@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — Local validation and sidebar labels
+## 0.5.1 — Windows preview (2026-10-21)
 
 - Run PowerShell/pwsh workspace and tab startup commands through one-time native
   shell arguments, avoiding the ConPTY initialization/input race. Keep the shell
@@ -12,6 +12,11 @@
   spans with the API; preserve semantic status, layout and monochrome clients.
 - Require complete nonce-framed PID, marker and environment fields in the live
   tab-transfer smoke, so partial PTY reads or line wrapping cannot satisfy a probe.
+
+This is a Windows preview with native runtime tests and an Inno-built installer.
+Full installer lifecycle acceptance remains blocked by Windows App Control on
+the pinned 0.3.0 compatibility fixture. It is not certified as a fully validated
+installer release; the 0.4.0 stable release and prior assets remain available.
 
 ## 0.5.0 — Presentation, federation and local validation
 

@@ -16,7 +16,7 @@ Crew 由 tmuxlike `12be9e307e47a56d3bfd669ab7bddb1ee7466e09` 演進；0.5.0 以
 | Workspace／tab 排序 | 0.4.0 起提供 | `workspace move`、`tab move`；0..len 插入槽；保留 PTY、ID、focus、chooser／confirm 目標；排序持久化 |
 | 跨 workspace 搬移整個 tab | 本版新增 | `tab move --to-workspace`；保留所有 pane、PTY、PID、agent instance、metadata 與 zoom；空來源 workspace 關閉；同機限定 |
 | Pane／workspace metadata tokens | 0.4.0 起提供 | patch／clear、per-key TTL、seq high-water、容量限制、snapshot 與更新／到期事件；不接管 agent 狀態 |
-| Metadata presentation 與 sidebar template | 本版新增，子集 | title／display_agent／state_labels、來源 guards、clear／TTL／seq、`$token`／`${token}`／`$$`；TUI 與 API 共用；Unreleased 加入單行 pane label 的 styled segments，尚無完整多列／grid／conditional rules |
+| Metadata presentation 與 sidebar template | 本版新增，子集 | title／display_agent／state_labels、來源 guards、clear／TTL／seq、`$token`／`${token}`／`$$`；TUI 與 API 共用；0.5.1 加入單行 pane label 的 styled segments，尚無完整多列／grid／conditional rules |
 | Git worktree | 0.3.0 起提供 | list/create/open/remove；保留 branch；拒絕 dirty/active/locked/primary |
 | Agent 狀態與等待 | 0.3.0 起強化 | wait/prompt 綁定 occupant instance；stale 回報不推進等待 |
 | Agent integrations | 部分 | generic report/release hooks、registry、PATH doctor、explain；加入程序偵測證據；不自動安裝官方 hooks |

@@ -4,6 +4,14 @@
 
 A cross-platform terminal multiplexer written in Rust, inspired by tmux and herdr. Primary targets: **Windows** and **Linux**; also works on **macOS**.
 
+## Crew 0.5.1 Windows preview
+
+[下載 Windows preview](https://github.com/urtiger101-tw/Crew/releases/tag/v0.5.1)：
+修復 PowerShell 啟動命令與本機 Inno 建置，新增單行 sidebar 樣式片段。
+此預發行版附 portable ZIP 與 unsigned installer；完整 installer lifecycle
+仍受 Windows App Control 阻擋，不能當作已完成安裝／升降級／解除安裝驗收。
+詳細範圍見 [0.5.1 發行說明](docs/releases/v0.5.1.md)。
+
 ## Crew 0.5.0：任務呈現、跨工作區分頁與多機協作
 
 專案已由 tmuxlike 改名為 **Crew**，後續 PR、CI 與 GitHub Release 位於
