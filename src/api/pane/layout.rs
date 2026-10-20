@@ -183,6 +183,7 @@ mod tests {
     #[test]
     fn zoom_on_toggle_off() {
         let mut w = Window {
+            id: 1,
             name: String::new(),
             manual_name: false,
             layout: Node::Split {
@@ -207,6 +208,7 @@ mod tests {
     #[test]
     fn zoom_single_pane_window_stays_unzoomed() {
         let mut w = Window {
+            id: 1,
             name: String::new(),
             manual_name: false,
             layout: Node::Leaf(7),
