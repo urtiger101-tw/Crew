@@ -626,8 +626,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "tmuxlike"
-version = "0.2.1"
+name = "crew"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "crossterm",

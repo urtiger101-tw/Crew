@@ -1,8 +1,68 @@
-# tmuxlike
+# Crew
 
 跨平台終端多工器（terminal multiplexer），以 Rust 撰寫，功能類似 tmux / herdr。主要支援 **Windows** 與 **Linux**，相容 **macOS**。
 
 A cross-platform terminal multiplexer written in Rust, inspired by tmux and herdr. Primary targets: **Windows** and **Linux**; also works on **macOS**.
+
+## Crew 0.3.0：Agent team 工作空間
+
+專案已由 tmuxlike 改名為 **Crew**，後續 PR、CI 與 GitHub Release 位於
+[urtiger101-tw/Crew](https://github.com/urtiger101-tw/Crew)。原專案是唯讀來源。
+`crew` 是主要指令；`tmuxlike` 相容執行檔使用同一份程式實作。
+
+本版補上穩定 workspace／tab ID、Git worktree、agent 身分保護、明確的 hooks
+與事件串流，讓多個 agent 可以各自使用終端與分支。實作以 Herdr 行為作參考，
+完整範圍及尚未對齊的功能列於 [功能對齊表](docs/herdr-parity.md)。
+
+```sh
+crew workspace create backend --cwd /path/to/repo --env ROLE=backend
+crew workspace list
+crew tab create tests --workspace backend --command "cargo test"
+crew worktree create --repo /path/to/repo --path /path/to/repo-review --branch review
+crew pane list
+crew integration list
+crew integration doctor
+crew events list --limit 100
+```
+
+建立 workspace／tab／worktree 預設不切換使用者焦點；加 `--focus` 才切換。
+`workspace` 與 `tab` 的穩定 ID 為 `wN` 和 `tN`，重新命名及重啟後保留；
+`pN` 窗格 ID 則需在重啟後重新查詢。`worktree remove` 拒絕 dirty、untracked、
+ignored、locked、primary 與 Crew 已知使用中的 checkout，保留 Git branch。
+Linux 另檢查窗格當前前景行程與 shell 的目錄；Windows／macOS 使用已知啟動目錄。
+其他程序或檢查後的目錄切換仍由使用者協調，Git 不提供跨程序使用鎖。
+
+### 舊版升級
+
+- `CREW_*` 環境變數優先；未設定時讀取對應 `TMUXLIKE_*`，保留舊 hooks。
+- 新安裝設定使用 `crew/config.toml`；有舊設定且沒有新設定時讀取
+  `tmuxlike/config.toml`。狀態檔亦保留舊路徑相容。
+- 選用新狀態檔後，會留下 `.crew-selected` 標記；清除或隔離新狀態檔後不會
+  再復活較舊的 tmuxlike 狀態。標記不是 session 資料，無須手動刪除。
+- 預設 socket 名稱維持 `tmuxlike-<user>.sock`，兩個執行檔連到同一個伺服器。
+  **使用新 workspace／tab／events API 前，先以舊程式執行 `server stop`，再啟動 Crew。**
+  停止伺服器會終止現有程序；保存的是版面，請先完成或保存正在進行的工作。
+- `--env` 覆寫值會存入本機狀態檔以供恢復；請只傳需要保存的環境設定。
+  任意 `--command` 不會在還原時重播。
+- `agent wait/prompt` 現在要求目標已有 agent 回報，並綁定該次 agent 身分。
+  對普通 shell 使用 `pane run` 或 `pane wait-output`。
+
+### 給工具與 agent 的 JSON 串流
+
+`crew api serve` 在 stdin/stdout 使用逐行 JSON。每個回覆保留 `id`；等待中的請求
+不會阻擋其他請求。`params.args` 使用 CLI 的參數陣列，沒有 shell 二次解析。
+這是 Crew 的版本化介面，與 Herdr 的原生 socket 協定不同。
+
+```json
+{"id":1,"method":"workspace.list","params":{"args":[]}}
+{"id":2,"method":"pane.read","params":{"args":["p1","--lines","40"]}}
+{"id":3,"method":"events.wait","params":{"args":["--after","12","--timeout","30000"]}}
+```
+
+執行 `crew api schema` 列出支援方法。事件的 `cursor` 用於讀取下一頁；`epoch`
+識別一次 server 執行。`events_lost: true` 表示超過 512 筆保留範圍，應重新取得
+snapshot；舊 epoch 會回 `server_restarted`。事件 `pane.output` 只提供位元組數，
+讀取內容請使用 `pane read`。更多範例見 [自動化說明](docs/automation.md)。
 
 ## 功能 Features
 
@@ -25,8 +85,8 @@ A cross-platform terminal multiplexer written in Rust, inspired by tmux and herd
   Which-key bar: after the prefix, the status bar lists the common keys, taken from your current bindings
 - 確認提示：互動式 `x`、`&` 與選單中 session／視窗列的 `x` 會先以 y/n 確認（`confirm-close`）；指令列、CLI 與 API 仍立即執行
   Confirmations: interactive `x`, `&` and the chooser's `x` on session and window rows ask y/n first (`confirm-close`); typed commands, the CLI and the API still run at once
-- 主題與無色模式：`[theme]` 提供 terminal / dark / light / mono 預設並可逐項覆寫顏色；支援 `NO_COLOR`、`TERM=dumb` 與 `TMUXLIKE_ASCII=1`（改用 ASCII 字元）
-  Themes: `[theme]` presets terminal / dark / light / mono with per-token color overrides; honors `NO_COLOR`, `TERM=dumb` and `TMUXLIKE_ASCII=1` (ASCII glyphs)
+- 主題與無色模式：`[theme]` 提供 terminal / dark / light / mono 預設並可逐項覆寫顏色；支援 `NO_COLOR`、`TERM=dumb` 與 `CREW_ASCII=1`（改用 ASCII 字元）
+  Themes: `[theme]` presets terminal / dark / light / mono with per-token color overrides; honors `NO_COLOR`, `TERM=dumb` and `CREW_ASCII=1` (ASCII glyphs)
 - 複製模式：vi 風格游標移動與選取（`v` 字元 / `V` 整行），`y` 複製；滑鼠拖曳選取自動複製；`prefix ]` 貼上；同時透過 OSC 52 寫入系統剪貼簿
   Copy mode with vi-style movement and selection (`v` / `V`, `y` to yank), mouse-drag selection, `prefix ]` to paste, system clipboard via OSC 52
 - `:` 指令列，支援 tmux 風格指令 · `:` command prompt with tmux-style commands
@@ -38,8 +98,8 @@ A cross-platform terminal multiplexer written in Rust, inspired by tmux and herd
 - TOML 設定檔；側邊欄與狀態列支援中日韓全形字寬 · TOML config; CJK-width-aware sidebar/status bar
 - 平台後端：Windows 使用 ConPTY + Named Pipe；Linux/macOS 使用 PTY + Unix socket
   Backends: ConPTY + named pipes on Windows; PTY + unix sockets on Linux/macOS
-- JSON 自動化 API：`tmuxlike pane|agent|session|api ...` 以 JSON 列出／分割／輸入／讀取窗格，回報與等待 agent 狀態（見下節）
-  JSON automation API: `tmuxlike pane|agent|session|api ...` lists, splits, types into and reads panes, and reports and waits on agent state (see below)
+- JSON 自動化 API：`crew pane|agent|session|api ...` 以 JSON 列出／分割／輸入／讀取窗格，回報與等待 agent 狀態（見下節）
+  JSON automation API: `crew pane|agent|session|api ...` lists, splits, types into and reads panes, and reports and waits on agent state (see below)
 - 版面保存：伺服器重啟後還原 session、視窗、分割與窗格目錄（Linux 為即時目錄，其他平台為啟動目錄）（`persist`）
   Layout persistence: sessions, windows, splits and pane directories are restored after a server restart (live directories on Linux, start directories elsewhere) (`persist`)
 
@@ -63,26 +123,26 @@ A cross-platform terminal multiplexer written in Rust, inspired by tmux and herd
 從 [Releases](../../releases) 下載執行檔，或自行編譯 / Download a binary from Releases, or build:
 
 ```sh
-cargo install --git https://github.com/stevenke1981/tmuxlike
+cargo install --git https://github.com/urtiger101-tw/Crew
 # or
-git clone https://github.com/stevenke1981/tmuxlike && cd tmuxlike && cargo build --release
+git clone https://github.com/urtiger101-tw/Crew && cd Crew && cargo build --release
 ```
 
 ## 使用 Usage
 
 ```sh
-tmuxlike                        # 連到最近的 session，沒有則建立 / attach last session or create one
-tmuxlike new -s work            # 建立名為 work 的 session / new session "work"
-tmuxlike attach -t work         # 重新連線 / re-attach (alias: a)
-tmuxlike ls                     # 列出 sessions / list sessions
-tmuxlike kill-session -t work   # 關閉 session
-tmuxlike kill-server            # 關閉伺服器與所有 session
-tmuxlike keys                   # 顯示快捷鍵 / show key bindings
-tmuxlike new -d -s bg           # 在背景建立 session / create a session without attaching
-tmuxlike send-keys -t bg 'echo hi' Enter   # 輸入文字或按鍵 / type text or keys
-tmuxlike capture-pane -p -t bg  # 印出窗格內容 / print the pane's visible text
-tmuxlike source-file            # 重新載入設定 / reload config in the running server
-tmuxlike set mouse off          # 任何伺服器指令皆可從命令列執行 / run any server command from the shell
+crew                        # 連到最近的 session，沒有則建立 / attach last session or create one
+crew new -s work            # 建立名為 work 的 session / new session "work"
+crew attach -t work         # 重新連線 / re-attach (alias: a)
+crew ls                     # 列出 sessions / list sessions
+crew kill-session -t work   # 關閉 session
+crew kill-server            # 關閉伺服器與所有 session
+crew keys                   # 顯示快捷鍵 / show key bindings
+crew new -d -s bg           # 在背景建立 session / create a session without attaching
+crew send-keys -t bg 'echo hi' Enter   # 輸入文字或按鍵 / type text or keys
+crew capture-pane -p -t bg  # 印出窗格內容 / print the pane's visible text
+crew source-file            # 重新載入設定 / reload config in the running server
+crew set mouse off          # 任何伺服器指令皆可從命令列執行 / run any server command from the shell
 ```
 
 ## 快捷鍵 Key bindings
@@ -166,8 +226,8 @@ Other keys are ignored and the chooser stays open. A mouse click closes it; the 
 
 ## 指令 Commands
 
-可在 `prefix :`、`bind`、`commands = [...]`、文字設定檔或命令列（`tmuxlike <command>`）使用。
-Usable from `prefix :`, key bindings, `commands = [...]`, plain command files, or the shell (`tmuxlike <command>`).
+可在 `prefix :`、`bind`、`commands = [...]`、文字設定檔或命令列（`crew <command>`）使用。
+Usable from `prefix :`, key bindings, `commands = [...]`, plain command files, or the shell (`crew <command>`).
 
 ```
 split-window [-h|-v]          new-window [-n NAME]        rename-window [NAME]
@@ -203,7 +263,7 @@ kill-session -t NAME          kill-window -t SESSION:IDX
 | `--copy` | 以複製模式渲染 Render in copy mode |
 
 ```sh
-tmuxlike debug-frame -t demo --prefix --text   # 按下前綴鍵後的狀態列 / bar after the prefix
+crew debug-frame -t demo --prefix --text   # 按下前綴鍵後的狀態列 / bar after the prefix
 ```
 
 ## 自動化 API Automation API (herdr-style)
@@ -220,12 +280,12 @@ A JSON command interface over the same local socket, so scripts and coding agent
 - 常見錯誤代碼 Common codes: `pane_not_found`, `agent_not_found`, `session_not_found`, `server_not_running`, `invalid_argument`, `timeout`, `agent_blocked`, `name_taken`, `no_neighbor`, `spawn_failed`, `internal`.
 - 窗格 ID 為 `p<N>`，同一次伺服器執行期間不變；伺服器重啟後請重新以 `pane list` 查詢。也接受 tmux 風格的 `%N`。
   Pane IDs are `p<N>` (also accepts tmux-style `%N`). They are stable while one server runs; query `pane list` again after a restart.
-- 每個窗格的環境變數 `TMUXLIKE_PANE_ID` 即是該窗格的 ID；`--current` 指向呼叫者所在窗格。省略 ID 時，目標為最近使用之 session 的焦點窗格。
-  Each pane has `TMUXLIKE_PANE_ID` set to its own ID; `--current` targets the calling pane. An omitted ID means the focused pane of the most recently used session.
-- 伺服器未執行時，API 指令在 stderr 印出 `{"error":{"code":"server_not_running","message":"..."}}` 並 exit 1。
-  With no server running, API commands print `{"error":{"code":"server_not_running","message":"..."}}` on stderr and exit 1.
-- `tmuxlike <group> --help`（例如 `tmuxlike pane --help`）把說明印到 stdout 並以 exit 0 結束，不需要伺服器；`tmuxlike pane` 不帶子指令時亦同。
-  `tmuxlike <group> --help` (for example `tmuxlike pane --help`) prints the help to stdout and exits 0 without a server; `tmuxlike pane` with no subcommand behaves the same.
+- 每個窗格的環境變數 `CREW_PANE_ID` 即是該窗格的 ID；`--current` 指向呼叫者所在窗格。省略 ID 時，目標為最近使用之 session 的焦點窗格。
+  Each pane has `CREW_PANE_ID` set to its own ID; `--current` targets the calling pane. An omitted ID means the focused pane of the most recently used session.
+- `workspace create` 與 `worktree` 指令會按需啟動伺服器；其他需要連線的 API 在伺服器未執行時，在 stderr 印出 `{"error":{"code":"server_not_running","message":"..."}}` 並 exit 1。
+  `workspace create` and `worktree` commands start the server when needed. Other connected API commands, with no server running, print `{"error":{"code":"server_not_running","message":"..."}}` on stderr and exit 1.
+- `crew <group> --help`（例如 `crew pane --help`）把說明印到 stdout 並以 exit 0 結束，不需要伺服器；`crew pane` 不帶子指令時亦同。
+  `crew <group> --help` (for example `crew pane --help`) prints the help to stdout and exits 0 without a server; `crew pane` with no subcommand behaves the same.
 - `pane wait-output` 以邏輯行比對：自動換行（soft wrap）的列會先接合再比對，因此超過窗格寬度的字串仍可符合。`--match` 為字面子字串，`--regex` 為正規表示式。
   `pane wait-output` matches logical lines: soft-wrapped rows are joined before matching, so a string wider than the pane still matches. `--match` is a literal substring; `--regex` is a regular expression.
 
@@ -272,36 +332,36 @@ A JSON command interface over the same local socket, so scripts and coding agent
 
 - 有回報時以回報為準：`pane report-agent` 的 `--seq` 必須較新才會套用，過期的回報回傳 `applied: false`。
   Reported state wins: `pane report-agent` applies only a newer `--seq`; a stale report returns `applied: false`.
-- 沒有回報時以輸出活動推定：`busy-secs` 內有輸出為 working，否則有未查看的輸出為 done，其餘為 idle。tmuxlike 不會自動偵測 agent 種類。
-  Without a report, status is inferred from output activity: output within `busy-secs` means working, unseen output means done, otherwise idle. tmuxlike does not detect agent kinds automatically.
+- 沒有回報時以輸出活動推定：`busy-secs` 內有輸出為 working，否則有未查看的輸出為 done，其餘為 idle。crew 不會自動偵測 agent 種類。
+  Without a report, status is inferred from output activity: output within `busy-secs` means working, unseen output means done, otherwise idle. crew does not detect agent kinds automatically.
 
 ### 範例 Examples
 
 1. 分割、執行並等待輸出 Split, run, and wait for output：
 
 ```sh
-pane=$(tmuxlike pane split --current --direction right --cwd "$PWD" --no-focus | jq -r .result.pane.pane_id)
-tmuxlike pane run "$pane" "cargo test"
-tmuxlike pane wait-output "$pane" --regex "test result" --timeout 120000
-tmuxlike pane read "$pane" --source recent --lines 60
+pane=$(crew pane split --current --direction right --cwd "$PWD" --no-focus | jq -r .result.pane.pane_id)
+crew pane run "$pane" "cargo test"
+crew pane wait-output "$pane" --regex "test result" --timeout 120000
+crew pane read "$pane" --source recent --lines 60
 ```
 
-   Windows PowerShell：`$pane = (tmuxlike pane split --current --direction right --no-focus | ConvertFrom-Json).result.pane.pane_id`
+   Windows PowerShell：`$pane = (crew pane split --current --direction right --no-focus | ConvertFrom-Json).result.pane.pane_id`
 
 2. Agent 回報 hook Agent report hook（在 agent 窗格內執行 run inside the agent's pane）：
 
 ```sh
-tmuxlike pane report-agent "$TMUXLIKE_PANE_ID" --source my-hook --agent claude --state working --seq "$SEQ"
+crew pane report-agent "$CREW_PANE_ID" --source my-hook --agent claude --state working --seq "$SEQ"
 # 另一個 script 等待它閒置 another script waits for idle
-tmuxlike agent wait "$TMUXLIKE_PANE_ID" --until idle --timeout 600000
+crew agent wait "$CREW_PANE_ID" --until idle --timeout 600000
 ```
 
 3. 送出提示並等待 Prompt and wait：
 
 ```sh
-tmuxlike agent rename p4 reviewer
-tmuxlike agent prompt reviewer "review the diff" --wait --until idle --timeout 300000
-tmuxlike agent read reviewer --source recent --lines 80
+crew agent rename p4 reviewer
+crew agent prompt reviewer "review the diff" --wait --until idle --timeout 300000
+crew agent read reviewer --source recent --lines 80
 ```
 
 ### 版面保存 Session persistence
@@ -312,23 +372,23 @@ tmuxlike agent read reviewer --source recent --lines 80
   On Linux the live directory of the pane's foreground process is tracked, and the saved and reported `cwd` is the current directory. On Windows and macOS it is not tracked: the saved and reported `cwd` is the pane's start directory, and later `cd` commands are not reflected.
 - 不保存：執行中的程式與行程、螢幕內容與捲動回溯、shell 變數與歷程。還原時每個窗格會在保存的 cwd 重新啟動 shell。
   Not saved: running processes, screen contents and scrollback, shell variables and history. On restore each pane starts a new shell in its saved cwd.
-- Resume 指令：`pane report-agent ... -- RESUME...` 給的指令，還原後會在該窗格的 shell 中輸入並送出（Enter）。tmuxlike 依 POSIX shell 與 PowerShell 的引號規則組成指令，不支援 cmd.exe。第一個參數必須是程式名稱，不可為路徑（如 `./claude`、`C:\...`）；參數不可含單引號（含 PowerShell 的全形引號）或控制字元。不符合時不送出，並記入除錯紀錄。
-  Resume commands: the command given after `--` in `pane report-agent` is typed and submitted (Enter) in the pane's shell after a restore. tmuxlike quotes it by POSIX shell and PowerShell rules; cmd.exe is not supported. The first argument must be a program name, not a path (such as `./claude` or `C:\...`), and arguments may not contain apostrophes (including PowerShell's typographic ones) or control characters. Otherwise nothing is sent and the rejection is logged.
-- 位置：`$TMUXLIKE_STATE`；未設定時使用資料目錄。停用：設定檔 `persist = false`，或執行期 `tmuxlike set persist off`（會立即刪除保存檔）。
-  Location: `$TMUXLIKE_STATE`, or the data directory if unset. Disable with `persist = false` in the config, or `tmuxlike set persist off` at runtime, which deletes the state file immediately.
-- 何時刪除保存檔：關閉最後一個 session（例如 `kill-session`，或 `pane close` 關掉最後一個窗格）時，伺服器會刪除保存檔並結束，因此不會還原。只有 `tmuxlike server stop`，或伺服器異常結束／重新開機，會留下可還原的版面。
-  When the file is deleted: closing the last session (for example with `kill-session`, or `pane close` on the last pane) deletes the state file and the server exits, so nothing is restored. Only `tmuxlike server stop`, or a crash or reboot, leaves a layout to restore.
+- Resume 指令：`pane report-agent ... -- RESUME...` 給的指令，還原後會在該窗格的 shell 中輸入並送出（Enter）。crew 依 POSIX shell 與 PowerShell 的引號規則組成指令，不支援 cmd.exe。第一個參數必須是程式名稱，不可為路徑（如 `./claude`、`C:\...`）；參數不可含單引號（含 PowerShell 的全形引號）或控制字元。不符合時不送出，並記入除錯紀錄。
+  Resume commands: the command given after `--` in `pane report-agent` is typed and submitted (Enter) in the pane's shell after a restore. crew quotes it by POSIX shell and PowerShell rules; cmd.exe is not supported. The first argument must be a program name, not a path (such as `./claude` or `C:\...`), and arguments may not contain apostrophes (including PowerShell's typographic ones) or control characters. Otherwise nothing is sent and the rejection is logged.
+- 位置：`$CREW_STATE`；未設定時使用資料目錄。停用：設定檔 `persist = false`，或執行期 `crew set persist off`（會立即刪除保存檔）。
+  Location: `$CREW_STATE`, or the data directory if unset. Disable with `persist = false` in the config, or `crew set persist off` at runtime, which deletes the state file immediately.
+- 何時刪除保存檔：關閉最後一個 session（例如 `kill-session`，或 `pane close` 關掉最後一個窗格）時，伺服器會刪除保存檔並結束，因此不會還原。只有 `crew server stop`，或伺服器異常結束／重新開機，會留下可還原的版面。
+  When the file is deleted: closing the last session (for example with `kill-session`, or `pane close` on the last pane) deletes the state file and the server exits, so nothing is restored. Only `crew server stop`, or a crash or reboot, leaves a layout to restore.
 - 損毀的保存檔：無法讀取或解析的檔案會移到 `<file>.bad`，伺服器以空白版面啟動；檔案不會被覆寫，供手動檢查。若只還原了部分 session，原始檔會複製為 `<file>.partial.bad`。
   Damaged state: a file that cannot be read or parsed is moved to `<file>.bad`, and the server starts with an empty layout. The file is never overwritten, so it can be inspected. If only some sessions could be restored, the original is copied to `<file>.partial.bad`.
-- `tmuxlike server stop`：保存後停止伺服器，下次啟動會還原。`tmuxlike kill-server`：關閉所有 session 並刪除保存檔，下次不會還原。
+- `crew server stop`：保存後停止伺服器，下次啟動會還原。`crew kill-server`：關閉所有 session 並刪除保存檔，下次不會還原。
   `server stop` saves and stops the server, so the next start restores the layout. `kill-server` closes everything and deletes the saved file, so nothing is restored.
 
 ## 設定 Configuration
 
-路徑 Path: `$TMUXLIKE_CONFIG`，或 or
-- Linux: `~/.config/tmuxlike/config.toml`
-- macOS: `~/Library/Application Support/tmuxlike/config.toml`
-- Windows: `%APPDATA%\tmuxlike\config.toml`
+路徑 Path: `$CREW_CONFIG`，或 or
+- Linux: `~/.config/crew/config.toml`
+- macOS: `~/Library/Application Support/crew/config.toml`
+- Windows: `%APPDATA%\crew\config.toml`
 
 ```toml
 prefix = "C-a"          # 前綴鍵 prefix key
@@ -366,10 +426,10 @@ Values are strings, so quote numbers and colors (for example `accent = "74"`). I
 
 `set` 可用選項 options: `prefix`, `shell`, `mouse`, `sidebar`, `sidebar-width`, `scrollback`/`history-limit`（僅影響新窗格 new panes only）, `busy-secs`, `automatic-rename`, `osc52`/`set-clipboard`, `persist`, `hints on|off`, `confirm-close on|off`, `pane-titles off|auto|always`, `theme terminal|dark|light|mono`, `ascii-glyphs auto|on|off`.
 
-重新載入 Reload: `prefix r`、`:source-file [PATH]` 或 `tmuxlike source-file`。`.toml` 檔會整個取代設定；其他副檔名視為每行一條指令（類似 `.tmux.conf`）。
+重新載入 Reload: `prefix r`、`:source-file [PATH]` 或 `crew source-file`。`.toml` 檔會整個取代設定；其他副檔名視為每行一條指令（類似 `.tmux.conf`）。
 A `.toml` file replaces the whole config; any other file is run line by line as commands (like `.tmux.conf`).
 
-環境變數 Env: `TMUXLIKE_SOCKET` 可指定 socket 名稱以執行多個獨立伺服器 / set to run independent servers; `TMUXLIKE_STATE` 指定版面保存檔路徑 / path of the saved-layout file.
+環境變數 Env: `CREW_SOCKET` 可指定 socket 名稱以執行多個獨立伺服器 / set to run independent servers; `CREW_STATE` 指定版面保存檔路徑 / path of the saved-layout file.
 
 ### 窗格標題 Pane titles
 
@@ -399,10 +459,10 @@ Precedence: an explicit `dark`, `light` or `mono` wins over the environment; `NO
 |---|---|
 | `NO_COLOR`（非空值 non-empty） | 預設 terminal 主題改為無色，保留 Unicode 符號與粗體、反白、淡色 No chrome colors; Unicode shapes and bold/reverse/DIM are kept |
 | `TERM=dumb` | 無色，並改用 ASCII 字元 No colors, and ASCII glyphs |
-| `TMUXLIKE_ASCII=1` | 改用 ASCII 字元：狀態 `@ ! + - ?`、框線 `\|` `-`、焦點框 `#` `=`；Linux／macOS 上非 UTF-8 的 locale 也會自動如此 ASCII glyphs; also automatic on a non-UTF-8 locale on Linux and macOS |
+| `CREW_ASCII=1` | 改用 ASCII 字元：狀態 `@ ! + - ?`、框線 `\|` `-`、焦點框 `#` `=`；Linux／macOS 上非 UTF-8 的 locale 也會自動如此 ASCII glyphs; also automatic on a non-UTF-8 locale on Linux and macOS |
 
-- 環境變數由**連線的客戶端**讀取，因此每次連線可各自設定，例如 `NO_COLOR=1 tmuxlike attach -t work`。`NO_COLOR` 本身不會改用 ASCII 字元。
-  These variables are read by the attaching client, so set them per attach, e.g. `NO_COLOR=1 tmuxlike attach -t work`. `NO_COLOR` alone does not switch to ASCII glyphs.
+- 環境變數由**連線的客戶端**讀取，因此每次連線可各自設定，例如 `NO_COLOR=1 crew attach -t work`。`NO_COLOR` 本身不會改用 ASCII 字元。
+  These variables are read by the attaching client, so set them per attach, e.g. `NO_COLOR=1 crew attach -t work`. `NO_COLOR` alone does not switch to ASCII glyphs.
 - `[theme] ascii_glyphs = "true"` 或 `"false"` 會覆寫環境變數；`"auto"`（預設）才依環境變數決定。
   `ascii_glyphs = "true"` or `"false"` overrides the environment; `"auto"` (the default) follows it.
 ## 語言 Language
@@ -415,8 +475,8 @@ Precedence: an explicit `dark`, `light` or `mono` wins over the environment; `NO
   Detection order for `auto`: `LC_ALL`, `LC_MESSAGES`, `LANG`, `LANGUAGE` in that order, and the first recognised value wins; if none is recognised, the Windows user locale is read (for example `zh-TW`); otherwise English. Git Bash sets `LANG`, which then wins over the Windows locale.
 - 所有 `zh` locale（`zh-CN`、`zh_SG`、`zh-Hans` 等）目前都使用 zh-TW 文字；其他語言一律使用英文。
   Every `zh` locale (`zh-CN`, `zh_SG`, `zh-Hans`, ...) currently uses the zh-TW text; other languages use English.
-- `TMUXLIKE_LANG=en` 或 `TMUXLIKE_LANG=zh-TW` 可覆寫命令列的語言，優先於 locale 偵測。它只影響 `--help`、`keys`、`pane --help`，以及連線、離開與錯誤等客戶端訊息；TUI 畫面仍依 `lang` 設定。
-  `TMUXLIKE_LANG=en` or `TMUXLIKE_LANG=zh-TW` overrides detection for the command line. It affects only `--help`, `keys`, `pane --help` and the client's connection, exit and error messages; the TUI still follows `lang`.
+- `CREW_LANG=en` 或 `CREW_LANG=zh-TW` 可覆寫命令列的語言，優先於 locale 偵測。它只影響 `--help`、`keys`、`pane --help`，以及連線、離開與錯誤等客戶端訊息；TUI 畫面仍依 `lang` 設定。
+  `CREW_LANG=en` or `CREW_LANG=zh-TW` overrides detection for the command line. It affects only `--help`, `keys`, `pane --help` and the client's connection, exit and error messages; the TUI still follows `lang`.
 - 不翻譯的內容：JSON API 輸出（`{"result"}`、`{"error":{"code","message"}}`、狀態值如 `working`）、命令與選項名稱（`split-window`、`--direction`）、按鍵名稱（`C-b`、`Esc`）、設定鍵名與值、窗格與工作階段 ID、檔案路徑、除錯紀錄，以及用法錯誤訊息。
   Never translated: JSON API output (`{"result"}`, `{"error":{"code","message"}}`, status values such as `working`), command, option and key names (`split-window`, `--direction`, `C-b`, `Esc`), config keys and values, pane and session IDs, file paths, log lines and usage errors.
 - 新增語言：在 `src/i18n/mod.rs` 的 `Lang` 加入變體，並補上 `code()` 與 `from_locale()` 的對應；再於 `src/i18n/catalog/*.rs` 的每個條目 `(key, en, zh-TW)` 加一欄該語言的譯文。測試會檢查 key 唯一、各欄非空，且 `{placeholder}` 在各語言中一致。
@@ -436,17 +496,17 @@ Precedence: an explicit `dark`, `light` or `mono` wins over the environment; `NO
 - 尚未支援 SSH 遠端機器 / No SSH remote machines yet
 - 尚未支援外掛 / No plugin system yet
 - 不會自動偵測 agent 種類，需由 agent 或 hook 呼叫 `pane report-agent` 回報；否則只有輸出活動推定 / No automatic agent detection: agents or hooks must call `pane report-agent`, otherwise only output-activity inference is available
-- 尚未支援 git worktree，以及 workspace／tab API（目前以 session／視窗對應）/ No git worktrees and no workspace/tab API yet (sessions and windows are used instead)
+- Herdr 的完整功能對照與差異請見 [功能對齊表](docs/herdr-parity.md)。Crew 保留自己的本機 wire protocol。 / See the [alignment matrix](docs/herdr-parity.md); Crew retains its own native wire protocol.
 - 選單不接受滑鼠選取列，任何點擊都會關閉它；請用鍵盤（`↑↓` `Enter`）/ The chooser does not take mouse selection: any click closes it; use the keys (`↑↓` `Enter`)
 - 終端機寬度不超過 `sidebar-width` + 20 欄（預設即 48 欄）時，側邊欄會直接隱藏，沒有提示 / When the terminal is not wider than `sidebar-width` + 20 columns (48 by default), the sidebar is hidden without a message
 - 前綴鍵等待沒有逾時設定 / The prefix key waits without a timeout (there is no prefix-timeout option yet)
-- 不明寬度（Ambiguous）字元：`● ▲ ◆ ○ │ ─ ▸ …` 在 CJK 寬字元的終端機（例如 CJK 代碼頁的 conhost）可能錯位；可設 `TMUXLIKE_ASCII=1` 或 `ascii_glyphs = "true"` 改用 ASCII 字元 / Ambiguous-width glyphs such as `● ▲ ◆ ○ │ ─ ▸ …` may misalign on CJK-wide terminals (for example a CJK-codepage conhost); use `TMUXLIKE_ASCII=1` or `ascii_glyphs = "true"` for ASCII glyphs
-- 螢幕閱讀器無法可靠朗讀 TUI（字元格重繪，順序不是閱讀順序）；請改用 `tmuxlike capture-pane -p`、`pane read` 或 `api snapshot` 取得純文字或 JSON / Screen readers cannot reliably follow a TUI (characters are repainted in a grid, not in reading order); use `capture-pane -p`, `pane read` or `api snapshot` for plain text or JSON
+- 不明寬度（Ambiguous）字元：`● ▲ ◆ ○ │ ─ ▸ …` 在 CJK 寬字元的終端機（例如 CJK 代碼頁的 conhost）可能錯位；可設 `CREW_ASCII=1` 或 `ascii_glyphs = "true"` 改用 ASCII 字元 / Ambiguous-width glyphs such as `● ▲ ◆ ○ │ ─ ▸ …` may misalign on CJK-wide terminals (for example a CJK-codepage conhost); use `CREW_ASCII=1` or `ascii_glyphs = "true"` for ASCII glyphs
+- 螢幕閱讀器無法可靠朗讀 TUI（字元格重繪，順序不是閱讀順序）；請改用 `crew capture-pane -p`、`pane read` 或 `api snapshot` 取得純文字或 JSON / Screen readers cannot reliably follow a TUI (characters are repainted in a grid, not in reading order); use `capture-pane -p`, `pane read` or `api snapshot` for plain text or JSON
 
 ## 疑難排解 Troubleshooting
 
-設定 `TMUXLIKE_LOG=路徑` 後啟動，伺服器會寫入除錯紀錄（窗格啟動、讀到的輸出等）。
-Set `TMUXLIKE_LOG=/path/to/file` before starting to get a server debug log (pane spawns, pty output, etc).
+設定 `CREW_LOG=路徑` 後啟動，伺服器會寫入除錯紀錄（窗格啟動、讀到的輸出等）。
+Set `CREW_LOG=/path/to/file` before starting to get a server debug log (pane spawns, pty output, etc).
 
 ## 測試 Testing
 
