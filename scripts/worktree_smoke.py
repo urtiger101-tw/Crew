@@ -117,14 +117,28 @@ def main():
             pid = panes[0]["pane_id"]
             # A command executed by the real PTY verifies its cwd independently of JSON.
             cwd_probe = "(Get-Location).Path | Set-Content -Encoding utf8 cwd-probe.txt" if WIN else "pwd > cwd-probe.txt"
-            data("pane", "run", pid, cwd_probe)
-            end = time.monotonic() + 15
-            while time.monotonic() < end and not (checkout / "cwd-probe.txt").exists():
-                time.sleep(0.05)
-            check((checkout / "cwd-probe.txt").exists(), "terminal did not run at the worktree cwd")
-            actual = (checkout / "cwd-probe.txt").read_text(encoding="utf-8-sig").strip()
-            check(Path(actual).samefile(checkout), actual)
-            (checkout / "cwd-probe.txt").unlink()
+            try:
+                if WIN:
+                    # A spawned PowerShell process can still be initializing its input reader.
+                    # wait-output joins wrapped rows, including long provider-qualified prompts.
+                    ready = data("pane", "wait-output", pid, "--regex", r"PS [^\r\n]*>",
+                                 "--timeout", "15000")
+                    check(ready.get("matched") is True, f"PowerShell prompt not ready: {ready}")
+                data("pane", "run", pid, cwd_probe)
+                end = time.monotonic() + 15
+                while time.monotonic() < end and not (checkout / "cwd-probe.txt").exists():
+                    time.sleep(0.05)
+                check((checkout / "cwd-probe.txt").exists(), "terminal did not run at the worktree cwd")
+                actual = (checkout / "cwd-probe.txt").read_text(encoding="utf-8-sig").strip()
+                check(Path(actual).samefile(checkout), actual)
+                (checkout / "cwd-probe.txt").unlink()
+            except Exception:
+                try:
+                    output = cli("pane", "read", pid, "--source", "recent").stdout
+                    print(f"cwd probe pane {pid}:\n{output}", file=sys.stderr)
+                except Exception as diagnostic_error:
+                    print(f"cwd probe pane {pid} could not be read: {diagnostic_error}", file=sys.stderr)
+                raise
             passed("terminal process starts at the actual worktree cwd")
 
             reopened = data("worktree", "open", "--repo", str(repo), "--branch", "feat/中文")
