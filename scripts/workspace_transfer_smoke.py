@@ -85,12 +85,23 @@ def main():
             return [t["tab_id"] for t in api("tab", "list", "--workspace", wid)["tabs"]]
 
         def shell_probe(pid, phase):
-            # A phase-specific output prevents an old scrollback line satisfying this probe.
-            command = (f"Write-Output ('{phase}=' + $PID + ':' + $global:CREW_TRANSFER_MARKER + ':' + $env:WORKSPACE_MARKER)"
-                       if WIN else f"printf '{phase}=%s:%s:%s\\n' \"$$\" \"$CREW_TRANSFER_MARKER\" \"$WORKSPACE_MARKER\"")
+            # Require complete, nonce-scoped fields. A prefix can match a PTY read
+            # before its marker/env arrive; one long response can also wrap at 60 columns.
+            nonce = "Q" + uuid.uuid4().hex[:8]
+            command = (
+                f"Write-Output ('{nonce}:P=' + $PID + ';'); "
+                f"Write-Output ('{nonce}:M=' + $global:CREW_TRANSFER_MARKER + ';'); "
+                f"Write-Output ('{nonce}:E=' + $env:WORKSPACE_MARKER + ';')"
+                if WIN else
+                f"printf '{nonce}:P=%s;\\n{nonce}:M=%s;\\n{nonce}:E=%s;\\n' "
+                '"$$" "$CREW_TRANSFER_MARKER" "$WORKSPACE_MARKER"'
+            )
             api("pane", "run", pid, command)
-            line = output(pid, "^" + phase + "=[0-9]+:")
-            return line.split("=", 1)[1]
+            fields = [output(pid, f"^{nonce}:{field}={pattern};$").split("=", 1)[1][:-1]
+                      for field, pattern in (("P", "[0-9]+"), ("M", "(?:[0-9a-f]{32})?"),
+                                             ("E", "(?:origin|destination)"))]
+            print(f"probe {phase} {pid}: {':'.join(fields)}", flush=True)
+            return ":".join(fields)
 
         def transfer(tid, target, index=None, source=None, *, closed=False):
             before = api("events", "list", "--limit", "512")["latest_cursor"]
@@ -205,7 +216,8 @@ def main():
             assert api("workspace", "current")["workspace"]["workspace_id"] == b
             assert api("workspace", "get", b)["workspace"]["active_tab"] == destination_active
             for pid in (pane, split):
-                assert shell_probe(pid, "AFTER_TRANSFER") == initial_processes[pid]
+                after = shell_probe(pid, "AFTER_TRANSFER")
+                assert after == initial_processes[pid], (pid, initial_processes[pid], after)
                 assert os.path.samefile(api("pane", "get", pid)["pane"]["cwd"], source_cwd)
             assert waiter.poll() is None, "a move must not complete/replace an agent wait"
             print("ok last-tab move closes only empty source; live PIDs, shell state, original cwd/env and token seq survive", flush=True)

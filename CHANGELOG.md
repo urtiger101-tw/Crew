@@ -10,6 +10,8 @@
 - Add optional single-line sidebar pane segments with literal metadata expansion,
   strict RGB foregrounds and per-segment bold/dim overrides. Share plain text and
   spans with the API; preserve semantic status, layout and monochrome clients.
+- Require complete nonce-framed PID, marker and environment fields in the live
+  tab-transfer smoke, so partial PTY reads or line wrapping cannot satisfy a probe.
 
 ## 0.5.0 — Presentation, federation and local validation
 

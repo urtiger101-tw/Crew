@@ -42,3 +42,14 @@ Write ownership: implementation agent owns config.rs, metadata/display.rs,
 render/sidebar.rs and related Rust tests. Root owns the plan, native smoke and
 user-facing docs, integration, execution evidence and handoff. Independent reviewer
 owns only review evidence outside the checkout.
+
+The first committed feature run at dca7280 retained 24 PASS, transfer FAIL and
+lifecycle BLOCKED. The existing transfer probe waited only for a response prefix.
+A controlled native ConPTY reproduction demonstrated that this prefix can return
+before the marker/environment arrive. The exact partial response from that failed
+run was not captured, so its precise sampling trigger is not claimed as proven.
+Follow-up scope is limited to complete nonce-scoped short P/M/E response fields,
+with a terminal delimiter, retaining the exact PID/marker/env comparisons. A new
+destination pane intentionally has an empty marker. No product transfer behavior
+or assertions are weakened. Preserve both failed runs and revalidate on a clean
+local commit with independent review.
