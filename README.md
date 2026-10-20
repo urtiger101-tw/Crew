@@ -4,24 +4,35 @@
 
 A cross-platform terminal multiplexer written in Rust, inspired by tmux and herdr. Primary targets: **Windows** and **Linux**; also works on **macOS**.
 
-## Crew 0.4.0：排序、任務標記與 Windows 安裝包
+## Crew 0.5.0：任務呈現、跨工作區分頁與多機協作
 
 專案已由 tmuxlike 改名為 **Crew**，後續 PR、CI 與 GitHub Release 位於
 [urtiger101-tw/Crew](https://github.com/urtiger101-tw/Crew)。原專案是唯讀來源。
 `crew` 是主要指令；`tmuxlike` 相容執行檔使用同一份程式實作。
 
-0.3.0 建立穩定 workspace／tab ID、Git worktree、agent 身分保護、generic hooks
-與事件串流。0.4.0 繼續對齊 Herdr，新增：
+0.5.0 延續既有 workspace、Git worktree、agent hooks、事件串流與 Inno Setup，
+加入五項 Herdr 行為對齊：
 
-- **工作區與分頁排序**：調整清單順序，保留正在執行的程序、焦點與穩定 ID。
-  詳見 [排序規則](docs/workspace-move.md)。
-- **Metadata tokens**：回報任務摘要或進度，支援每個鍵獨立的 TTL 與來源序號，
-  在 API／事件中讀取；不改變 agent 的語義狀態。詳見 [Metadata](docs/metadata.md)。
-- **Windows Inno Setup 安裝包**：每位使用者安裝、開始功能表捷徑、升級與解除安裝；
-  同時提供 portable ZIP。詳見 [Windows 安裝指南](docs/windows-install.md)。
+- **Metadata 顯示模板**：pane／workspace 標題、agent 顯示名稱、狀態文字與
+  `$token` 模板；API 與側邊欄共用結果，保留 TTL、來源序號及明確 agent 身分。
+  詳見 [呈現與模板](docs/metadata-display.md)。
+- **跨工作區搬移分頁**：整個 tab 連同窗格、執行中的 PTY 與 agent 搬到另一個
+  workspace，保留 ID、程序與版面。詳見 [搬移規則](docs/workspace-move.md)。
+- **SSH federation**：保存主機、查詢與操作遠端 API，合併查看各主機工作區與
+  agent，透過互動選單進入真正的 SSH 終端。詳見 [SSH federation](docs/ssh-federation.md)。
+- **外掛市場與動作**：內建離線目錄、選用 GitHub 搜尋、檢視／安裝／更新、
+  本地開發連結、啟停、動作執行與日誌。詳見 [外掛](docs/plugins.md)。
+- **自動 agent 種類偵測**：依實際程序提供種類提示，明確 hook 回報仍優先，
+  種類提示不推進 agent wait。詳見 [程序偵測](docs/agent-detection.md)。
 
-完整範圍及尚未對齊的功能列於 [功能對齊表](docs/herdr-parity.md)。本版不宣稱
-完整 Herdr 相容；排序不跨 workspace 搬移 tab，metadata 也未包含 sidebar 模板。
+完整範圍與其餘差異列於 [功能對齊表](docs/herdr-parity.md)。Crew 保留自己的
+CLI、socket 協定與外掛格式；字串模板、federation selector 及外掛 actions 各有
+明確範圍，並未實作 Herdr 的所有模板格式、遠端 pane 嵌入或外掛事件引擎。
+
+本輪改用 [本機驗證與原生打包](docs/local-validation.md)，不啟動 GitHub-hosted
+runner。發行紀錄會列出實際通過的平台；Linux 驗證不代表 Windows 安裝包或
+macOS 已驗證。既有 [Windows Inno Setup 流程](docs/windows-install.md) 可由
+Windows 本機執行，保留全部安裝／升級／解除安裝驗收。
 
 ```sh
 crew workspace create backend --cwd /path/to/repo --env ROLE=backend
@@ -41,10 +52,28 @@ crew workspace move w3 --index 0
 crew tab move t4 --index 0 --workspace w1
 crew pane report-metadata p1 --source task:hook --token "task=修正登入" --seq 1 --ttl-ms 60000
 crew workspace report-metadata w1 --source build:ci --token build=running --seq 1
+crew tab move t4 --workspace w1 --to-workspace w2 --index 0
+crew pane report-metadata p1 --source task:hook --title '登入修正' --seq 2
+crew set sidebar-pane-template '$title · $task'
+crew plugin marketplace list
+crew plugin install crew.workspaces --yes
+crew plugin action invoke list --plugin crew.workspaces
 ```
 
-`--index` 是移動前清單的插入槽（`0..數量`），尾槽表示移到最後；原位置前後兩個
-槽都是 no-op。ID 僅為範例，實際請使用建立或查詢回應中的 ID。
+同層排序的 `--index` 是移動前清單的插入槽（`0..數量`），尾槽表示移到最後；
+原位置前後兩個槽都是 no-op。跨工作區搬移使用目的工作區的插入槽；省略時附加
+至最後。ID 僅為範例，實際請使用建立或查詢回應中的 ID。
+
+設定好 OpenSSH alias、host key、驗證方式與已啟動的遠端 Crew 後：
+
+```sh
+crew machine add buildbox --label Build --binary /opt/crew/bin/crew
+crew --machine Build workspace list
+crew federation
+```
+
+`federation` 中用方向鍵選工作區、Enter attach、`r` 更新、`q` 離開；遠端終端
+沿用 `Ctrl-b d` detach。Crew 不會自動部署、啟動或重啟遠端 daemon。
 
 建立 workspace／tab／worktree 預設不切換使用者焦點；加 `--focus` 才切換。
 `workspace` 與 `tab` 的穩定 ID 為 `wN` 和 `tN`，重新命名及重啟後保留；
@@ -523,9 +552,9 @@ Precedence: an explicit `dark`, `light` or `mono` wins over the environment; `NO
 - 終端模擬由 `vt100` crate 提供，少數進階序列可能不支援 / Terminal emulation via the `vt100` crate; some advanced sequences may be unsupported
 - 窗格工作目錄只有 Linux 即時追蹤；Windows／macOS 保存與回報的 `cwd` 是窗格啟動目錄 / Live working-directory tracking is Linux only; on Windows and macOS the saved and reported `cwd` is the pane's start directory
 - 還原的 resume 指令只依 POSIX shell 與 PowerShell 的引號規則組成，不支援 cmd.exe / Restored resume commands are quoted for POSIX shells and PowerShell only; cmd.exe is not supported
-- 尚未支援 SSH 遠端機器 / No SSH remote machines yet
-- 尚未支援外掛 / No plugin system yet
-- 不會自動偵測 agent 種類，需由 agent 或 hook 呼叫 `pane report-agent` 回報；否則只有輸出活動推定 / No automatic agent detection: agents or hooks must call `pane report-agent`, otherwise only output-activity inference is available
+- SSH 目前支援 POSIX 遠端主機與 federation selector；不跨主機搬移 PTY，也不將遠端 pane 嵌入同一本地版面 / SSH uses POSIX remote hosts and a federation selector; cross-host PTY transfer and embedded remote panes are not implemented
+- 外掛使用 Crew 自有 manifest 與 argv actions；尚無 Herdr 外掛相容、啟動事件、畫面渲染或 pane extension 引擎 / Plugins use Crew manifests and argv actions; Herdr compatibility, startup/event hooks and pane renderers are not implemented
+- 自動偵測僅提供程序種類提示；可靠的 working／blocked／idle 與 wait 仍需 `pane report-agent`。Windows 使用 child tree，macOS／Windows 不解析 Node/Python package arguments / Detection supplies process-kind hints; lifecycle waits still need explicit reports, and evidence varies by platform
 - Herdr 的完整功能對照與差異請見 [功能對齊表](docs/herdr-parity.md)。Crew 保留自己的本機 wire protocol。 / See the [alignment matrix](docs/herdr-parity.md); Crew retains its own native wire protocol.
 - 選單不接受滑鼠選取列，任何點擊都會關閉它；請用鍵盤（`↑↓` `Enter`）/ The chooser does not take mouse selection: any click closes it; use the keys (`↑↓` `Enter`)
 - 終端機寬度不超過 `sidebar-width` + 20 欄（預設即 48 欄）時，側邊欄會直接隱藏，沒有提示 / When the terminal is not wider than `sidebar-width` + 20 columns (48 by default), the sidebar is hidden without a message
@@ -540,7 +569,18 @@ Set `CREW_LOG=/path/to/file` before starting to get a server debug log (pane spa
 
 ## 測試 Testing
 
-`cargo test`（單元測試 unit tests）、`python scripts/smoke.py`（CI 在 Linux / macOS / Windows 上執行：背景 session、確認 PowerShell/shell 提示字元、send-keys、ANSI 畫面 / runs on all three OSes in CI）、`python scripts/api_smoke.py`（自動化 API：分割、輸入、換行輸出、agent 狀態、錯誤碼、版面保存，以及關閉最後一個 session 後清除保存檔；三個平台的 CI 皆執行 / automation API: splits, input, wrapped output, agent status, error codes, layout persistence, and clearing the saved state when the last session closes; runs on all three OSes in CI）與 `python3 scripts/e2e_linux.py`（需 `pip install pyte`，在 Linux 上以虛擬終端驅動實際操作 / drives a real session through a pty on Linux）。
+在已提交的 checkout 執行完整原生驗證：
+
+```sh
+python3 scripts/validate_local.py --offline --output ../Crew-local-evidence --target-dir ../Crew-local-target
+python3 scripts/package_local.py --evidence ../Crew-local-evidence/validation.json --output ../Crew-local-dist
+```
+
+需預先備妥 Rust／Python／Git 與離線依賴。Linux 的 SSH smoke 另需 OpenSSH server、
+loopback 及 PTY 權限；Windows 會實際建立 Inno 安裝包並執行全部 lifecycle 檢查。
+完整指令、依賴與容器 fixture 選項見 [本機驗證](docs/local-validation.md)。結果記錄
+source commit／tree、binary 與 log hashes，未執行的平台列為 `NOT_RUN`。
+GitHub workflow 只保留明確授權的手動入口，推送、PR 與 tag 不會自動執行。
 
 ## License
 

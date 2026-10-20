@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.5.0 — Presentation, federation and local validation
+
+- Add source-scoped pane/workspace presentation, literal token templates, guards,
+  field clearing, TTL and sequence protection. Share computed display with the
+  TUI and API without changing agent lifecycle or resource identities.
+- Transfer a complete live tab to another workspace while preserving PTYs,
+  pane/tab IDs, agent instances, metadata, focus and persistent layout order.
+- Save SSH machines, route API requests over native OpenSSH and combine scoped
+  workspace/agent views. Add an interactive federation selector with real remote
+  attach/detach, bounded probes, partial failures and explicit reconnection.
+- Add a bundled plugin marketplace, optional public GitHub discovery, manifest
+  inspection, install/link/update, enable/disable, bounded argv actions and logs.
+  Require installation trust and keep config/state and previous installations.
+- Detect agent kinds from live process evidence with platform-specific native
+  backends. Explicit reports remain authoritative; hints do not complete waits.
+- Replace automatic hosted push/PR/tag runs with an opt-in manual workflow.
+  Add local validation and native packaging with source, command, log and binary
+  hashes. Native Windows local runs retain the full Inno installer lifecycle.
+
+This release implements bounded behavior subsets. It does not add Herdr's full
+styled row/grid templates, plugin pane/event engine, screen-state detection,
+remote pane embedding or cross-host PTY transfer. See `docs/herdr-parity.md`.
+Local evidence covers its named native platform only. Windows/macOS and installer
+execution must be reported from actual native runs; no CI run ID is synthesized.
+
 ## 0.4.0 — Ordering, metadata and Windows setup
 
 - Add workspace/tab ordering with zero-based insertion slots. Preserve stable IDs,
