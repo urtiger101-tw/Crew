@@ -1,0 +1,11 @@
+id = "crew.worktrees"
+name = "Git Worktree Inspector"
+version = "1.0.0"
+min_crew_version = "0.5.0"
+description = "List real Git worktrees for the directory from which the action is invoked."
+platforms = ["linux", "macos", "windows"]
+
+[[actions]]
+id = "list"
+title = "Inspect project worktrees"
+command = ["{crew}", "worktree", "list", "--repo", "{cwd}"]
