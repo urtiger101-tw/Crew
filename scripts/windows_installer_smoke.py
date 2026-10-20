@@ -6,6 +6,7 @@ Refuses to run if Crew is already registered for the current user. Never kills a
 user's daemon: the only server stopped by this test has its own random socket.
 """
 import argparse
+import base64
 import json
 import os
 from pathlib import Path
@@ -17,6 +18,127 @@ import uuid
 
 from windows_installer import compiler, execute, legacy_fixture
 from windows_installer_contract import APP_ID, CHECKS, LEGACY, TARGET, installer_name, require, require_static_crt, sha256, validate_record
+
+
+# Native WSH returned '?' for this Unicode fixture. Read through IShellLinkW and
+# retain both results; a damaged .lnk must still fail. The vtable follows the
+# Windows SDK; IPersistFile comes from .NET's COM types.
+# Fixture paths are below MAX_PATH. A full buffer is rejected, never truncated.
+SHORTCUT_READ_SCRIPT = r"""
+$ErrorActionPreference='Stop'
+function Trace-ShortcutValue($name,$value) {
+    $kind=if ($null -eq $value) { '<null>' } else { $value.GetType().FullName }
+    $text=[string]$value
+    $escaped=($text.ToCharArray() | ForEach-Object { '\u{0:X4}' -f [int]$_ }) -join ''
+    [Console]::Error.WriteLine(('CREW_SHORTCUT_VALUE name={0}; null={1}; type={2}; utf16_length={3}; escaped_utf16={4}' -f $name,($null -eq $value),$kind,$text.Length,$escaped))
+}
+$s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:CREW_SHORTCUT)
+$legacy=[ordered]@{ target=$s.TargetPath; working_directory=$s.WorkingDirectory; arguments=$s.Arguments }
+$expectedProfile=[Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
+Trace-ShortcutValue 'Shortcut' $env:CREW_SHORTCUT
+Trace-ShortcutValue 'WSH.TargetPath' $legacy.target
+Trace-ShortcutValue 'WSH.WorkingDirectory' $legacy.working_directory
+Trace-ShortcutValue 'WSH.Arguments' $legacy.arguments
+Trace-ShortcutValue 'ExpectedBinary' $env:CREW_EXPECTED_BINARY
+Trace-ShortcutValue 'ExpectedWorkingDirectory' $expectedProfile
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.ComTypes;
+using System.Text;
+
+[ComImport, Guid("00021401-0000-0000-C000-000000000046")]
+internal class CrewShellLink { }
+
+[ComImport, Guid("000214F9-0000-0000-C000-000000000046")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface CrewIShellLinkW {
+    [PreserveSig] int GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder path, int chars, IntPtr findData, uint flags);
+    [PreserveSig] int GetIDList(out IntPtr pidl);
+    [PreserveSig] int SetIDList(IntPtr pidl);
+    [PreserveSig] int GetDescription([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder text, int chars);
+    [PreserveSig] int SetDescription([MarshalAs(UnmanagedType.LPWStr)] string text);
+    [PreserveSig] int GetWorkingDirectory([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder path, int chars);
+    [PreserveSig] int SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string path);
+    [PreserveSig] int GetArguments([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder text, int chars);
+    [PreserveSig] int SetArguments([MarshalAs(UnmanagedType.LPWStr)] string text);
+    [PreserveSig] int GetHotkey(out ushort hotkey);
+    [PreserveSig] int SetHotkey(ushort hotkey);
+    [PreserveSig] int GetShowCmd(out int command);
+    [PreserveSig] int SetShowCmd(int command);
+    [PreserveSig] int GetIconLocation([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder path, int chars, out int index);
+    [PreserveSig] int SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string path, int index);
+    [PreserveSig] int SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string path, uint reserved);
+    [PreserveSig] int Resolve(IntPtr window, uint flags);
+    [PreserveSig] int SetPath([MarshalAs(UnmanagedType.LPWStr)] string path);
+}
+
+public static class CrewShortcutReader {
+    private static string Checked(int result, StringBuilder value, string operation) {
+        if (result != 0) throw new COMException(operation + " did not return S_OK", result);
+        if (value.Length >= value.Capacity - 1) throw new InvalidOperationException(operation + " filled its buffer");
+        return value.ToString();
+    }
+
+    public static string[] Read(string filename) {
+        object instance = new CrewShellLink();
+        try {
+            // STGM_READ = 0. Do not Resolve, Save, or modify the shortcut.
+            ((IPersistFile)instance).Load(filename, 0);
+            CrewIShellLinkW link = (CrewIShellLinkW)instance;
+            StringBuilder target = new StringBuilder(260);
+            StringBuilder working = new StringBuilder(260);
+            StringBuilder arguments = new StringBuilder(260);
+            string t = Checked(link.GetPath(target, target.Capacity, IntPtr.Zero, 0), target, "GetPath");
+            string w = Checked(link.GetWorkingDirectory(working, working.Capacity), working, "GetWorkingDirectory");
+            string a = Checked(link.GetArguments(arguments, arguments.Capacity), arguments, "GetArguments");
+            return new string[] { t, w, a };
+        } finally {
+            Marshal.FinalReleaseComObject(instance);
+        }
+    }
+}
+'@
+$wide=[CrewShortcutReader]::Read($env:CREW_SHORTCUT)
+Trace-ShortcutValue 'IShellLinkW.TargetPath' $wide[0]
+Trace-ShortcutValue 'IShellLinkW.WorkingDirectory' $wide[1]
+Trace-ShortcutValue 'IShellLinkW.Arguments' $wide[2]
+$data=[ordered]@{
+    reader='IShellLinkW'
+    expected_user_profile=$expectedProfile
+    wsh=$legacy
+    wide=[ordered]@{ target=$wide[0]; working_directory=$wide[1]; arguments=$wide[2] }
+}
+$json=$data | ConvertTo-Json -Depth 4 -Compress
+Write-Output ('CREW_SHORTCUT_DATA ' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json)))
+"""
+# Windows PowerShell 5.1 -EncodedCommand requires UTF-16LE. Keep C# quotes and
+# here-string line breaks out of native argv parsing; fixture paths stay in env.
+SHORTCUT_READ_ENCODED = base64.b64encode(SHORTCUT_READ_SCRIPT.encode("utf-16le")).decode("ascii")
+
+
+def decode_shortcut_values(output):
+    prefix = "CREW_SHORTCUT_DATA "
+    require(output.startswith(prefix), "Unicode shortcut reader did not return its result")
+    return json.loads(base64.b64decode(output[len(prefix):], validate=True).decode("utf-8"))
+
+
+def validate_shortcut_values(values, expected_binary):
+    require(isinstance(values, dict) and values.get("reader") == "IShellLinkW",
+            "shortcut validation requires the Unicode reader")
+    wide = values.get("wide")
+    require(isinstance(wide, dict) and all(isinstance(wide.get(key), str)
+            for key in ("target", "working_directory", "arguments")), "Unicode shortcut values are missing")
+    target, working = wide["target"], wide["working_directory"]
+    profile = values.get("expected_user_profile")
+    # Compare file identity, including short/long Windows aliases, without changing any characters.
+    require(bool(target) and Path(target).is_absolute() and Path(target).is_file()
+            and os.path.samefile(target, expected_binary), "Start Menu shortcut points elsewhere")
+    require(isinstance(profile, str) and bool(profile) and Path(profile).is_absolute()
+            and Path(profile).is_dir() and bool(working) and Path(working).is_absolute()
+            and Path(working).is_dir() and os.path.samefile(working, profile),
+            "Start Menu shortcut working directory is not the user profile")
+    require(wide["arguments"] == "", "Start Menu shortcut has unexpected arguments")
 
 
 def wait_until(predicate, message, seconds=15):
@@ -139,37 +261,13 @@ def native_smoke(args):
                     "HKCU installed version differs")
             require(shortcut.is_file(), "per-user Start Menu shortcut is missing")
             shortcut_env = dict(env, CREW_SHORTCUT=str(shortcut), CREW_EXPECTED_BINARY=str(directory / "crew.exe"))
-            target = execute(["powershell", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
-                              "$ErrorActionPreference='Stop'; "
-                              # Keep the raw COM values: quoting/prefixes must not be guessed away.
-                              # Escape every UTF-16 code unit so diagnostics survive any console code page.
-                              "function Trace-ShortcutValue($name,$value) { "
-                              "$kind=if ($null -eq $value) { '<null>' } else { $value.GetType().FullName }; "
-                              "$text=[string]$value; "
-                              "$escaped=($text.ToCharArray() | ForEach-Object { '\\u{0:X4}' -f [int]$_ }) -join ''; "
-                              "[Console]::Error.WriteLine(('CREW_SHORTCUT_VALUE name={0}; null={1}; type={2}; "
-                              "utf16_length={3}; escaped_utf16={4}' -f $name,($null -eq $value),$kind,$text.Length,$escaped)) }; "
-                              "$s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:CREW_SHORTCUT); $t=$s.TargetPath; "
-                              "$w=$s.WorkingDirectory; $a=$s.Arguments; "
-                              "$p=[Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile); "
-                              "try { "
-                              "if (-not [string]::Equals([IO.Path]::GetFullPath($t), "
-                              "[IO.Path]::GetFullPath($env:CREW_EXPECTED_BINARY), [StringComparison]::OrdinalIgnoreCase)) "
-                              "{ throw 'Start Menu shortcut points elsewhere' }; "
-                              "if ([string]::IsNullOrWhiteSpace($p) -or [string]::IsNullOrWhiteSpace($w) -or "
-                              "-not [IO.Directory]::Exists($p) -or -not [string]::Equals([IO.Path]::GetFullPath($w), "
-                              "[IO.Path]::GetFullPath($p), [StringComparison]::OrdinalIgnoreCase)) "
-                              "{ throw 'Start Menu shortcut working directory is not the user profile' }; "
-                              "Write-Output 'CREW_SHORTCUT_OK' "
-                              "} catch { "
-                              "Trace-ShortcutValue 'Shortcut' $env:CREW_SHORTCUT; "
-                              "Trace-ShortcutValue 'TargetPath' $t; "
-                              "Trace-ShortcutValue 'ExpectedBinary' $env:CREW_EXPECTED_BINARY; "
-                              "Trace-ShortcutValue 'WorkingDirectory' $w; "
-                              "Trace-ShortcutValue 'ExpectedWorkingDirectory' $p; "
-                              "Trace-ShortcutValue 'Arguments' $a; throw }"],
+            before = shortcut.read_bytes()
+            output = execute(["powershell", "-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", SHORTCUT_READ_ENCODED],
                              env=shortcut_env, log=logs / f"shortcut-{len(checks):02d}-{version}.log")
-            require(target == "CREW_SHORTCUT_OK", "Start Menu shortcut validation did not complete")
+            values = decode_shortcut_values(output)
+            print("Installer shortcut values: " + json.dumps(values, ensure_ascii=True, sort_keys=True), flush=True)
+            require(shortcut.read_bytes() == before, "shortcut reader changed the installed shortcut")
+            validate_shortcut_values(values, directory / "crew.exe")
 
         def uninstaller(directory):
             found = list(directory.glob("unins*.exe"))

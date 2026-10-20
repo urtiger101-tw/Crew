@@ -634,6 +634,67 @@ class ReleaseChecks(unittest.TestCase):
                     changed["scope"] = "all-users"
                 with self.subTest(mode=mode), self.assertRaises(ValueError):
                     validate_installer(folder, changed, meta, windows["files"])
+
+    def test_shortcut_unicode_transport_and_physical_identity(self):
+        import base64
+        from windows_installer_smoke import (
+            SHORTCUT_READ_ENCODED, SHORTCUT_READ_SCRIPT, decode_shortcut_values, validate_shortcut_values,
+        )
+
+        self.assertEqual(base64.b64decode(SHORTCUT_READ_ENCODED, validate=True).decode("utf-16le"), SHORTCUT_READ_SCRIPT)
+
+        # These are real filesystem identity checks, not a simulation of native COM.
+        with tempfile.TemporaryDirectory(prefix="crew-shortcut-check-") as temporary:
+            root = Path(temporary)
+            install = root / "fresh 安裝 space"
+            install.mkdir()
+            binary = install / "crew.exe"
+            binary.write_bytes(b"same-content payload")
+            alias = root / "binary-alias.exe"
+            os.link(binary, alias)
+            other = root / "different-file.exe"
+            other.write_bytes(binary.read_bytes())
+            profile = root / "user profile 使用者"
+            profile.mkdir()
+            values = {"reader": "IShellLinkW", "expected_user_profile": str(profile),
+                      "wide": {"target": str(binary), "working_directory": str(profile), "arguments": ""},
+                      "wsh": {"target": str(binary).replace("安裝", "??")}}
+            encoded = "CREW_SHORTCUT_DATA " + base64.b64encode(json.dumps(values, ensure_ascii=False).encode("utf-8")).decode("ascii")
+            self.assertTrue(encoded.isascii())
+            decoded = decode_shortcut_values(encoded)
+            self.assertEqual(decoded, values)
+            validate_shortcut_values(decoded, binary)
+            alias_values = json.loads(json.dumps(values))
+            alias_values["wide"]["target"] = str(alias)
+            validate_shortcut_values(alias_values, binary)
+            for mode in ["different-file", "missing", "lossy", "quoted", "empty", "relative", "wrong-cwd", "missing-profile", "arguments", "wrong-reader"]:
+                changed = json.loads(json.dumps(values))
+                if mode == "different-file":
+                    changed["wide"]["target"] = str(other)
+                elif mode == "missing":
+                    changed["wide"]["target"] = str(root / "missing.exe")
+                elif mode == "lossy":
+                    changed["wide"]["target"] = values["wsh"]["target"]
+                elif mode == "quoted":
+                    changed["wide"]["target"] = '"' + str(binary) + '"'
+                elif mode == "empty":
+                    changed["wide"]["target"] = ""
+                elif mode == "relative":
+                    changed["wide"]["target"] = "crew.exe"
+                elif mode == "wrong-cwd":
+                    changed["wide"]["working_directory"] = str(install)
+                elif mode == "missing-profile":
+                    changed["expected_user_profile"] = ""
+                elif mode == "arguments":
+                    changed["wide"]["arguments"] = "--unexpected"
+                elif mode == "wrong-reader":
+                    changed["reader"] = "WSH"
+                with self.subTest(mode=mode), self.assertRaises(ValueError):
+                    validate_shortcut_values(changed, binary)
+            for invalid in ["CREW_SHORTCUT_OK", "noise\n" + encoded, encoded + "\nnoise", "CREW_SHORTCUT_DATA ***"]:
+                with self.subTest(output=invalid), self.assertRaises(ValueError):
+                    decode_shortcut_values(invalid)
+
     def test_archives_preserve_members_and_reject_changed_payloads(self):
         # Offline fixtures test archive validation, never claim a real platform build.
         for suffix in [".tar.gz", ".zip"]:
