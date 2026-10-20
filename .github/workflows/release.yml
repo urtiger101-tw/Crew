@@ -5,10 +5,13 @@ on:
       tag:
         description: 'Release tag matching Cargo.toml (run from main after CI succeeds)'
         required: true
-        default: v0.4.0
+        default: v0.5.0
         type: string
-  push:
-    tags: ['v[0-9]*']
+      allow_hosted_minutes:
+        description: 'Explicitly authorize GitHub-hosted runner usage for this release'
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -29,6 +32,7 @@ defaults:
 
 jobs:
   verify:
+    if: ${{ inputs.allow_hosted_minutes == true }}
     name: Verify source and CI
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -147,7 +151,7 @@ jobs:
   publish:
     name: Publish complete release
     needs: [verify, build]
-    if: ${{ always() }}
+    if: ${{ always() && inputs.allow_hosted_minutes == true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
