@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real OpenSSH loopback + two real Crew daemons + a terminal chooser.
+"""Real OpenSSH loopback, real Crew daemons, and terminal chooser regressions.
 
 Linux only. Requires ssh, sshd, ssh-keygen and permission to start a loopback sshd.
 The test uses temporary host/user keys, an exact pinned host key, separate Crew
@@ -87,14 +87,15 @@ def main():
                     if k not in ("CREW", "TMUXLIKE") and not k.startswith(("CREW_", "TMUXLIKE_"))}
         base_env.update(CREW_LANG="en", TERM="xterm-256color")
         envs = []
-        for name in ("local", "remote", "absent"):
+        for name in ("local", "remote", "absent", "restart"):
             config = root / (name + ".toml")
             config.write_text('persist = false\nshell = "/bin/sh"\nsidebar = true\n', encoding="utf-8")
             env = dict(base_env, CREW_SOCKET="crew-ssh-" + name + uuid.uuid4().hex,
                        CREW_CONFIG=str(config), CREW_STATE=str(root / (name + ".json")),
                        CREW_LOG=str(root / (name + ".log")), CREW_MACHINES=str(root / "machines.json"))
             envs.append(env)
-        local_env, remote_env, absent_env = envs
+        local_env, remote_env, absent_env, restart_env = envs
+        restart_env["CREW_MACHINES"] = str(root / "restart-machines.json")
 
         def run(*args, env=local_env, timeout=30):
             return subprocess.run([str(exe), *args], env=env, cwd=root, capture_output=True,
@@ -226,6 +227,11 @@ LogLevel VERBOSE
             assert {(w["machine_id"], w["workspace_id"]) for w in merged["workspaces"]} == {("local", "w1"), (mid, "w1")}
             assert {a["machine_id"] for a in merged["agents"]} == {"local", mid}
             assert {m["machine_id"] for m in merged["machines"] if m["state"] == "unavailable"} == {missing, offline}
+            epochs = {m["machine_id"]: m["data"]["epoch"] for m in merged["machines"] if m["state"] == "reachable"}
+            assert epochs == {"local": api("events", "list")["epoch"],
+                              mid: api("events", "list", env=remote_env)["epoch"]}
+            assert all(w["machine_epoch"] == epochs[w["machine_id"]] for w in merged["workspaces"])
+            assert all(a["machine_epoch"] == epochs[a["machine_id"]] for a in merged["agents"])
             passed("combined workspace/agent views preserve healthy machines beside offline hosts")
 
             r = run("--machine", mid, "--timeout-ms", "500", "pane", "wait-output", rp, "--regex", "NEVER_SSH_MARKER", "--timeout", "20000")
@@ -370,6 +376,16 @@ LogLevel VERBOSE
 
             # A removed ID must fail, even if another workspace now has its name.
             # An empty machine catalog makes this second selector local-only.
+            # Keep this daemon alive: with persist=false, closing its last workspace
+            # can stop it, and a new daemon is allowed to start its ID counter over.
+            keeper = api("workspace", "create", "local-keeper")["workspace"]
+
+            def assert_keeper_present():
+                kept = api("workspace", "get", keeper["workspace_id"])["workspace"]
+                assert kept["name"] == "local-keeper" and kept["workspace_id"] == keeper["workspace_id"]
+                assert kept["tabs"][0]["active_pane"] == keeper["tabs"][0]["active_pane"]
+
+            assert_keeper_present()
             while select.select([master], [], [], 0)[0]:
                 transcript.extend(os.read(master, 65536))
             deleted_env = dict(local_env, CREW_MACHINES=str(root / "deleted-machines.json"))
@@ -379,16 +395,56 @@ LogLevel VERBOSE
             until(">   w1  local-work")
             cached_at = time.monotonic()
             api("workspace", "close", local["workspace_id"])
+            assert_keeper_present()
             replacement = api("workspace", "create", "local-work")["workspace"]
             assert replacement["workspace_id"] != local["workspace_id"]
+            assert_keeper_present()
             assert time.monotonic() - cached_at < 10
             os.write(master, b"\r")
             until("Attach failed with exit 1")
             assert api("workspace", "get", replacement["workspace_id"])["workspace"]["attached"] == 0
+            assert_keeper_present()
             os.write(master, b"q")
             assert chooser.wait(timeout=5) == 0
             assert termios.tcgetattr(slave) == initial_tty
             passed("removed selected ID refuses attachment despite workspace name reuse")
+
+            # A cold daemon restart may reuse both ID and name. The cached
+            # selector must carry its observed epoch into the daemon's attach
+            # lock, not pair old rows with a fresh epoch in a preflight request.
+            while select.select([master], [], [], 0)[0]:
+                transcript.extend(os.read(master, 65536))
+            first = api("workspace", "create", "restart-work", env=restart_env)["workspace"]
+            initial_epoch = api("events", "list", env=restart_env)["epoch"]
+            chooser = subprocess.Popen([str(exe), "federation", "watch", "--timeout-ms", "1000"], env=restart_env,
+                                       cwd=root, stdin=slave, stdout=slave, stderr=slave, preexec_fn=controlling_tty)
+            until("0 connection checks pending")
+            until(">   w1  restart-work")
+            cached_at = time.monotonic()
+            api("workspace", "close", first["workspace_id"], env=restart_env)
+            deadline = time.monotonic() + 5
+            while run("workspace", "list", env=restart_env).returncode == 0:
+                assert time.monotonic() < deadline, "old restart fixture daemon did not exit"
+                time.sleep(.02)
+            replacement = api("workspace", "create", "restart-work", env=restart_env)["workspace"]
+            replacement_epoch = api("events", "list", env=restart_env)["epoch"]
+            assert first["workspace_id"] == replacement["workspace_id"] == "w1"
+            assert initial_epoch != replacement_epoch
+            assert time.monotonic() - cached_at < 10
+            restart_record = {"selected_workspace_id": first["workspace_id"], "selected_epoch": initial_epoch,
+                              "replacement_workspace_id": replacement["workspace_id"],
+                              "replacement_epoch": replacement_epoch, "rejected": False}
+            (root / "restart-guard.json").write_text(json.dumps(restart_record, indent=2) + "\n")
+            os.write(master, b"\r")
+            until("Attach failed with exit 1")
+            assert b"server changed since selection" in transcript
+            assert api("workspace", "get", "w1", env=restart_env)["workspace"]["attached"] == 0
+            os.write(master, b"q")
+            assert chooser.wait(timeout=5) == 0
+            assert termios.tcgetattr(slave) == initial_tty
+            restart_record.update(rejected=True, replacement_attached=0, terminal_restored=True)
+            (root / "restart-guard.json").write_text(json.dumps(restart_record, indent=2) + "\n")
+            passed("cached selector rejects a restarted daemon despite workspace ID and name reuse")
 
             original = (root / "machines.json").read_bytes()
             (root / "machines.json").write_text('{"broken":', encoding="utf-8")
@@ -405,7 +461,8 @@ LogLevel VERBOSE
             if options.logs:
                 options.logs.mkdir(parents=True, exist_ok=True)
                 sshd_log.flush()
-                for name in ("sshd.log", "local.log", "remote.log", "absent.log", "proxy-cleanup.json"):
+                for name in ("sshd.log", "local.log", "remote.log", "absent.log", "restart.log",
+                             "proxy-cleanup.json", "restart-guard.json"):
                     if (root / name).is_file():
                         shutil.copyfile(root / name, options.logs / name)
                 if "transcript" in locals():
