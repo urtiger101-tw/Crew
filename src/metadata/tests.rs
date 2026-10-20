@@ -10,6 +10,12 @@ fn request(items: &[(&str, Option<&str>)], seq: Option<u64>, ttl_ms: Option<u64>
             .collect(),
         seq,
         ttl_ms,
+        title: TextPatch::default(),
+        display_agent: TextPatch::default(),
+        state_labels: BTreeMap::new(),
+        agent: None,
+        applies_to_source: None,
+        clear_presentation: false,
     }
 }
 
@@ -406,7 +412,7 @@ fn cli_preserves_literals_and_rejects_ambiguous_options() {
         vec!["p1", "--source", "hook", "--token", "k=x", "--seq", "-1"],
         vec!["p1", "--source", "hook", "--token", "k=x", "--seq", "+1"],
         vec!["p1", "--source", "hook", "--token", "k=x", "--ttl-ms", "0"],
-        vec!["p1", "--source", "hook", "--title", "not supported"],
+        vec!["p1", "--source", "hook", "--unsupported", "not supported"],
         vec!["p01", "--source", "hook", "--token", "k=x"],
         vec!["p1", "p2", "--source", "hook", "--token", "k=x"],
         vec!["p1", "--source", "hook"],
@@ -416,6 +422,30 @@ fn cli_preserves_literals_and_rejects_ambiguous_options() {
 }
 
 use crate::api::Request as ApiRequest;
+
+#[test]
+fn patch_after_expiry_cannot_resurrect_omitted_labels_or_guards_before_sweep() {
+    let now = Instant::now();
+    let later = now + Duration::from_millis(11);
+    let key = Key::Pane(1);
+    for sweep_first in [false, true] {
+        let mut store = Store::default();
+        let mut req = request(&[], Some(1), Some(10));
+        req.title = TextPatch::set("old title".into());
+        req.display_agent = TextPatch::set("old label".into());
+        req.agent = Some("old-agent".into());
+        store.apply(key, &req, now).unwrap();
+        if sweep_first {
+            store.expire(later);
+        }
+        let mut fresh = request(&[], Some(2), None);
+        fresh.title = TextPatch::set("new title".into());
+        store.apply(key, &fresh, later).unwrap();
+        let value = store.presentation(key, later, None, None);
+        assert_eq!(value.title.as_deref(), Some("new title"));
+        assert_eq!(value.display_agent, None);
+    }
+}
 
 #[test]
 fn handler_validates_direct_api_and_expiry_without_starting_a_server() {
@@ -438,19 +468,21 @@ fn handler_validates_direct_api_and_expiry_without_starting_a_server() {
     let mut bad = req.clone();
     bad.ttl_ms = Some(0);
     assert_eq!(
-        crate::api::handle(&shared, ApiRequest::Metadata(bad))
+        crate::api::handle(&shared, ApiRequest::Metadata(Box::new(bad)))
             .unwrap_err()
             .code,
         "invalid_argument"
     );
     assert!(lock(&shared).metadata.resources.is_empty());
     let Reply::Json(result) =
-        crate::api::handle(&shared, ApiRequest::Metadata(req.clone())).unwrap()
+        crate::api::handle(&shared, ApiRequest::Metadata(Box::new(req.clone()))).unwrap()
     else {
         panic!()
     };
     assert_eq!(result["accepted"], true);
-    let Reply::Json(stale) = crate::api::handle(&shared, ApiRequest::Metadata(req)).unwrap() else {
+    let Reply::Json(stale) =
+        crate::api::handle(&shared, ApiRequest::Metadata(Box::new(req))).unwrap()
+    else {
         panic!()
     };
     assert_eq!(stale["accepted"], false);
@@ -490,9 +522,338 @@ fn handler_validates_direct_api_and_expiry_without_starting_a_server() {
 }
 
 #[test]
-fn raw_metadata_schema_rejects_unsupported_presentation_fields() {
+fn raw_metadata_schema_rejects_unknown_fields() {
     let req = request(&[("task", Some("v"))], None, None);
     let mut value = serde_json::to_value(&req).unwrap();
-    value["title"] = json!("unsupported");
+    value["unknown_presentation_field"] = json!("unsupported");
     assert!(serde_json::from_value::<Request>(value).is_err());
+}
+
+#[test]
+fn presentation_null_clear_and_omission_have_distinct_wire_semantics() {
+    let mut req = request(&[], Some(1), None);
+    req.title = TextPatch::set("First".into());
+    let mut value = serde_json::to_value(&req).unwrap();
+    assert!(value.get("display_agent").is_none());
+    value["title"] = serde_json::Value::Null;
+    let decoded: Request = serde_json::from_value(value).unwrap();
+    assert_eq!(decoded.title, TextPatch::clear());
+    assert!(decoded.display_agent.missing());
+}
+
+#[test]
+fn presentation_patches_keep_omitted_fields_and_do_not_change_tokens() {
+    let now = Instant::now();
+    let mut store = Store::default();
+    let key = Key::Pane(1);
+    let mut req = request(&[("task", Some("work"))], Some(1), None);
+    req.title = TextPatch::set("  Title\n中文\u{202e} ".into());
+    req.display_agent = TextPatch::set("Team A".into());
+    req.state_labels
+        .insert("working".into(), Some("Building".into()));
+    assert!(store.apply(key, &req, now).unwrap().accepted);
+    let original = store.presentation(key, now, None, None);
+    assert_eq!(original.title.as_deref(), Some("Title中文"));
+    let mut clear = request(&[], Some(2), None);
+    clear.title = TextPatch::clear();
+    store.apply(key, &clear, now).unwrap();
+    let view = store.presentation(key, now, None, None);
+    assert_eq!(view.title, None);
+    assert_eq!(view.display_agent, original.display_agent);
+    assert_eq!(view.state_labels["working"], "Building");
+    assert_eq!(store.values(key, now)["task"], "work");
+    clear.title = TextPatch::default();
+    clear.clear_presentation = true;
+    clear.seq = Some(3);
+    store.apply(key, &clear, now).unwrap();
+    assert_eq!(
+        store.presentation(key, now, None, None),
+        presentation::Presentation::default()
+    );
+    assert_eq!(store.values(key, now)["task"], "work");
+    assert!(!store.apply(key, &req, now).unwrap().accepted);
+}
+
+#[test]
+fn guarded_presentation_is_hidden_but_tokens_remain_independent() {
+    let now = Instant::now();
+    let mut store = Store::default();
+    let key = Key::Pane(1);
+    let mut req = request(&[("task", Some("shared"))], Some(1), None);
+    req.title = TextPatch::set("Guarded".into());
+    req.agent = Some("codex".into());
+    req.applies_to_source = Some("hook:codex".into());
+    store.apply(key, &req, now).unwrap();
+    for (agent, source) in [
+        (None, None),
+        (Some("claude"), Some("hook:codex")),
+        (Some("codex"), Some("other")),
+        (Some("codex"), None),
+    ] {
+        assert!(store.presentation(key, now, agent, source).title.is_none());
+        assert_eq!(store.values(key, now)["task"], "shared");
+    }
+    assert_eq!(
+        store
+            .presentation(key, now, Some("codex"), Some("hook:codex"))
+            .title
+            .as_deref(),
+        Some("Guarded")
+    );
+}
+
+#[test]
+fn presentation_source_ttl_and_sequence_are_not_refreshed_by_token_only_reports() {
+    let now = Instant::now();
+    let key = Key::Pane(1);
+    let mut store = Store::default();
+    let mut req = request(&[], Some(10), Some(10));
+    req.title = TextPatch::set("short-lived".into());
+    store.apply(key, &req, now).unwrap();
+    store
+        .apply(key, &request(&[("kept", Some("yes"))], Some(11), None), now)
+        .unwrap();
+    let end = now + Duration::from_millis(10);
+    assert!(store.presentation(key, end, None, None).title.is_none());
+    assert_eq!(store.expire(end), vec![(key, vec!["@presentation".into()])]);
+    assert!(store.expire(end).is_empty());
+    assert!(!store.apply(key, &req, end).unwrap().accepted);
+    assert_eq!(store.values(key, end)["kept"], "yes");
+}
+
+#[test]
+fn guard_only_patches_and_clearing_last_field_keep_both_guards_until_explicit_clear() {
+    let now = Instant::now();
+    let key = Key::Pane(1);
+    let mut store = Store::default();
+    let mut guard = request(&[], Some(10), None);
+    guard.agent = Some("codex".into());
+    guard.applies_to_source = Some("hook:codex".into());
+    assert_eq!(
+        store.apply(key, &guard, now).unwrap().changed,
+        vec!["@presentation"]
+    );
+    assert_eq!(store.resources[&key].presentations.len(), 1);
+    let mut title = request(&[], Some(11), None);
+    title.title = TextPatch::set("First".into());
+    store.apply(key, &title, now).unwrap();
+    let mut clear = request(&[], Some(12), None);
+    clear.title = TextPatch::clear();
+    store.apply(key, &clear, now).unwrap();
+    assert_eq!(
+        store.resources[&key].presentations["hook:test"].value,
+        presentation::Presentation::default()
+    );
+    title.seq = Some(13);
+    title.title = TextPatch::set("Later".into());
+    store.apply(key, &title, now).unwrap();
+    for (agent, source) in [
+        (Some("claude"), Some("hook:codex")),
+        (Some("codex"), Some("other")),
+        (None, None),
+    ] {
+        assert!(store.presentation(key, now, agent, source).title.is_none());
+    }
+    assert_eq!(
+        store
+            .presentation(key, now, Some("codex"), Some("hook:codex"))
+            .title
+            .as_deref(),
+        Some("Later")
+    );
+    guard.seq = Some(12);
+    guard.agent = Some("claude".into());
+    assert!(!store.apply(key, &guard, now).unwrap().accepted);
+    assert_eq!(
+        store.resources[&key].presentations["hook:test"]
+            .agent
+            .as_deref(),
+        Some("codex")
+    );
+    let mut remove = request(&[], Some(14), None);
+    remove.clear_presentation = true;
+    store.apply(key, &remove, now).unwrap();
+    title.seq = Some(15);
+    store.apply(key, &title, now).unwrap();
+    assert_eq!(
+        store.presentation(key, now, None, None).title.as_deref(),
+        Some("Later")
+    );
+}
+
+#[test]
+fn guard_only_ttl_expires_without_token_refresh_and_without_reviving_before_sweep() {
+    let now = Instant::now();
+    let end = now + Duration::from_millis(10);
+    let key = Key::Pane(1);
+    for sweep_first in [false, true] {
+        let mut store = Store::default();
+        let mut guard = request(&[], Some(1), Some(10));
+        guard.agent = Some("codex".into());
+        store.apply(key, &guard, now).unwrap();
+        store
+            .apply(key, &request(&[("task", Some("keep"))], Some(2), None), now)
+            .unwrap();
+        assert_eq!(
+            store.resources[&key].presentations["hook:test"].deadline,
+            Some(end)
+        );
+        if sweep_first {
+            assert_eq!(store.expire(end), vec![(key, vec!["@presentation".into()])]);
+        }
+        let mut title = request(&[], Some(3), None);
+        title.title = TextPatch::set("Fresh".into());
+        store.apply(key, &title, end).unwrap();
+        assert_eq!(
+            store.presentation(key, end, None, None).title.as_deref(),
+            Some("Fresh")
+        );
+        assert!(!store.apply(key, &guard, end).unwrap().accepted);
+        assert_eq!(store.values(key, end)["task"], "keep");
+    }
+}
+
+#[test]
+fn guard_only_sources_are_bounded_and_clear_or_expiry_releases_capacity_atomically() {
+    let now = Instant::now();
+    let key = Key::Pane(1);
+    let mut store = Store::default();
+    for n in 0..MAX_SOURCES {
+        let mut guard = request(&[], None, Some(10));
+        guard.source = format!("guard:{n}");
+        guard.agent = Some("codex".into());
+        store.apply(key, &guard, now).unwrap();
+    }
+    let before = store.resources[&key].clone();
+    let mut overflow = request(&[("task", Some("overflow"))], Some(0), None);
+    overflow.agent = Some("claude".into());
+    assert_eq!(
+        store.apply(key, &overflow, now).unwrap_err().code,
+        "metadata_source_limit"
+    );
+    assert_eq!(store.resources[&key], before);
+    let mut clear = request(&[], None, None);
+    clear.source = "guard:0".into();
+    clear.clear_presentation = true;
+    store.apply(key, &clear, now).unwrap();
+    assert!(store.apply(key, &overflow, now).unwrap().accepted);
+    assert_eq!(store.resources[&key].presentations.len(), MAX_SOURCES);
+    store.expire(now + Duration::from_millis(10));
+    assert_eq!(store.resources[&key].presentations.len(), 1);
+    overflow.source = "after-expiry".into();
+    assert!(
+        store
+            .apply(key, &overflow, now + Duration::from_millis(10))
+            .unwrap()
+            .accepted
+    );
+}
+
+#[test]
+fn presentation_sources_fall_back_after_newer_source_clears_or_expires() {
+    let now = Instant::now();
+    let key = Key::Pane(1);
+    let mut store = Store::default();
+    let mut first = request(&[], None, None);
+    first.title = TextPatch::set("Older".into());
+    store.apply(key, &first, now).unwrap();
+    let mut next = first.clone();
+    next.source = "other".into();
+    next.title = TextPatch::set("Newer".into());
+    next.ttl_ms = Some(5);
+    store.apply(key, &next, now).unwrap();
+    assert_eq!(
+        store.presentation(key, now, None, None).title.as_deref(),
+        Some("Newer")
+    );
+    assert_eq!(
+        store
+            .presentation(key, now + Duration::from_millis(5), None, None)
+            .title
+            .as_deref(),
+        Some("Older")
+    );
+}
+
+#[test]
+fn invalid_presentation_is_atomic_and_unsequenced_sources_are_bounded() {
+    let now = Instant::now();
+    let key = Key::Pane(1);
+    let mut store = Store::default();
+    for n in 0..32 {
+        let mut req = request(&[], None, None);
+        req.source = format!("source{n}");
+        req.title = TextPatch::set("title".into());
+        store.apply(key, &req, now).unwrap();
+    }
+    let mut overflow = request(&[("task", Some("must-not-appear"))], Some(0), None);
+    overflow.title = TextPatch::set("overflow".into());
+    assert_eq!(
+        store.apply(key, &overflow, now).unwrap_err().code,
+        "metadata_source_limit"
+    );
+    assert!(store.values(key, now).is_empty());
+    assert!(!store.resources[&key].sequences.contains_key("hook:test"));
+    overflow.source = "source0".into();
+    overflow
+        .state_labels
+        .insert("bogus".into(), Some("invalid".into()));
+    assert_eq!(
+        store.apply(key, &overflow, now).unwrap_err().code,
+        "invalid_argument"
+    );
+    overflow.state_labels.clear();
+    overflow.target = Target::Workspace("w1".into());
+    overflow.display_agent = TextPatch::set("not-a-workspace-field".into());
+    assert!(overflow.validate().is_err());
+}
+
+#[test]
+fn cli_presentation_patches_and_ambiguities() {
+    let parse = |group, args: &[&str]| {
+        cli::parse(group, &args.iter().map(|s| (*s).into()).collect::<Vec<_>>())
+    };
+    let ApiRequest::Metadata(req) = parse(
+        "pane",
+        &[
+            "p1",
+            "--source",
+            "display",
+            "--title",
+            "A",
+            "--display-agent",
+            "B",
+            "--state-label",
+            "working=C",
+            "--agent",
+            "codex",
+            "--applies-to-source",
+            "hook:test",
+        ],
+    )
+    .unwrap() else {
+        panic!()
+    };
+    assert_eq!(req.title, TextPatch::set("A".into()));
+    assert_eq!(req.state_labels["working"].as_deref(), Some("C"));
+    for args in [
+        vec!["--title", "a", "--clear-title"],
+        vec!["--clear-title", "--title", "a"],
+        vec!["--clear-presentation", "--display-agent", "a"],
+        vec!["--state-label", "idle=a", "--clear-state-label", "idle"],
+        vec!["--clear-title=x"],
+        vec!["--state-label", "bogus=a"],
+    ] {
+        let mut all = vec!["p1", "--source", "x"];
+        all.extend(args);
+        assert!(parse("pane", &all).is_err(), "{all:?}");
+    }
+    assert!(parse("workspace", &["w1", "--source", "x", "--title", "Work"]).is_ok());
+    assert!(
+        parse(
+            "workspace",
+            &["w1", "--source", "x", "--display-agent", "No"]
+        )
+        .is_err()
+    );
 }
