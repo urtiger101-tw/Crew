@@ -1,0 +1,75 @@
+{
+  "task_id": "crew-v05-local-tooling-review",
+  "actor_instance": "/root/v05_presentation",
+  "receiver_instance": "/root",
+  "base_sha": "3e498edbbc7ccb4b7f71f7c5daf76c4f3212e495",
+  "original_head_sha": "93c4bca9242f60d983088193820c4fb6779cb620",
+  "head_sha": "a9a60b79d319e3f7a85d93f69ac8dcc2166e13f0",
+  "tested_sha": "a9a60b79d319e3f7a85d93f69ac8dcc2166e13f0",
+  "result": "PASS",
+  "scope": "local tooling only",
+  "findings": [],
+  "resolved_findings": [
+    {
+      "id": "LOCAL-P2-1",
+      "priority": "P2",
+      "path": "scripts/package_local.py",
+      "original_lines": [
+        92,
+        94
+      ],
+      "fixed_lines": [
+        94,
+        95
+      ],
+      "status": "RESOLVED",
+      "reproducer": "/tmp/crew-local-review-a9a60b7-repro.py"
+    }
+  ],
+  "checks": [
+    {
+      "name": "local-tooling-regression",
+      "result": "PASS",
+      "exit_code": 0,
+      "tests": 17,
+      "log": "/tmp/crew-local-review-a9a60b7-17-tests.log"
+    },
+    {
+      "name": "hosted-tooling-regression",
+      "result": "PASS",
+      "exit_code": 0,
+      "tests": 11,
+      "log": "/tmp/crew-local-review-a9a60b7-hosted-11-tests.log"
+    },
+    {
+      "name": "setup-copy-race",
+      "result": "PASS",
+      "exit_code": 1,
+      "expected": "installer artifact changed while copying",
+      "simulation": true,
+      "log": "/tmp/crew-local-review-a9a60b7-setup-race.log"
+    },
+    {
+      "name": "sidecar-copy-race",
+      "result": "PASS",
+      "exit_code": 1,
+      "expected": "installer artifact changed while copying",
+      "simulation": true,
+      "log": "/tmp/crew-local-review-a9a60b7-sidecar-race.log"
+    },
+    {
+      "name": "native-windows-installer",
+      "result": "NOT_RUN",
+      "exit_code": null
+    },
+    {
+      "name": "integrated-native-linux-validator",
+      "result": "NOT_RUN",
+      "exit_code": null
+    }
+  ],
+  "external_side_effects": {
+    "performed": false
+  },
+  "next_owner": "/root"
+}

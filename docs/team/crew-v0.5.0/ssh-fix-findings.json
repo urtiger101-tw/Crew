@@ -1,0 +1,117 @@
+{
+  "task_id": "crew-v05-ssh-review",
+  "actor_instance": "/root/v05_presentation",
+  "receiver_instance": "/root",
+  "base_sha": "5e7e208bca5bf388aded7631aff0d8846b47363f",
+  "original_head_sha": "a80e0f9a7308bd944139e045a7e961b468d833bc",
+  "head_sha": "923033dfaa79df448b37050dc0bc72ed59b98675",
+  "tested_sha": "923033dfaa79df448b37050dc0bc72ed59b98675",
+  "binary": "/workspace/scratch/21396cda8665/target-v05-remote-fix/debug/crew",
+  "binary_sha256": "f5f794745948b55bc2ac04741face70cc5f202f6702b4c4d9182fc3313c3b8b3",
+  "result": "PASS",
+  "scope": "SSH federation slice on native Linux",
+  "findings": [],
+  "resolved_findings": [
+    {
+      "id": "SSH-P2-1",
+      "priority": "P2",
+      "status": "RESOLVED",
+      "original_path": "src/remote/transport.rs",
+      "original_lines": [
+        241,
+        248
+      ],
+      "verification": {
+        "name": "proxy",
+        "result": "PASS",
+        "exit_code": 0,
+        "platform": "linux",
+        "simulation": false,
+        "log": "/tmp/crew-ssh-review-923033d-proxy.log"
+      }
+    },
+    {
+      "id": "SSH-P2-2",
+      "priority": "P2",
+      "status": "RESOLVED",
+      "original_path": "src/remote/dashboard.rs",
+      "original_lines": [
+        301,
+        313
+      ],
+      "verification": [
+        {
+          "name": "rename",
+          "result": "PASS",
+          "exit_code": 0,
+          "platform": "linux",
+          "simulation": false,
+          "log": "/tmp/crew-ssh-review-923033d-rename.log"
+        },
+        {
+          "name": "removed",
+          "result": "PASS",
+          "exit_code": 0,
+          "platform": "linux",
+          "simulation": false,
+          "log": "/tmp/crew-ssh-review-923033d-removed.log"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "name": "proxy",
+      "result": "PASS",
+      "exit_code": 0,
+      "platform": "linux",
+      "simulation": false,
+      "log": "/tmp/crew-ssh-review-923033d-proxy.log"
+    },
+    {
+      "name": "rename",
+      "result": "PASS",
+      "exit_code": 0,
+      "platform": "linux",
+      "simulation": false,
+      "log": "/tmp/crew-ssh-review-923033d-rename.log"
+    },
+    {
+      "name": "removed",
+      "result": "PASS",
+      "exit_code": 0,
+      "platform": "linux",
+      "simulation": false,
+      "log": "/tmp/crew-ssh-review-923033d-removed.log"
+    },
+    {
+      "name": "real-openssh-pty",
+      "result": "PASS",
+      "exit_code": 0,
+      "groups": 13,
+      "platform": "linux",
+      "simulation": false,
+      "log": "/tmp/crew-ssh-review-923033d-native-01.log"
+    },
+    {
+      "name": "post-test-fixture-audit",
+      "result": "PASS",
+      "exit_code": 0,
+      "log": "/tmp/crew-ssh-review-923033d-cleanup-audit.json"
+    },
+    {
+      "name": "native-windows-macos",
+      "result": "NOT_RUN",
+      "exit_code": null
+    },
+    {
+      "name": "full-integrated-linux-validator",
+      "result": "NOT_RUN",
+      "exit_code": null
+    }
+  ],
+  "external_side_effects": {
+    "performed": false
+  },
+  "next_owner": "/root"
+}
