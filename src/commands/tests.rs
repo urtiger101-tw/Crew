@@ -31,6 +31,28 @@ fn tokenize_quotes() {
 }
 
 #[test]
+fn cli_values_survive_command_transport_as_literal_arguments() {
+    for value in [
+        "",
+        "a b",
+        "\t$title",
+        "$title\n",
+        "#$title",
+        r#""$title"\tail"#,
+        r"path\without-spaces",
+        "'單引號'",
+        "${task}",
+    ] {
+        let line = ["set", "pane-template", value].map(quote).join(" ");
+        assert_eq!(tokenize(&line), vec!["set", "pane-template", value]);
+        assert_eq!(
+            parse(&line).unwrap(),
+            Cmd::Set("pane-template".into(), value.into())
+        );
+    }
+}
+
+#[test]
 fn parse_commands() {
     assert_eq!(
         parse("splitw -h").unwrap(),
