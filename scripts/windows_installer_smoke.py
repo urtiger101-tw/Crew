@@ -141,17 +141,34 @@ def native_smoke(args):
             shortcut_env = dict(env, CREW_SHORTCUT=str(shortcut), CREW_EXPECTED_BINARY=str(directory / "crew.exe"))
             target = execute(["powershell", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
                               "$ErrorActionPreference='Stop'; "
+                              # Keep the raw COM values: quoting/prefixes must not be guessed away.
+                              # Escape every UTF-16 code unit so diagnostics survive any console code page.
+                              "function Trace-ShortcutValue($name,$value) { "
+                              "$kind=if ($null -eq $value) { '<null>' } else { $value.GetType().FullName }; "
+                              "$text=[string]$value; "
+                              "$escaped=($text.ToCharArray() | ForEach-Object { '\\u{0:X4}' -f [int]$_ }) -join ''; "
+                              "[Console]::Error.WriteLine(('CREW_SHORTCUT_VALUE name={0}; null={1}; type={2}; "
+                              "utf16_length={3}; escaped_utf16={4}' -f $name,($null -eq $value),$kind,$text.Length,$escaped)) }; "
                               "$s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:CREW_SHORTCUT); $t=$s.TargetPath; "
+                              "$w=$s.WorkingDirectory; $a=$s.Arguments; "
+                              "$p=[Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile); "
+                              "try { "
                               "if (-not [string]::Equals([IO.Path]::GetFullPath($t), "
                               "[IO.Path]::GetFullPath($env:CREW_EXPECTED_BINARY), [StringComparison]::OrdinalIgnoreCase)) "
                               "{ throw 'Start Menu shortcut points elsewhere' }; "
-                              "$p=[Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile); $w=$s.WorkingDirectory; "
                               "if ([string]::IsNullOrWhiteSpace($p) -or [string]::IsNullOrWhiteSpace($w) -or "
                               "-not [IO.Directory]::Exists($p) -or -not [string]::Equals([IO.Path]::GetFullPath($w), "
                               "[IO.Path]::GetFullPath($p), [StringComparison]::OrdinalIgnoreCase)) "
                               "{ throw 'Start Menu shortcut working directory is not the user profile' }; "
-                              "Write-Output 'CREW_SHORTCUT_OK'"],
-                             env=shortcut_env)
+                              "Write-Output 'CREW_SHORTCUT_OK' "
+                              "} catch { "
+                              "Trace-ShortcutValue 'Shortcut' $env:CREW_SHORTCUT; "
+                              "Trace-ShortcutValue 'TargetPath' $t; "
+                              "Trace-ShortcutValue 'ExpectedBinary' $env:CREW_EXPECTED_BINARY; "
+                              "Trace-ShortcutValue 'WorkingDirectory' $w; "
+                              "Trace-ShortcutValue 'ExpectedWorkingDirectory' $p; "
+                              "Trace-ShortcutValue 'Arguments' $a; throw }"],
+                             env=shortcut_env, log=logs / f"shortcut-{len(checks):02d}-{version}.log")
             require(target == "CREW_SHORTCUT_OK", "Start Menu shortcut validation did not complete")
 
         def uninstaller(directory):
