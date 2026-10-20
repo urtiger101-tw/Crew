@@ -1,4 +1,4 @@
-//! argv -> `Request` for the herdr-style CLI (`tmuxlike pane ...`, `tmuxlike agent ...`).
+//! argv -> `Request` for the herdr-style CLI (`crew pane ...`, `crew agent ...`).
 //! Pure: no I/O, no environment access (the caller passes `current`).
 //! Public API: `API_COMMANDS`, `HELP`, `parse`. Submodules: `scan` (option scanner and option
 //! specs), `args` (validators), `pane_cmds`, `agent_cmds`, `tests`.
@@ -14,7 +14,17 @@ use args::{check_count, none, unknown_sub};
 use scan::{flag, no_opts, scan};
 
 /// Top-level words routed to this parser by `main.rs`.
-pub const API_COMMANDS: &[&str] = &["pane", "agent", "api", "session", "server"];
+pub const API_COMMANDS: &[&str] = &[
+    "pane",
+    "agent",
+    "api",
+    "session",
+    "server",
+    "workspace",
+    "tab",
+    "worktree",
+    "events",
+];
 
 /// Sentinel error returned for every help request (`pane --help`, `pane` alone, ...). The
 /// usage text itself is the `cli.api_help` catalog entry; `main.rs` prints it in the CLI language.
@@ -32,6 +42,9 @@ pub fn parse(args: &[String], current: Option<usize>) -> Result<Request, String>
         return Err(HELP.to_string());
     }
     match group.as_str() {
+        "workspace" | "tab" => crate::workspace::parse(group, sub, rest, current),
+        "worktree" => crate::worktree::parse(sub, rest),
+        "events" => crate::events::parse(sub, rest),
         "pane" => pane_cmds::dispatch(sub, rest, current),
         "agent" => agent_cmds::dispatch(sub, rest),
         "api" => api(sub, rest),
