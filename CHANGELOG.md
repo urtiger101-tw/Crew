@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.4.0 — Ordering, metadata and Windows setup
+
+- Add workspace/tab ordering with zero-based insertion slots. Preserve stable IDs,
+  running PTYs, agent instances, active resources and pending UI selections.
+- Add bounded pane/workspace token patches, per-key TTL and per-source sequence
+  protection. Expose metadata in resource snapshots and update/expiry events;
+  keep it independent from agent lifecycle and clear it on cold restart.
+- Add a per-user Windows x64 Inno Setup installer with a stable upgrade identity,
+  Start Menu entry and uninstall support. Preserve configuration/state, unrelated
+  files and PATH, and refuse replacement while installed executables are in use.
+- Build Windows release executables with a static CRT and verify their PE imports.
+  Keep the portable ZIP alongside the installer and three Unix archives.
+- Gate releases on native ordering/metadata smokes and Windows installer build,
+  installation, version replacement, busy-binary refusal and uninstall checks.
+  Include the setup executable in source/CI provenance and release digest checks.
+
+This is an additional Herdr behavior subset: cross-workspace tab/pane moves,
+metadata presentation overrides/templates and the other gaps in
+`docs/herdr-parity.md` remain separate work. Setup executables are unsigned.
+An upgrade test fixture wraps released 0.3.0 binaries; no 0.3.0 installer was
+previously published. Actual native validation is recorded by the release's CI.
+
 ## 0.3.0 — Crew
 
 - Rename the product to Crew and move PR/CI/releases to urtiger101-tw/Crew.

@@ -4,15 +4,24 @@
 
 A cross-platform terminal multiplexer written in Rust, inspired by tmux and herdr. Primary targets: **Windows** and **Linux**; also works on **macOS**.
 
-## Crew 0.3.0：Agent team 工作空間
+## Crew 0.4.0：排序、任務標記與 Windows 安裝包
 
 專案已由 tmuxlike 改名為 **Crew**，後續 PR、CI 與 GitHub Release 位於
 [urtiger101-tw/Crew](https://github.com/urtiger101-tw/Crew)。原專案是唯讀來源。
 `crew` 是主要指令；`tmuxlike` 相容執行檔使用同一份程式實作。
 
-本版補上穩定 workspace／tab ID、Git worktree、agent 身分保護、明確的 hooks
-與事件串流，讓多個 agent 可以各自使用終端與分支。實作以 Herdr 行為作參考，
-完整範圍及尚未對齊的功能列於 [功能對齊表](docs/herdr-parity.md)。
+0.3.0 建立穩定 workspace／tab ID、Git worktree、agent 身分保護、generic hooks
+與事件串流。0.4.0 繼續對齊 Herdr，新增：
+
+- **工作區與分頁排序**：調整清單順序，保留正在執行的程序、焦點與穩定 ID。
+  詳見 [排序規則](docs/workspace-move.md)。
+- **Metadata tokens**：回報任務摘要或進度，支援每個鍵獨立的 TTL 與來源序號，
+  在 API／事件中讀取；不改變 agent 的語義狀態。詳見 [Metadata](docs/metadata.md)。
+- **Windows Inno Setup 安裝包**：每位使用者安裝、開始功能表捷徑、升級與解除安裝；
+  同時提供 portable ZIP。詳見 [Windows 安裝指南](docs/windows-install.md)。
+
+完整範圍及尚未對齊的功能列於 [功能對齊表](docs/herdr-parity.md)。本版不宣稱
+完整 Herdr 相容；排序不跨 workspace 搬移 tab，metadata 也未包含 sidebar 模板。
 
 ```sh
 crew workspace create backend --cwd /path/to/repo --env ROLE=backend
@@ -24,6 +33,18 @@ crew integration list
 crew integration doctor
 crew events list --limit 100
 ```
+
+已取得資源 ID 後，可以排序與回報標記：
+
+```sh
+crew workspace move w3 --index 0
+crew tab move t4 --index 0 --workspace w1
+crew pane report-metadata p1 --source task:hook --token "task=修正登入" --seq 1 --ttl-ms 60000
+crew workspace report-metadata w1 --source build:ci --token build=running --seq 1
+```
+
+`--index` 是移動前清單的插入槽（`0..數量`），尾槽表示移到最後；原位置前後兩個
+槽都是 no-op。ID 僅為範例，實際請使用建立或查詢回應中的 ID。
 
 建立 workspace／tab／worktree 預設不切換使用者焦點；加 `--focus` 才切換。
 `workspace` 與 `tab` 的穩定 ID 為 `wN` 和 `tN`，重新命名及重啟後保留；
@@ -40,7 +61,7 @@ Linux 另檢查窗格當前前景行程與 shell 的目錄；Windows／macOS 使
 - 選用新狀態檔後，會留下 `.crew-selected` 標記；清除或隔離新狀態檔後不會
   再復活較舊的 tmuxlike 狀態。標記不是 session 資料，無須手動刪除。
 - 預設 socket 名稱維持 `tmuxlike-<user>.sock`，兩個執行檔連到同一個伺服器。
-  **使用新 workspace／tab／events API 前，先以舊程式執行 `server stop`，再啟動 Crew。**
+  **升級後使用新 API 前，先以舊程式執行 `server stop`，再啟動新版 Crew。**
   停止伺服器會終止現有程序；保存的是版面，請先完成或保存正在進行的工作。
 - `--env` 覆寫值會存入本機狀態檔以供恢復；請只傳需要保存的環境設定。
   任意 `--command` 不會在還原時重播。
@@ -120,7 +141,16 @@ snapshot；舊 epoch 會回 `server_restarted`。事件 `pane.output` 只提供�
 
 ## 安裝 Install
 
-從 [Releases](../../releases) 下載執行檔，或自行編譯 / Download a binary from Releases, or build:
+從 [Releases](https://github.com/urtiger101-tw/Crew/releases) 選擇對應平台的檔案。
+Windows x64 可選 Inno Setup `setup.exe` 或 portable `.zip`；Linux 與兩種 Mac
+架構使用 `.tar.gz`。所有發行檔都附 SHA256SUMS 與來源 manifest。
+
+安裝精靈預設只安裝給目前使用者，從開始功能表開啟 Crew。若要在任意 terminal
+直接輸入 `crew`，請依 [Windows 安裝指南](docs/windows-install.md) 將安裝目錄
+加入自己的 PATH；安裝精靈保留既有 PATH。升級前請保存工作並停止舊 server。
+發行檔尚未簽章，Mac 尚未 notarize。
+
+也可自行編譯 / Build from source:
 
 ```sh
 cargo install --git https://github.com/urtiger101-tw/Crew
@@ -368,8 +398,8 @@ crew agent read reviewer --source recent --lines 80
 
 - 保存：session 與視窗結構、分割方向與比例、窗格目錄（cwd）、agent 名稱與 resume 指令。版面改變時自動寫入。
   Saved: session and window structure, split directions and ratios, pane directories (cwd), agent names and resume commands. Written automatically when the layout changes.
-- 工作目錄 Working directory：Linux 會即時追蹤窗格前景程序的目錄，保存與回報的 `cwd` 為目前目錄。Windows 與 macOS 不追蹤：保存與回報的 `cwd` 是窗格的啟動目錄，之後的 `cd` 不會反映。
-  On Linux the live directory of the pane's foreground process is tracked, and the saved and reported `cwd` is the current directory. On Windows and macOS it is not tracked: the saved and reported `cwd` is the pane's start directory, and later `cd` commands are not reflected.
+- 工作目錄 Working directory：Linux 保存版面與檢查 worktree 占用時會讀取窗格程序目前的目錄；一般 pane JSON 的 `cwd` 仍是啟動時記錄的目錄。Windows 與 macOS 目前使用啟動目錄，之後的 `cd` 不會反映在保存的目錄中。
+  On Linux, layout persistence and worktree occupancy checks read the pane process's current directory; ordinary pane JSON still reports the directory recorded at startup. Windows and macOS currently use the start directory, so later `cd` commands are not reflected in the saved directory.
 - 不保存：執行中的程式與行程、螢幕內容與捲動回溯、shell 變數與歷程。還原時每個窗格會在保存的 cwd 重新啟動 shell。
   Not saved: running processes, screen contents and scrollback, shell variables and history. On restore each pane starts a new shell in its saved cwd.
 - Resume 指令：`pane report-agent ... -- RESUME...` 給的指令，還原後會在該窗格的 shell 中輸入並送出（Enter）。crew 依 POSIX shell 與 PowerShell 的引號規則組成指令，不支援 cmd.exe。第一個參數必須是程式名稱，不可為路徑（如 `./claude`、`C:\...`）；參數不可含單引號（含 PowerShell 的全形引號）或控制字元。不符合時不送出，並記入除錯紀錄。
@@ -421,8 +451,8 @@ accent = "74"
 border_active = "#e5c07b"
 ```
 
-設定值一律為字串，數字與顏色要加引號（例如 `accent = "74"`）。設定檔無法解析時（例如 `accent = 74` 忘了引號），啟動時會印出 `config error` 並改用全部預設值；執行中的 `source-file` 則回報錯誤並保留原設定。
-Values are strings, so quote numbers and colors (for example `accent = "74"`). If the file cannot be parsed (for example `accent = 74` without quotes), startup prints `config error` and uses all defaults; a running `source-file` reports the error and keeps the current settings.
+`[theme.colors]` 的值必須是字串，色碼要加引號（例如 `accent = "74"`）；其他設定依上例使用 TOML 數字、布林值、字串或陣列。設定檔無法解析時（例如 `accent = 74` 忘了引號），啟動時會印出 `config error` 並改用全部預設值；執行中的 `source-file` 則回報錯誤並保留原設定。
+Values under `[theme.colors]` must be strings, so quote color values (for example `accent = "74"`). Other settings use the TOML number, boolean, string or array types shown above. If the file cannot be parsed (for example `accent = 74` without quotes), startup prints `config error` and uses all defaults; a running `source-file` reports the error and keeps the current settings.
 
 `set` 可用選項 options: `prefix`, `shell`, `mouse`, `sidebar`, `sidebar-width`, `scrollback`/`history-limit`（僅影響新窗格 new panes only）, `busy-secs`, `automatic-rename`, `osc52`/`set-clipboard`, `persist`, `hints on|off`, `confirm-close on|off`, `pane-titles off|auto|always`, `theme terminal|dark|light|mono`, `ascii-glyphs auto|on|off`.
 
