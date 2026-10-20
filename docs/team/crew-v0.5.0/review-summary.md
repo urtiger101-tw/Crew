@@ -21,7 +21,7 @@ attestation.
 | --- | --- | --- | --- |
 | Metadata presentation/templates | v05_presentation; root for CLI literal fix | v05_transfer | [Presentation review](presentation-review.md), [machine record](presentation-review.json) |
 | Live cross-workspace tab transfer | v05_transfer | root | [Transfer review](transfer-review.md) |
-| SSH federation | v05_remote | v05_presentation | [Original review](ssh-initial-review.md), [successor review](ssh-fix-review.md) |
+| SSH federation | v05_remote | v05_presentation | [Original review](ssh-initial-review.md), [first successor](ssh-fix-review.md), [epoch follow-up](ssh-epoch-initial-review.md), [epoch successor](ssh-epoch-fix-review.md) |
 | Plugin marketplace/actions | root | v05_remote; v05_transfer for public download | [Original review](plugin-initial-review.md), [fix review](plugin-fix-review.md), [network check](plugin-network-review.md) |
 | Agent-kind process detection | v05_presentation | v05_transfer | [Presentation/detection review](presentation-review.md) |
 | Local validation/native packaging | v05_transfer | v05_presentation | [Packaging review](local-packaging-review.md) |
@@ -100,3 +100,45 @@ history and the raw evidence archive alongside public release metadata. The
 existing 0.4.0 release remains the rollback binary; program rollback does not
 reverse application state or restore processes. The five features retain their
 own documented limits rather than claiming full Herdr wire/UI/plugin parity.
+
+## Follow-up before final publication
+
+Three full local attempts against the first public candidate
+`276ad68338af7562add672a7b461d9772fbd4b1b` remain separate from the final release
+gate. Attempt 01 failed because the invoking PATH omitted the system directory
+containing runuser. Attempt 02 recorded 25 successful commands, but a log later
+contained an older 411-byte prefix instead of the recorded 516 bytes. The
+packager correctly refused that evidence. The [independent log analysis](local-log-integrity-review.md)
+supports an external snapshot write-back hypothesis without identifying the
+writer. Later live validation and packaging use /tmp outside the browser shared
+folder, and only completed immutable artifacts are copied for upload.
+
+Attempt 03 exposed a test assumption: closing the final workspace can end its
+daemon, so a later create may belong to a fresh daemon whose first ID is w1.
+Author `52709b62711dca03d8131a829ffcf581fe4364e5`, integrated as
+`8b9c800`, adds a keeper workspace for the existing same-daemon removed-ID case
+without removing its assertions. The reviewer separately reproduced a real
+cross-epoch defect: a cached selector could attach to the new daemon's reused
+ID. This is SSH-P2-3, recorded in the [additional failed review](ssh-epoch-initial-review.md).
+The keeper alone does not resolve that product defect.
+
+Author `e82676349ed1a7153efed8c8489b7eeeff1d5a70`, integrated as
+`1ea47032b60098f3e43bd8736212484a81c7191e`, fixes the defect with a single-lock
+federation snapshot carrying epoch, workspace rows and agent rows. The selector
+sends the cached epoch and ID through a distinct guarded CLI verb and protocol
+tag. The server checks the epoch, resolves the ID and registers the client under
+one State lock. Older endpoints refuse the new contract instead of ignoring the
+epoch or silently falling back.
+
+The [independent successor review](ssh-epoch-fix-review.md) and its
+[machine record](ssh-epoch-fix-findings.json) resolve SSH-P2-3 after the original
+cross-epoch reproduction, 14 real OpenSSH/PTY groups and four old/new daemon
+compatibility checks. The reviewer also checked the narrow integration conflict:
+the boxed metadata request keeps its existing `*req` handler, and agent detection
+and presentation fields remain present. This focused evidence does not replace
+the final integrated public-source gate or establish native Windows/macOS PASS.
+
+All original failed reports and raw logs are retained. The release evidence must
+identify a new final public commit with the reviewed tree, a fresh complete
+native gate, and successful unchanged-input packaging. Neither the first public
+candidate's PASS labels nor this document authorize publishing rejected evidence.
