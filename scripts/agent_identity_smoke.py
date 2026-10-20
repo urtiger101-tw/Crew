@@ -118,7 +118,8 @@ def main():
             release(pane, "beta", kind="other-agent")
 
             listing = api("integration", "list")
-            assert listing["events"]["done"] == "idle" and listing["automatic_detection"] is False
+            assert listing["events"]["done"] == "idle"
+            assert listing["automatic_detection"] == (listing["detection_backend"] != "unsupported")
             doctor = api("integration", "doctor", "codex")
             assert doctor["server_probed"] is False and doctor["agents"][0]["agent_started"] is False
             hook = ["integration", "report", "custom-agent"]

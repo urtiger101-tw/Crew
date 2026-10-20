@@ -159,8 +159,15 @@ def native_smoke(args):
     require(len(records) == 1, "expected exactly one installer build manifest")
     record_path = records[0]
     record = json.loads(record_path.read_bytes())
-    meta = {key: record[key] for key in ("repository", "tag", "version", "sha", "ci_run_id", "ci_attempt")}
-    portable = json.loads((folder / f"Crew-{meta['tag']}-{TARGET}.json").read_bytes())["package"]
+    local_provider = getattr(args, "local_provider", False)
+    require(local_provider or not getattr(args, "offline", False), "--offline is only available with --local-provider")
+    if local_provider:
+        from windows_installer_local import local_smoke_inputs
+        record, meta, portable = local_smoke_inputs(folder)
+    else:
+        # The original CI/release branch retains its CI-bound provenance.
+        meta = {key: record[key] for key in ("repository", "tag", "version", "sha", "ci_run_id", "ci_attempt")}
+        portable = json.loads((folder / f"Crew-{meta['tag']}-{TARGET}.json").read_bytes())["package"]
     validate_record(folder, record, meta, portable["files"], require_smoke=False)
     require(tuple(int(n) for n in meta["version"].split(".")) > (0, 3, 0), "upgrade smoke needs a genuinely newer version")
     setup = folder / installer_name(meta["tag"])
@@ -313,7 +320,12 @@ def native_smoke(args):
 
             fixture_dir = root / "legacy-fixture"
             fixture_dir.mkdir()
-            old_setup, old_payloads = legacy_fixture(compiler(logs), fixture_dir, logs)
+            if local_provider:
+                from windows_installer_local import compiler_for_local, legacy_fixture_for_local
+                native_compiler = compiler_for_local(logs, offline=args.offline)
+                old_setup, old_payloads = legacy_fixture_for_local(native_compiler, fixture_dir, logs, offline=args.offline)
+            else:
+                old_setup, old_payloads = legacy_fixture(compiler(logs), fixture_dir, logs)
             upgrade = root / "upgrade 安裝 space"
             current = upgrade
             installer_run(old_setup, "legacy-fixture-install", upgrade)
@@ -417,6 +429,9 @@ def native_smoke(args):
         "checks": [{"name": name, "result": "PASS"} for name in CHECKS],
     }
     validate_record(folder, record, meta, portable["files"])
+    if local_provider:
+        # Recheck checkout and payload identity after the real native lifecycle.
+        local_smoke_inputs(folder)
     record_path.write_bytes(release.json_bytes(record))
     (logs / "installer-validation.json").write_bytes(release.json_bytes(record["validation"]))
     print("PASS native Windows installer lifecycle: real 0.3.0 upgrade, busy guards, data preservation and uninstall", flush=True)
@@ -426,6 +441,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", default="installer-dist")
     parser.add_argument("--logs", default="installer-logs")
+    parser.add_argument("--local-provider", action="store_true", help="validate explicit local provenance without a GitHub run ID")
+    parser.add_argument("--offline", action="store_true", help="local provider only: require cached pinned installer dependencies")
     args = parser.parse_args()
     try:
         native_smoke(args)
