@@ -395,8 +395,8 @@ fn empty_state_shows_only_without_agents_and_with_hints() {
         empty_lines(25, "—", Lang::En),
         vec![
             "no agent reports — see:",
-            "tmuxlike pane",
-            "report-agent --help"
+            "crew pane report-agent",
+            "--help"
         ]
     );
     let count = |rows: &[SidebarRow]| {
@@ -647,7 +647,7 @@ fn zh_tw_title_hint_empty_state_and_state_words() {
     let first = row_text(&e, 2);
     assert!(first.starts_with("尚無代理回報"), "{first:?}");
     let lines = empty_lines(25, "—", Lang::ZhTw);
-    assert_eq!(lines.len(), 3, "{lines:?}");
+    assert_eq!(lines.len(), 2, "{lines:?}");
     assert!(lines.iter().all(|l| l.width() <= 25), "{lines:?}");
 }
 
