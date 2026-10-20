@@ -9,6 +9,7 @@ fn pv(pid: usize, status: Status, name: &str, message: Option<&str>, focused: bo
         pid,
         status,
         name: name.into(),
+        state_label: None,
         message: message.map(String::from),
         focused,
     }
