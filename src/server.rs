@@ -475,7 +475,9 @@ impl State {
                     canonical.display()
                 ));
             }
-            cmd.cwd(d);
+            let process_cwd = crate::process_path::for_child(std::path::Path::new(d))
+                .map_err(|error| anyhow!(error.message))?;
+            cmd.cwd(process_cwd);
         }
         crate::log!("pane {id}: spawning {shell:?} {}x{}", size.cols, size.rows);
         let child = pair.slave.spawn_command(cmd).map_err(|e| {

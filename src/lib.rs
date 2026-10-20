@@ -26,6 +26,7 @@ mod ipc;
 mod keys;
 mod layout;
 mod persist;
+mod process_path;
 mod proto;
 mod render;
 mod server;
