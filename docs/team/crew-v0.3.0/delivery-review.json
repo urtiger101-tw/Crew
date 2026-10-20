@@ -1,0 +1,184 @@
+{
+  "task_id": "DELIVERY-REVIEW",
+  "revision": 2,
+  "actor_instance": "/root/target_audit",
+  "receiver_instance": "/root",
+  "role": "independent_reviewer",
+  "kind": "handoff",
+  "result": "PASS",
+  "simulation": false,
+  "observed_at": "2026-10-20T05:24:09.905347+00:00",
+  "base_sha": "2f01881f7268918879852eae4255e159d669d74d",
+  "original_head_sha": "f7a9dde5099c9f8b58570a91dfa753d221715c33",
+  "fix_sha": "ec2329ed75d8e9674ed665f483183ee4584a9403",
+  "head_sha": "ec2329ed75d8e9674ed665f483183ee4584a9403",
+  "tested_sha": "ec2329ed75d8e9674ed665f483183ee4584a9403",
+  "scope": [
+    ".github/workflows/ci.yml",
+    ".github/workflows/release.yml",
+    "scripts/package_release.py",
+    "rust-toolchain.toml"
+  ],
+  "independence": {
+    "implementation_author": "/root/worktree_worker",
+    "fix_author": "/root/worktree_worker",
+    "reviewer_is_author_of_reviewed_code": false,
+    "excluded": [
+      "CORE/R4",
+      "whole-PR approval"
+    ]
+  },
+  "acceptance_ids": [
+    "DELIVERY-exact-source-CI",
+    "DELIVERY-complete-draft-publication",
+    "DELIVERY-least-token-permissions",
+    "DELIVERY-platform-matrix",
+    "DELIVERY-release-self-test"
+  ],
+  "artifact": {
+    "path": "docs/team/crew-v0.3.0/delivery-review.md",
+    "sha256": "03de55439d49fcbeee9df5bf0524bf4ba010df3b1e7c716edb18939ba8fa0634"
+  },
+  "reviewed_files_sha256": {
+    ".github/workflows/ci.yml": "322bdf47665cfccf15b8a22ab41e6d6604d84192848c2b0254ee7a25b2078c06",
+    ".github/workflows/release.yml": "afa0503a689e3298f055af101a9e8a901352eef3ac77d480cf31fe28f3574f7e",
+    "scripts/package_release.py": "e2cc1ccdc94263baa7bcb921279faeed6a3e0cd963a2f7ff26bc61ad4f3f8f5b",
+    "rust-toolchain.toml": "080d1c422a980a506912db5c2cc9fbedcf1df1fe4c8de676934ab7c421c5d768"
+  },
+  "source_blobs": {
+    ".github/workflows/ci.yml": "560e85e4de1d6be8f667ea0ab73ca30f35a57bfc",
+    ".github/workflows/release.yml": "629eacbb770c8b21b9f0d24c27ce42feacc71c2f",
+    "scripts/package_release.py": "6c0115080129d88c2af6947da751f133a7ccf4c6",
+    "rust-toolchain.toml": "23d8f60dcccda40687bce4f5bc93a08ca38b23b4"
+  },
+  "platform": "Linux-6.18.55-x86_64-with-glibc2.39",
+  "python_version": "3.12.14",
+  "checks": [
+    {
+      "name": "original-independent-publish-scenarios",
+      "argv": [
+        "python3",
+        "/tmp/crew-delivery-review.py",
+        "/workspace/scratch/21396cda8665/tmuxlike/scripts/package_release.py"
+      ],
+      "cwd": "/workspace/scratch/21396cda8665/tmuxlike",
+      "exit_code": 1,
+      "result": "FAIL",
+      "simulation": true,
+      "detail": "DELIVERY-1: CI became attempt 2/failure during upload; published=true and ci_reads=1. All other original scenarios passed.",
+      "remote_calls": 0,
+      "reviewed_source_sha": "f7a9dde5099c9f8b58570a91dfa753d221715c33",
+      "integration_head_observed": "938d8522a6f3a06ad44fe9de75d66f8aaf085948",
+      "reviewed_source_files_match": true
+    },
+    {
+      "name": "fixed-self-test",
+      "tested_sha": "ec2329ed75d8e9674ed665f483183ee4584a9403",
+      "argv": [
+        "python3",
+        "scripts/package_release.py",
+        "self-test"
+      ],
+      "cwd": "/workspace/scratch/21396cda8665/wt-worktree",
+      "exit_code": 0,
+      "result": "PASS",
+      "simulation": true,
+      "detail": "5 tests passed; final publication test includes 13 mocked scenarios."
+    },
+    {
+      "name": "fixed-independent-publish-scenarios",
+      "tested_sha": "ec2329ed75d8e9674ed665f483183ee4584a9403",
+      "argv": [
+        "python3",
+        "/tmp/crew-delivery-review.py",
+        "/workspace/scratch/21396cda8665/wt-worktree/scripts/package_release.py"
+      ],
+      "cwd": "/workspace/scratch/21396cda8665/wt-worktree",
+      "exit_code": 0,
+      "result": "PASS",
+      "simulation": true,
+      "remote_calls": 0,
+      "cases": [
+        "complete success",
+        "upload failure",
+        "missing asset",
+        "moved tag",
+        "CI rerun failure during upload",
+        "changed initial CI attempt",
+        "repository fence"
+      ],
+      "detail": "DELIVERY-1 now retains draft with published=false and ci_reads=2."
+    },
+    {
+      "name": "workflow-actionlint",
+      "tested_sha": "ec2329ed75d8e9674ed665f483183ee4584a9403",
+      "argv": [
+        "/tmp/crew-actionlint/actionlint",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ],
+      "cwd": "/workspace/scratch/21396cda8665/wt-worktree",
+      "exit_code": 0,
+      "result": "PASS",
+      "tool_version": "1.7.12",
+      "simulation": false
+    },
+    {
+      "name": "source-cleanliness",
+      "argv": [
+        "git",
+        "status",
+        "--short"
+      ],
+      "cwd": "/workspace/scratch/21396cda8665/wt-worktree",
+      "exit_code": 0,
+      "result": "PASS",
+      "simulation": false
+    },
+    {
+      "name": "hosted-CI-native-builds-live-release",
+      "exit_code": null,
+      "result": "NOT_RUN",
+      "detail": "No remote mutations, release uploads, Windows/macOS builds or hosted workflow runs by this reviewer."
+    }
+  ],
+  "findings": [
+    {
+      "id": "DELIVERY-1",
+      "priority": "P2",
+      "file": "scripts/package_release.py",
+      "function": "publish",
+      "original_lines": "313-366",
+      "title": "Latest successful CI could become stale during asset uploads before publication",
+      "status": "RESOLVED",
+      "owner": "/root/worktree_worker",
+      "reproduction": "During sixth mocked upload, switch latest CI from attempt 1/success to attempt 2/failure. Original code publishes; fixed code retains draft.",
+      "fixed_by": "ec2329ed75d8e9674ed665f483183ee4584a9403",
+      "verified_on": "ec2329ed75d8e9674ed665f483183ee4584a9403",
+      "verified_result": "PASS",
+      "simulation": true
+    }
+  ],
+  "reproducer": {
+    "original_path": "/tmp/crew-delivery-review.py",
+    "persistent_location": "docs/team/crew-v0.3.0/delivery-review.md#appendix-independent-offline-reproducer",
+    "sha256": "e0c25d0d8b1da921856acb1d0296303344d720597c46cddd460d56dc1c97bb57",
+    "simulation": true,
+    "remote_calls": 0
+  },
+  "unresolved": [],
+  "known_limits": [
+    "No cross-resource transaction between final GitHub reads and publication PATCH.",
+    "Existing drafts require authorized inspection before retry; no overwrite.",
+    "Missing remote asset digest fails closed.",
+    "Full expected job set required for the pinned CI attempt; partial reruns may require rerun-all.",
+    "Unsigned packages; signing/notarization and installer/upgrade validation are out of scope.",
+    "Hosted CI and four native builds remain NOT_RUN by reviewer."
+  ],
+  "next_action": "Root integrates the author fix and this scoped evidence, then obtains actual required CI for the final source SHA and performs only authorized remote release actions.",
+  "external_side_effects": {
+    "authorized": false,
+    "performed": false
+  },
+  "local_test_side_effects": "Temporary synthetic archives only; deleted by TemporaryDirectory. The review adds only its Markdown and JSON evidence files."
+}

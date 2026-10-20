@@ -73,9 +73,9 @@ fn flag_target(a: &Args, current: Option<usize>) -> Result<Option<usize>, String
     match (a.get("pane"), a.has("current")) {
         (Some(_), true) => Err("use only one of --pane or --current".into()),
         (Some(p), false) => pane_id(p).map(Some),
-        (None, true) => current.map(Some).ok_or_else(|| {
-            "--current needs TMUXLIKE_PANE_ID (run inside a tmuxlike pane)".to_string()
-        }),
+        (None, true) => current
+            .map(Some)
+            .ok_or_else(|| "--current needs TMUXLIKE_PANE_ID (run inside a crew pane)".to_string()),
         (None, false) => Ok(None),
     }
 }
@@ -150,7 +150,7 @@ fn pane_focus(rest: &[String], current: Option<usize>) -> Result<Request, String
     let a = scan(rest, &[val("direction"), val("pane"), flag("current")])?;
     let Some(dir) = a.get("direction") else {
         if a.has("pane") || a.has("current") {
-            return Err(format!("usage: tmuxlike {DIR_USAGE}"));
+            return Err(format!("usage: crew {DIR_USAGE}"));
         }
         return Ok(Request::PaneFocus {
             pane: one_id(&a.words(), ID_USAGE)?,
@@ -261,7 +261,7 @@ fn pane_wait_output(rest: &[String]) -> Result<Request, String> {
     let pattern = match (a.get("match"), a.get("regex")) {
         (Some(text), _) => Pattern::Match(text.to_string()),
         (None, Some(pat)) => Pattern::Regex(regex_arg(pat)?),
-        (None, None) => return Err(format!("usage: tmuxlike {USAGE}")),
+        (None, None) => return Err(format!("usage: crew {USAGE}")),
     };
     Ok(Request::PaneWaitOutput {
         pane: one_id(&a.words(), USAGE)?,

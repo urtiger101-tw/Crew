@@ -58,7 +58,10 @@ impl ClientEnv {
         ClientEnv {
             no_color: var("NO_COLOR").is_some(),
             dumb: var("TERM").is_some_and(|t| t == "dumb"),
-            ascii: var("TMUXLIKE_ASCII").is_some_and(|v| v == "1") || (cfg!(unix) && non_utf8),
+            ascii: crate::brand::env_var("ASCII")
+                .ok()
+                .is_some_and(|v| v == "1")
+                || (cfg!(unix) && non_utf8),
             lang: crate::i18n::Lang::detect(),
         }
     }

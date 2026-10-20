@@ -26,7 +26,7 @@ pub enum Command {
     Run {
         line: String,
     },
-    /// herdr-style automation request (`tmuxlike pane ...`, `agent ...`)
+    /// herdr-style automation request (`crew pane ...`, `agent ...`)
     Api(crate::api::Request),
 }
 

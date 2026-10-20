@@ -11,6 +11,7 @@ use super::{
 use crate::config::Config;
 use crate::server::{Pane, Shared, State};
 use serde_json::{Value, json};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 /// Delay between the prompt text and Enter, so TUI agents accept the text as input.
@@ -19,7 +20,61 @@ const SUBMIT_ENTER_DELAY_MS: u64 = 150;
 const PROMPT_START_LIMIT: Duration = Duration::from_millis(5000);
 /// Default wait set when a request names no statuses.
 const DEFAULT_UNTIL: [Status; 3] = [Status::Idle, Status::Done, Status::Blocked];
-/// Source tag that `persist` gives agents restored after a server restart.
+
+/// Zero is reserved for a restored, not-yet-reported occupant. Tokens are local to one
+/// server process: no request or wait survives a server restart.
+static NEXT_INSTANCE: AtomicU64 = AtomicU64::new(1);
+
+#[derive(Clone, Copy, Debug)]
+struct Occupant {
+    pane: usize,
+    instance: u64,
+}
+
+impl Occupant {
+    fn resolve(st: &State, target: &Target) -> Result<Self, ApiError> {
+        let pane = resolve_target(st, target)?;
+        let agent = st.panes[&pane]
+            .agent
+            .as_ref()
+            .ok_or_else(|| missing_agent(pane))?;
+        Ok(Self {
+            pane,
+            instance: agent.instance,
+        })
+    }
+
+    fn check(self, st: &State) -> Result<Status, ApiError> {
+        let pane = st
+            .panes
+            .get(&self.pane)
+            .ok_or_else(|| ApiError::pane_not_found(self.pane))?;
+        let agent = pane
+            .agent
+            .as_ref()
+            .ok_or_else(|| missing_agent(self.pane))?;
+        if agent.instance != self.instance {
+            return Err(ApiError::new(
+                "agent_replaced",
+                format!(
+                    "{} now hosts a different agent instance",
+                    pane_id_str(self.pane)
+                ),
+            ));
+        }
+        Ok(status(pane, &st.cfg))
+    }
+}
+
+fn missing_agent(pane: usize) -> ApiError {
+    ApiError::new(
+        "agent_not_found",
+        format!(
+            "{} has no reported agent; use pane commands for an ordinary terminal",
+            pane_id_str(pane)
+        ),
+    )
+}
 
 /// Effective status of a pane.
 pub fn status(p: &Pane, cfg: &Config) -> Status {
@@ -109,13 +164,6 @@ fn pane_obj(st: &State, pid: usize) -> Result<Value, ApiError> {
     pane_json(st, pid).ok_or_else(|| ApiError::pane_not_found(pid))
 }
 
-fn status_of(st: &State, pid: usize) -> Result<Status, ApiError> {
-    st.panes
-        .get(&pid)
-        .map(|p| status(p, &st.cfg))
-        .ok_or_else(|| ApiError::pane_not_found(pid))
-}
-
 /// Pane ids whose reported agent carries `name`.
 fn owners_of(st: &State, name: &str) -> Vec<usize> {
     st.panes
@@ -199,21 +247,38 @@ fn kept_seq(existing: Option<&AgentInfo>, source: &str) -> Option<u64> {
         .and_then(|old| old.seq)
 }
 
-/// Stored agent info for an accepted report. A report for the same agent label keeps the
-/// old name, and keeps the old resume command when the new report sends none.
-fn merge_info(existing: Option<&AgentInfo>, r: Report) -> AgentInfo {
-    let same_label = existing.is_some_and(|old| old.agent == r.agent);
-    let name = if same_label {
+/// An accepted report retains its instance only while source and kind both match. An
+/// explicit release removes the old instance, so even identical re-reports allocate anew.
+fn instance_for(existing: Option<&AgentInfo>, r: &Report) -> Result<u64, ApiError> {
+    if let Some(old) =
+        existing.filter(|old| old.source == r.source && old.agent == r.agent && old.instance != 0)
+    {
+        return Ok(old.instance);
+    }
+    NEXT_INSTANCE
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
+        .map_err(|_| ApiError::new("internal", "agent instance counter exhausted"))
+}
+
+/// Names and resume commands belong to one occupant. Restored metadata may be claimed by
+/// the first live reporter of the same kind, but an unrelated source cannot inherit it.
+fn merge_info(existing: Option<&AgentInfo>, r: Report) -> Result<AgentInfo, ApiError> {
+    let instance = instance_for(existing, &r)?;
+    let keep_metadata = existing.is_some_and(|old| {
+        old.agent == r.agent && (old.source == r.source || old.source == RESTORE_SOURCE)
+    });
+    let name = if keep_metadata {
         existing.and_then(|old| old.name.clone())
     } else {
         None
     };
     let resume = match existing {
-        Some(old) if same_label && r.resume.is_empty() => old.resume.clone(),
+        Some(old) if keep_metadata && r.resume.is_empty() => old.resume.clone(),
         _ => r.resume,
     };
     let seq = r.seq.or_else(|| kept_seq(existing, &r.source));
-    AgentInfo {
+    Ok(AgentInfo {
+        instance,
         source: r.source,
         agent: r.agent,
         state: r.state,
@@ -221,7 +286,7 @@ fn merge_info(existing: Option<&AgentInfo>, r: Report) -> AgentInfo {
         seq,
         name,
         resume,
-    }
+    })
 }
 
 fn validate_report(r: &Report) -> Result<(), ApiError> {
@@ -252,7 +317,10 @@ fn report_agent(shared: &Shared, pid: usize, mut r: Report) -> Result<Value, Api
     if applied {
         let turned_blocked = r.state == Status::Blocked
             && !p.agent.as_ref().is_some_and(|a| a.state == Status::Blocked);
-        p.agent = Some(merge_info(p.agent.as_ref(), r));
+        let agent = merge_info(p.agent.as_ref(), r)?;
+        let event = json!({"instance": agent.instance, "source": agent.source, "agent": agent.agent, "state": agent.state.as_str()});
+        p.agent = Some(agent);
+        st.events.record("agent.status", Some(pid), event);
         st.relayout_pane(pid);
         if turned_blocked {
             crate::commands::notify_blocked(&mut st, pid);
@@ -283,7 +351,13 @@ fn release_agent(
     if is_stale(p.agent.as_ref(), source, seq) {
         return Ok(json!({"released": false}));
     }
+    let event = p
+        .agent
+        .as_ref()
+        .map(|a| json!({"instance": a.instance, "source": a.source, "agent": a.agent}))
+        .unwrap_or_default();
     p.agent = None;
+    st.events.record("agent.released", Some(pid), event);
     st.relayout_pane(pid);
     Ok(json!({"released": true}))
 }
@@ -386,22 +460,26 @@ fn next_sleep(now: Instant, deadline: Option<Instant>) -> Duration {
 }
 
 enum Outcome {
-    Matched(Status),
+    Matched(Status, Value),
     Expired,
 }
 
-/// Poll `pid` until `hit` accepts its status or `deadline` passes. The lock is taken only for
-/// each check, and never across the sleep. A pane that disappears is `pane_not_found`.
+/// Poll one occupant, not merely a pane. A release or replacement cannot satisfy a wait.
+/// The matched status and agent snapshot are captured under one lock, so a replacement
+/// between the match and reply cannot accidentally put the new agent in the old reply.
 fn poll_until(
     shared: &Shared,
-    pid: usize,
+    occupant: Occupant,
     deadline: Option<Instant>,
     hit: impl Fn(Status) -> bool,
 ) -> Result<Outcome, ApiError> {
     loop {
-        let status = status_of(&lock(shared), pid)?;
-        if hit(status) {
-            return Ok(Outcome::Matched(status));
+        {
+            let st = lock(shared);
+            let status = occupant.check(&st)?;
+            if hit(status) {
+                return Ok(Outcome::Matched(status, pane_obj(&st, occupant.pane)?));
+            }
         }
         let now = Instant::now();
         if deadline.is_some_and(|d| now >= d) {
@@ -418,13 +496,16 @@ fn timeout_error(pid: usize, what: &str) -> ApiError {
 /// Wait until the pane reaches one of `until`, or fail with `timeout`.
 fn wait_for(
     shared: &Shared,
-    pid: usize,
+    occupant: Occupant,
     deadline: Option<Instant>,
     until: &[Status],
-) -> Result<Status, ApiError> {
-    match poll_until(shared, pid, deadline, |s| matches_until(until, s))? {
-        Outcome::Matched(s) => Ok(s),
-        Outcome::Expired => Err(timeout_error(pid, "no waited status before timeout")),
+) -> Result<(Status, Value), ApiError> {
+    match poll_until(shared, occupant, deadline, |s| matches_until(until, s))? {
+        Outcome::Matched(s, agent) => Ok((s, agent)),
+        Outcome::Expired => Err(timeout_error(
+            occupant.pane,
+            "no waited status before timeout",
+        )),
     }
 }
 
@@ -434,26 +515,34 @@ fn agent_wait(
     wait: &WaitSpec,
     start: Instant,
 ) -> Result<Value, ApiError> {
-    let pid = resolve_target(&lock(shared), target)?;
+    let occupant = Occupant::resolve(&lock(shared), target)?;
     let until = until_set(&wait.until);
-    let status = wait_for(shared, pid, deadline(start, wait.timeout_ms), &until)?;
-    let agent = pane_obj(&lock(shared), pid)?;
+    let (status, agent) = wait_for(shared, occupant, deadline(start, wait.timeout_ms), &until)?;
     Ok(json!({"agent": agent, "status": status.as_str()}))
 }
 
 /// Phase 1 of a waited prompt: the agent must start working (or block) in time. The caller's
 /// timeout, when shorter than the start limit, takes the `timeout` code instead.
-fn await_start(shared: &Shared, pid: usize, caller: Option<Instant>) -> Result<(), ApiError> {
+fn await_start(
+    shared: &Shared,
+    occupant: Occupant,
+    caller: Option<Instant>,
+) -> Result<(), ApiError> {
     let stall = Instant::now() + PROMPT_START_LIMIT;
     let caller_first = caller.is_some_and(|c| c <= stall);
     let deadline = if caller_first { caller } else { Some(stall) };
     let started = |s: Status| matches!(s, Status::Working | Status::Blocked);
-    match poll_until(shared, pid, deadline, started)? {
-        Outcome::Matched(_) => Ok(()),
-        Outcome::Expired if caller_first => Err(timeout_error(pid, "prompt not started in time")),
+    match poll_until(shared, occupant, deadline, started)? {
+        Outcome::Matched(..) => Ok(()),
+        Outcome::Expired if caller_first => {
+            Err(timeout_error(occupant.pane, "prompt not started in time"))
+        }
         Outcome::Expired => Err(ApiError::new(
             "agent_prompt_stalled",
-            format!("{} did not start after the prompt", pane_id_str(pid)),
+            format!(
+                "{} did not start after the prompt",
+                pane_id_str(occupant.pane)
+            ),
         )),
     }
 }
@@ -465,30 +554,68 @@ fn agent_prompt(
     wait: Option<&WaitSpec>,
     start: Instant,
 ) -> Result<Value, ApiError> {
-    let (pid, before) = {
-        let st = lock(shared);
-        let pid = resolve_target(&st, target)?;
-        let before = status_of(&st, pid)?;
-        (pid, before)
+    let caller = wait.and_then(|wait| deadline(start, wait.timeout_ms));
+    let (occupant, before) = {
+        let mut st = lock(shared);
+        let occupant = Occupant::resolve(&st, target)?;
+        let before = occupant.check(&st)?;
+        if before == Status::Blocked {
+            return Err(ApiError::new(
+                "agent_blocked",
+                format!(
+                    "{} is blocked; nothing was sent",
+                    pane_id_str(occupant.pane)
+                ),
+            ));
+        }
+        if caller.is_some_and(|end| Instant::now() >= end) {
+            return Err(timeout_error(
+                occupant.pane,
+                "prompt timeout before submission; nothing was sent",
+            ));
+        }
+        // The identity check and text write share a lock. Do not delegate to pane::submit,
+        // which is intentionally identity-agnostic for ordinary shell commands.
+        st.paste(occupant.pane, text);
+        st.mark_dirty();
+        (occupant, before)
     };
-    if before == Status::Blocked {
-        return Err(ApiError::new(
-            "agent_blocked",
-            format!("{} is blocked; nothing was sent", pane_id_str(pid)),
-        ));
+    let delay = Duration::from_millis(SUBMIT_ENTER_DELAY_MS);
+    std::thread::sleep(caller.map_or(delay, |end| {
+        delay.min(end.saturating_duration_since(Instant::now()))
+    }));
+    {
+        let mut st = lock(shared);
+        if occupant.check(&st)? == Status::Blocked {
+            return Err(ApiError::new(
+                "agent_blocked",
+                format!(
+                    "{} became blocked after text was pasted; Enter was not sent",
+                    pane_id_str(occupant.pane)
+                ),
+            ));
+        }
+        if caller.is_some_and(|end| Instant::now() >= end) {
+            return Err(timeout_error(
+                occupant.pane,
+                "text was pasted but prompt timed out before Enter",
+            ));
+        }
+        // A replacement after paste must never receive the delayed Enter.
+        st.write_pane(occupant.pane, b"\r");
+        st.mark_dirty();
+        if wait.is_none() {
+            return Ok(json!({"sent": true, "agent": pane_obj(&st, occupant.pane)?}));
+        }
     }
-    pane_api::submit(shared, pid, text, SUBMIT_ENTER_DELAY_MS)?;
     let Some(wait) = wait else {
-        let agent = pane_obj(&lock(shared), pid)?;
-        return Ok(json!({"sent": true, "agent": agent}));
+        unreachable!("non-waiting prompt returned after Enter")
     };
-    let caller = deadline(start, wait.timeout_ms);
     if before != Status::Working {
-        await_start(shared, pid, caller)?;
+        await_start(shared, occupant, caller)?;
     }
     let until = until_set(&wait.until);
-    let status = wait_for(shared, pid, caller, &until)?;
-    let agent = pane_obj(&lock(shared), pid)?;
+    let (status, agent) = wait_for(shared, occupant, caller, &until)?;
     Ok(json!({"sent": true, "agent": agent, "status": status.as_str()}))
 }
 
@@ -498,6 +625,7 @@ mod tests {
 
     fn info(source: &str, agent: &str, seq: Option<u64>) -> AgentInfo {
         AgentInfo {
+            instance: 0,
             source: source.into(),
             agent: agent.into(),
             state: Status::Working,
@@ -592,7 +720,7 @@ mod tests {
             seq: None,
             ..report("claude", vec![])
         };
-        let merged = merge_info(Some(&old), quiet);
+        let merged = merge_info(Some(&old), quiet).unwrap();
         assert_eq!(merged.seq, Some(5));
         assert!(is_stale(Some(&merged), "hook", Some(4)));
         assert!(!is_stale(Some(&merged), "hook", Some(6)));
@@ -605,7 +733,7 @@ mod tests {
             seq: None,
             ..report("claude", vec![])
         };
-        assert_eq!(merge_info(Some(&old), quiet).seq, None);
+        assert_eq!(merge_info(Some(&old), quiet).unwrap().seq, None);
         assert_eq!(kept_seq(Some(&old), "hook"), None);
         assert_eq!(kept_seq(Some(&old), "other"), Some(9));
         assert_eq!(kept_seq(None, "hook"), None);
@@ -615,7 +743,9 @@ mod tests {
     fn report_with_seq_replaces_stored_seq() {
         let old = info("hook", "claude", Some(5));
         assert_eq!(
-            merge_info(Some(&old), report("claude", vec![])).seq,
+            merge_info(Some(&old), report("claude", vec![]))
+                .unwrap()
+                .seq,
             Some(2)
         );
     }
@@ -625,7 +755,7 @@ mod tests {
         let mut old = info("hook", "claude", Some(1));
         old.name = Some("reviewer".into());
         old.resume = vec!["claude".into(), "--resume".into()];
-        let merged = merge_info(Some(&old), report("claude", vec![]));
+        let merged = merge_info(Some(&old), report("claude", vec![])).unwrap();
         assert_eq!(merged.name.as_deref(), Some("reviewer"));
         assert_eq!(merged.resume, old.resume);
         assert_eq!(merged.message.as_deref(), Some("go"));
@@ -637,10 +767,10 @@ mod tests {
         let mut old = info("hook", "claude", Some(1));
         old.name = Some("reviewer".into());
         old.resume = vec!["old".into()];
-        let other = merge_info(Some(&old), report("codex", vec![]));
+        let other = merge_info(Some(&old), report("codex", vec![])).unwrap();
         assert_eq!(other.name, None);
         assert!(other.resume.is_empty());
-        let replaced = merge_info(Some(&old), report("claude", vec!["new".into()]));
+        let replaced = merge_info(Some(&old), report("claude", vec!["new".into()])).unwrap();
         assert_eq!(replaced.resume, vec!["new".to_string()]);
         assert_eq!(replaced.name.as_deref(), Some("reviewer"));
     }
@@ -650,9 +780,44 @@ mod tests {
         let mut restored = info(RESTORE_SOURCE, "claude", None);
         restored.name = Some("reviewer".into());
         assert!(!is_stale(Some(&restored), "hook", Some(1)));
-        let merged = merge_info(Some(&restored), report("claude", vec![]));
+        let merged = merge_info(Some(&restored), report("claude", vec![])).unwrap();
         assert_eq!(merged.source, "hook");
         assert_eq!(merged.name.as_deref(), Some("reviewer"));
+    }
+
+    #[test]
+    fn instance_survives_updates_but_not_replacement_or_release() {
+        let initial = merge_info(None, report("codex", vec![])).unwrap();
+        assert_ne!(initial.instance, 0);
+        let updated = merge_info(Some(&initial), report("codex", vec![])).unwrap();
+        assert_eq!(updated.instance, initial.instance);
+        let replaced = merge_info(Some(&updated), report("claude", vec![])).unwrap();
+        assert_ne!(replaced.instance, initial.instance);
+        let other_source = merge_info(
+            Some(&updated),
+            Report {
+                source: "new-process".into(),
+                ..report("codex", vec![])
+            },
+        )
+        .unwrap();
+        assert_ne!(other_source.instance, initial.instance);
+        // Release removes AgentInfo entirely. A subsequent report with identical source
+        // and kind must allocate a fresh token, even when both arrive within one poll.
+        let restarted = merge_info(None, report("codex", vec![])).unwrap();
+        assert_ne!(restarted.instance, initial.instance);
+    }
+
+    #[test]
+    fn unrelated_source_does_not_inherit_name_or_resume() {
+        let mut old = info("old-process", "codex", Some(20));
+        old.instance = 123;
+        old.name = Some("reviewer".into());
+        old.resume = vec!["codex".into(), "resume".into(), "old-session".into()];
+        let replacement = merge_info(Some(&old), report("codex", vec![])).unwrap();
+        assert!(replacement.name.is_none());
+        assert!(replacement.resume.is_empty());
+        assert_ne!(replacement.instance, old.instance);
     }
 
     #[test]

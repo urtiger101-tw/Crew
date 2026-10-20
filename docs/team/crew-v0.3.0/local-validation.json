@@ -1,0 +1,323 @@
+{
+  "candidate_sha": "efbf228127774bd25c7cf5904485eb27204d1632",
+  "candidate_tree": "54ab25e4b096519ac9d540f8efd49bf3af943851",
+  "started_at": "2026-10-20T05:50:57.999172+00:00",
+  "actor_instance": "/root/reference_audit",
+  "cwd": "/workspace/scratch/21396cda8665/tmuxlike",
+  "initial_git_status": "",
+  "platform": "Linux",
+  "machine": "x86_64",
+  "kernel": "6.18.55",
+  "python": "3.12.14",
+  "cargo": "cargo 1.96.1 (356927216 2026-06-26)",
+  "rustc": "rustc 1.96.1 (31fca3adb 2026-06-26)",
+  "target_directory": "/workspace/scratch/21396cda8665/target-final-validation",
+  "checks": [
+    {
+      "label": "01-format",
+      "command": [
+        "/workspace/scratch/21396cda8665/toolchain/cargo/bin/cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "cwd": "/workspace/scratch/21396cda8665/tmuxlike",
+      "started_at": "2026-10-20T05:50:58.064561+00:00",
+      "finished_at": "2026-10-20T05:50:58.329400+00:00",
+      "duration_seconds": 0.265,
+      "exit_code": 0,
+      "status": "PASS",
+      "log": "/tmp/crew-final-validation/01-format.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "02-clippy",
+      "command": [
+        "/workspace/scratch/21396cda8665/toolchain/cargo/bin/cargo",
+        "clippy",
+        "--offline",
+        "--locked",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "cwd": "/workspace/scratch/21396cda8665/tmuxlike",
+      "started_at": "2026-10-20T05:50:58.329912+00:00",
+      "finished_at": "2026-10-20T05:51:09.044581+00:00",
+      "duration_seconds": 10.715,
+      "exit_code": 0,
+      "status": "PASS",
+      "log": "/tmp/crew-final-validation/02-clippy.log",
+      "log_sha256": "315b8d52f7e9cbecc29dc0ae8d41d517b7700513a11267d3665a38e806263fc9"
+    },
+    {
+      "label": "03-unit",
+      "command": [
+        "/workspace/scratch/21396cda8665/toolchain/cargo/bin/cargo",
+        "test",
+        "--offline",
+        "--locked"
+      ],
+      "cwd": "/workspace/scratch/21396cda8665/tmuxlike",
+      "started_at": "2026-10-20T05:51:09.045074+00:00",
+      "finished_at": "2026-10-20T05:51:20.349063+00:00",
+      "duration_seconds": 11.304,
+      "exit_code": 0,
+      "status": "PASS",
+      "log": "/tmp/crew-final-validation/03-unit.log",
+      "log_sha256": "86f471b2e04d6ad107263a1cd188d1d6956bea76d1806bc9e0b2e5b875306cbc"
+    },
+    {
+      "label": "04-release-tooling",
+      "command": [
+        "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "scripts/package_release.py",
+        "self-test"
+      ],
+      "cwd": "/workspace/scratch/21396cda8665/tmuxlike",
+      "started_at": "2026-10-20T05:51:20.349680+00:00",
+      "finished_at": "2026-10-20T05:51:20.514407+00:00",
+      "duration_seconds": 0.165,
+      "exit_code": 0,
+      "status": "PASS",
+      "log": "/tmp/crew-final-validation/04-release-tooling.log",
+      "log_sha256": "1fdf8791124972953ea5c62639051e3587d6c7c49d0eea03aa11fe0bf6af366b"
+    },
+    {
+      "label": "05-build-release-bins",
+      "command": [
+        "/workspace/scratch/21396cda8665/toolchain/cargo/bin/cargo",
+        "build",
+        "--offline",
+        "--locked",
+        "--release",
+        "--bins"
+      ],
+      "cwd": "/workspace/scratch/21396cda8665/tmuxlike",
+      "started_at": "2026-10-20T05:51:20.514903+00:00",
+      "finished_at": "2026-10-20T05:52:05.598729+00:00",
+      "duration_seconds": 45.084,
+      "exit_code": 0,
+      "status": "PASS",
+      "log": "/tmp/crew-final-validation/05-build-release-bins.log",
+      "log_sha256": "cc3d31cdde1c30481e9a1634b7d39e2833316cdc980b97171412ad8f30fd58fa"
+    },
+    {
+      "label": "06-legacy-pty",
+      "command": [
+        "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "scripts/smoke.py",
+        "/workspace/scratch/21396cda8665/target-final-validation/release/tmuxlike"
+      ],
+      "cwd": "/workspace/scratch/21396cda8665/tmuxlike",
+      "started_at": "2026-10-20T05:52:25.684400+00:00",
+      "finished_at": "2026-10-20T05:52:25.848778+00:00",
+      "duration_seconds": 0.164,
+      "exit_code": 0,
+      "status": "PASS",
+      "log": "/tmp/crew-final-validation/06-legacy-pty.log",
+      "log_sha256": "5ae1fb0df6ff1906b045bd072f9d445cdb12b007682ab433c42e521d046defe0"
+    },
+    {
+      "label": "07-api",
+      "command": [
+        "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "scripts/api_smoke.py",
+        "/workspace/scratch/21396cda8665/target-final-validation/release/crew"
+      ],
+      "cwd": "/workspace/scratch/21396cda8665/tmuxlike",
+      "started_at": "2026-10-20T05:52:25.849371+00:00",
+      "finished_at": "2026-10-20T05:52:32.284981+00:00",
+      "duration_seconds": 6.436,
+      "exit_code": 0,
+      "status": "PASS",
+      "log": "/tmp/crew-final-validation/07-api.log",
+      "log_sha256": "0dc3e11a93c8b5ec2fa5477f8bdf14e2fdfa2b9dd2bbde9d320b282fc4d12900"
+    },
+    {
+      "label": "08-workspace",
+      "command": [
+        "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "scripts/workspace_smoke.py",
+        "/workspace/scratch/21396cda8665/target-final-validation/release/crew"
+      ],
+      "cwd": "/workspace/scratch/21396cda8665/tmuxlike",
+      "started_at": "2026-10-20T05:52:32.285559+00:00",
+      "finished_at": "2026-10-20T05:52:33.954537+00:00",
+      "duration_seconds": 1.669,
+      "exit_code": 0,
+      "status": "PASS",
+      "log": "/tmp/crew-final-validation/08-workspace.log",
+      "log_sha256": "842549502a311a72f395c46cfee1ddd1eb8e49ffce4c58b3f4e7de3790d6b97f"
+    },
+    {
+      "label": "09-worktree-and-races",
+      "command": [
+        "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "scripts/worktree_smoke.py",
+        "/workspace/scratch/21396cda8665/target-final-validation/release/crew"
+      ],
+      "cwd": "/workspace/scratch/21396cda8665/tmuxlike",
+      "started_at": "2026-10-20T05:52:33.955076+00:00",
+      "finished_at": "2026-10-20T05:52:36.225730+00:00",
+      "duration_seconds": 2.271,
+      "exit_code": 0,
+      "status": "PASS",
+      "log": "/tmp/crew-final-validation/09-worktree-and-races.log",
+      "log_sha256": "fc838d2fd9510ab5c45477ef4fdd0083b2c50007868eb4764923fd1153dae79f"
+    },
+    {
+      "label": "10-agent-identity",
+      "command": [
+        "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "scripts/agent_identity_smoke.py",
+        "/workspace/scratch/21396cda8665/target-final-validation/release/crew"
+      ],
+      "cwd": "/workspace/scratch/21396cda8665/tmuxlike",
+      "started_at": "2026-10-20T05:52:36.226280+00:00",
+      "finished_at": "2026-10-20T05:52:38.696846+00:00",
+      "duration_seconds": 2.471,
+      "exit_code": 0,
+      "status": "PASS",
+      "log": "/tmp/crew-final-validation/10-agent-identity.log",
+      "log_sha256": "5989d6537fa98ea1dade9c976531ea7d683a9deec2cff2ab9244a2261ef79745"
+    },
+    {
+      "label": "11-bridge-events",
+      "command": [
+        "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "scripts/bridge_events_smoke.py",
+        "/workspace/scratch/21396cda8665/target-final-validation/release/crew"
+      ],
+      "cwd": "/workspace/scratch/21396cda8665/tmuxlike",
+      "started_at": "2026-10-20T05:52:38.697442+00:00",
+      "finished_at": "2026-10-20T05:52:39.162767+00:00",
+      "duration_seconds": 0.465,
+      "exit_code": 0,
+      "status": "PASS",
+      "log": "/tmp/crew-final-validation/11-bridge-events.log",
+      "log_sha256": "5cf3e66d8daddeabb382df11374d33a0cf37ecf495388de0e13a5023a6cd77c7"
+    }
+  ],
+  "source_sha256": {
+    ".github/workflows/ci.yml": "322bdf47665cfccf15b8a22ab41e6d6604d84192848c2b0254ee7a25b2078c06",
+    ".github/workflows/release.yml": "afa0503a689e3298f055af101a9e8a901352eef3ac77d480cf31fe28f3574f7e",
+    "Cargo.lock": "d9ab7a8df5a439e2930159fe920a07c76517eeeb7547d82a922d4392491d092c",
+    "Cargo.toml": "cf691ca68192eaa93e37c8ffa76f434e28cdcf0c2759e21117c86541f23ca67c",
+    "rust-toolchain.toml": "080d1c422a980a506912db5c2cc9fbedcf1df1fe4c8de676934ab7c421c5d768",
+    "scripts/agent_identity_smoke.py": "6631f0211c69808d82cff1def3214e082065f95516f38ce9e1077bb5c1f8c0c8",
+    "scripts/api_smoke.py": "3eb305ba365b247dfd7663a4512b4331b0bd7d56fb2f8e67529a9289175c0f0e",
+    "scripts/bridge_events_smoke.py": "05116d0de5b9da397b2136aa73973a54034d10e1816ad796c8c83a001e7e1660",
+    "scripts/e2e_linux.py": "ad4345a53c5e43b4e787ec8e43830de4a909b40959c012a1bef5ebf8bb41c611",
+    "scripts/package_release.py": "e2cc1ccdc94263baa7bcb921279faeed6a3e0cd963a2f7ff26bc61ad4f3f8f5b",
+    "scripts/smoke.py": "1d9f52627659aad495653bcf2225544a75a7da65beba981769a2645adf7d5a2d",
+    "scripts/workspace_smoke.py": "73d53c10beb889ca650c9a77107bffac65c9fba054ad8f42706af83fdcb3be97",
+    "scripts/worktree_race_linux.py": "6f3c10369e268fc7e1285a1e81e81add2a2f53b260ce69704832db93980e2bd1",
+    "scripts/worktree_smoke.py": "49eba5eec2b5e156b3f0ff61bbec2ee7465661ccb96d9d7a9d2249e307ecaa74",
+    "src/api/agent.rs": "a73c001cd2d5cfb8acd50b6bedd0267a6dfc6d895e02aff2067a52faf3347027",
+    "src/api/cli/agent_cmds.rs": "cfb0a1880a72e07fa50f5f8688447e499d08d4c232e72bc25680eba7726dbb84",
+    "src/api/cli/args.rs": "4d8bd662c94789dff7f1362b3be0db38bcdc97cca303494b8e9f24ed6cebddbc",
+    "src/api/cli/mod.rs": "4f7b9c113eb77c89b063e17ccf756547604217e1390cc1f9172524d3ed849940",
+    "src/api/cli/pane_cmds.rs": "a1d2cc1255645a5255fd6d2de921cde428562a6426d4d574c4f779a0e30b0c1c",
+    "src/api/cli/scan.rs": "44623994a6a66503253042afd97a9505fee319545b852840b52ac0c5d47f26d4",
+    "src/api/cli/tests.rs": "8adc7f015fb341d03e4b4e5817fe5f0cb298c6fdb2dc80c7b25765b957194ede",
+    "src/api/cli/tests/agent.rs": "b4f99e78c7632854d937de5cf266a212d5688d857189625a2cce99c60e2bd146",
+    "src/api/cli/tests/pane_io.rs": "4b2302f3504df70dedea16c6eaa8fb99e07dff5dd519283825c90dd601d8367e",
+    "src/api/cli/tests/pane_ops.rs": "42ed15ff1b1264d71363fd10e195dd4084bf0fa8b37a97b320486d677e58872a",
+    "src/api/mod.rs": "3d8e0544e1c91df8840aba5f65030c3955c7d50ff82a5263ee0a2be82370266d",
+    "src/api/pane/keys.rs": "12469660086f508a2e23aab1264913696e470ed5d93130d34c1d4b859376049d",
+    "src/api/pane/layout.rs": "7c4aee2de1777ac0d8774a2f2ed44eff9df96e4fe3d4a02e454340774dabfc98",
+    "src/api/pane/mod.rs": "25e1a2fb07f481b160aca68bea6334f739cc85f715b95d6e14b0be734a3204b5",
+    "src/api/pane/query.rs": "5772465760b5c95361719d6ac0435ace1012617a543c1755daa5dc9924baa558",
+    "src/api/pane/read.rs": "0f089fbc7ff780da9462989ad264e980476ea2fa2777d6d15df562779108325b",
+    "src/bin/tmuxlike.rs": "0de16653f2217bbf989fba5fc0ec546c8ced4b4d97fe4afb6b5d665b8ca5279c",
+    "src/brand.rs": "f06d3e29d1666472165fd381ddbf550720da027d167d1d4bc13a378354ac5557",
+    "src/bridge.rs": "6c7558e0453354779f349da7bac34d743489bbb86ecd29051b94d13fe4f17b03",
+    "src/client.rs": "5fd65ad9e9102015ea8dcf6a7a88571c87bd3a2821a385f11e146e64d22b07f3",
+    "src/commands.rs": "9702a48bdb12bcd205a73a4e2b3bd328c77d0e519ed92ef0f66af0536c938a16",
+    "src/commands/tests.rs": "f110a74f0472b5e9ad1c80ddd569c66751f4413a7f2b353b316b98d3f735ebed",
+    "src/commands/ui.rs": "a20f65c0752a5612e7cad1d7d59881d4e46f1bd274a8ef1e1beaa2cbca63d0a6",
+    "src/config.rs": "56e77a8680832107102768df8a669d9ee931f424b300e8312b8b4ed98be80957",
+    "src/copy.rs": "cd9615c63038544931eb7e0d50efd7f8c701d10efc0c44faab1e7094539d7404",
+    "src/events.rs": "76aa23af523ba1bd762e96d0555e2ef9db3e1d5d4f958c1d175ad326d05b2349",
+    "src/i18n/catalog/cli.rs": "f47b1150265901f7148cb8288ca8b1e806ec5ec43fd3a0ef35a67377e405785b",
+    "src/i18n/catalog/messages.rs": "0056097d88342af512df146fc430d56b1e1aec383262b05056a09bb3cb00cad0",
+    "src/i18n/catalog/mod.rs": "8d9160af4a83420537c5239aadb0c7eda24062c7fda655baf15147bfe96dc839",
+    "src/i18n/catalog/render.rs": "79c5fbb3b4a2d34fe6c669c3b133d294851138e9a3ab59f268aa5966d65bf389",
+    "src/i18n/mod.rs": "6f9d459f5cf990713d4b3a6ab8d25db81fdaafa445baa59ed145383a0ceccd9d",
+    "src/input/copy.rs": "9f7c9e234390b58c20ed42718d107fcaecc43b7c2c08ec8c89b78fc3f4da12a3",
+    "src/input/keys.rs": "7cd9d30b8d99465a7e221d34f6db843fa891c67938f9c4e457d823e9f6821b53",
+    "src/input/mod.rs": "c3f9f78549f294b70065e1f7d7dbd55d2d4e98e139e9c3bfc71371a3ed836b1f",
+    "src/input/mouse.rs": "7849e8a79b981e3aeb1bd6f229535843cccff2932049713c82f33e84c74e2ed1",
+    "src/integrations.rs": "eb4296e8abde6229a01d5c57f89afd5be527100eb2183c2d7bd1a81649d2569e",
+    "src/ipc.rs": "3366ac713ae666b3f06339bb5e50018b13c140cf9fe6a7a19cc309dc6cff1319",
+    "src/keys.rs": "fb5c330e1e28d492895168cb6fbcbc3e1c0c119f0f1d5d08f879cde94b17647b",
+    "src/layout.rs": "3fe4942319eb4bebb39b04b477bf7740f811ecaa1fba6f851d4acfbaaa40c650",
+    "src/lib.rs": "d8b5e358bb167ab612c91ad2745c5e0ad8b1f7bad492aaffda3744879da470a5",
+    "src/main.rs": "adbd272f32a057b5196c82182d704294a32f3ad4ce00298f0ec01a7074e85401",
+    "src/persist/mod.rs": "f75ce65ca45e14e5bf8ebf2f958eda0d7708992fc849cef3506667357734b22f",
+    "src/persist/resume.rs": "e049b8434a883ffd84350772682e35c8f17266088bc74745aa673b07532ec2a3",
+    "src/persist/snapshot.rs": "4a2f12b9b22d88c68b74005ad5ca9a12bb3528f096890418e3dc9e21c201676d",
+    "src/persist/tests.rs": "7892ca8ac3b07a291235abdb4e6ddf0e36ce58974b2a1bc3943d5bc17bfb9aac",
+    "src/proto.rs": "6ec620670cbed491c04a7d544ad48bae2dddd3e9a1c9e328525eba5c7a00b676",
+    "src/render/mod.rs": "d743407ecf1bc3e8d8f11c8dea7d9c78158e64f23eb2c6ee2005ddeaf9bde403",
+    "src/render/overlay.rs": "95dbed1d170f92bc4edd240d1d60a72fd9c39c1c7c278427ae4e45f5af8a3fce",
+    "src/render/overlay/tests.rs": "7b275b342516662dccb54787dc28fd189d285fdfdc2c7f9625b50a687d5a17d7",
+    "src/render/panes.rs": "f1da15aedff1501ad95e6aab3404cbe5a85fb0115d468cd3649399fb332b6d25",
+    "src/render/sidebar.rs": "22a2d75a3bb9b428695f9c1442eba4266a314f86f1fb27aff8914e860d2e334b",
+    "src/render/sidebar/tests.rs": "90a064fff935945133af1ff5e0918a7a8a49b8cb6c5460a786013fd0c05692fe",
+    "src/render/status.rs": "f93da376037354f0a790e557244f696701128e625cbbc1543076912183d2cc6d",
+    "src/render/status/tests.rs": "79e3a78020bedef1eba9c3341a97da6d61a71c2fe10fd3f8e105065b426f5862",
+    "src/render/status/text.rs": "5fb1975515ca5eb1931912051fa7620c958254b7ac2dc91ffacd8136cd6fd84f",
+    "src/server.rs": "4cf36b8e4a0bdb14759645a628187631c4bd17258ca6b2ea7eb02d3f24c47b11",
+    "src/theme.rs": "056b1ec1f00ac530508fd41f48861cc0881835af54012eda8c8bc485e78b8b60",
+    "src/workspace.rs": "696f86a36b6596507c58eee97543da361c04b03dc0e88830ab47ca871adc9f32",
+    "src/workspace/cli.rs": "aabc939af4816e3e354128089c6483a76d4b80dc677f56bf3fb46f96a8ab9c64",
+    "src/workspace/tests.rs": "72637362aa6f33a950dcbf688b714357ada872cb22e201950575a451c298976e",
+    "src/worktree.rs": "3aa223b2501e4cd5bbd3b8c5cedb713f846bcd5f265905e7279377fcb8a054fa",
+    "src/worktree/cli.rs": "9c240b18b201063a88cb66c133b1626902c70c74706739091875426fb52e6cc0",
+    "src/worktree/git.rs": "c37d067a78b76514e31768d475e7dfea805877f6452ec82e5b16946ff7bb91da"
+  },
+  "end_sha": "efbf228127774bd25c7cf5904485eb27204d1632",
+  "final_git_status": "",
+  "finished_at": "2026-10-20T05:52:39.168382+00:00",
+  "complete": true,
+  "status": "PASS",
+  "binary_sha256": {
+    "/workspace/scratch/21396cda8665/target-final-validation/release/crew": "8382d48f1970ccedac7c33cf331c944f0c9d89f992935da57053521b86754ac2",
+    "/workspace/scratch/21396cda8665/target-final-validation/release/tmuxlike": "8382d48f1970ccedac7c33cf331c944f0c9d89f992935da57053521b86754ac2"
+  },
+  "task_id": "VERIFY-final-linux",
+  "role": "validation_executor",
+  "product_source_review_baseline": "a421a6bd3808f5930a00e4dd921298d98ddd449b",
+  "source_diff_from_review_baseline": [],
+  "counts": {
+    "required_commands": 11,
+    "unit_passed": 318,
+    "unit_failed": 0,
+    "release_tooling_passed": 5,
+    "smoke_suites_passed": 6
+  },
+  "race_regressions": {
+    "r3": "PASS",
+    "r6": "PASS",
+    "invoked_by": "scripts/worktree_smoke.py Linux tail"
+  },
+  "not_run_by_actor": [
+    "Windows execution",
+    "macOS execution",
+    "GitHub Actions",
+    "PR or release publication",
+    "interactive e2e_linux.py scenario"
+  ],
+  "limitations": [
+    "This validation is not independent approval of the actor's earlier agent/integration implementation.",
+    "A subsequent code revision requires appropriate renewed validation."
+  ],
+  "external_side_effects": {
+    "executed": false
+  },
+  "document_sha256": "16478af71159c061d53fdaed6dc98c5c449b1b5edbe8ac88c82a09a4f7341cfc"
+}

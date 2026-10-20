@@ -1,24 +1,104 @@
 name: CI
 on:
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
+    branches: [main]
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: crew-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  PYTHONUTF8: '1'
+  RUST_BACKTRACE: '1'
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
-  build:
+  test:
+    name: ${{ matrix.name }}
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+        include:
+          - { name: Linux x86_64, runner: ubuntu-24.04, ext: '' }
+          - { name: Windows x86_64, runner: windows-2025, ext: '.exe' }
+          - { name: macOS arm64, runner: macos-15, ext: '' }
+    runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo build --release
-      - run: cargo test
-      - name: Smoke test (real pty / ConPTY session)
+      - name: Repository guard
+        run: test "$GITHUB_REPOSITORY" = 'urtiger101-tw/Crew'
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2; upstream tag verified 2026-10-20
+        with:
+          persist-credentials: false
+      - name: Python
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: '3.12'
+      - name: Rust toolchain
+        run: rustup toolchain install 1.96.1 --profile minimal --component rustfmt --component clippy
+      - name: Prepare logs
+        run: mkdir -p ci-logs
+      - name: Format
+        run: cargo fmt --all --check 2>&1 | tee ci-logs/format.log
+      - name: Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings 2>&1 | tee ci-logs/clippy.log
+      - name: Unit tests
+        run: cargo test --locked 2>&1 | tee ci-logs/unit.log
+      - name: Release tooling tests
+        run: python scripts/package_release.py self-test 2>&1 | tee ci-logs/release-tooling.log
+      - name: Build both executables
+        run: cargo build --locked --release --bins 2>&1 | tee ci-logs/build.log
+      - name: Legacy PTY smoke
         timeout-minutes: 5
-        run: python scripts/smoke.py
-      - name: Automation API smoke test (JSON CLI, agent state, persistence)
+        run: python scripts/smoke.py target/release/tmuxlike${{ matrix.ext }} 2>&1 | tee ci-logs/legacy-pty.log
+      - name: Automation API smoke
         timeout-minutes: 8
-        run: python scripts/api_smoke.py
+        run: python scripts/api_smoke.py target/release/crew${{ matrix.ext }} 2>&1 | tee ci-logs/api.log
+      - name: Workspace smoke
+        timeout-minutes: 5
+        run: python scripts/workspace_smoke.py target/release/crew${{ matrix.ext }} 2>&1 | tee ci-logs/workspace.log
+      - name: Worktree smoke
+        timeout-minutes: 5
+        run: python scripts/worktree_smoke.py target/release/crew${{ matrix.ext }} 2>&1 | tee ci-logs/worktree.log
+      - name: Agent identity smoke
+        timeout-minutes: 5
+        run: python scripts/agent_identity_smoke.py target/release/crew${{ matrix.ext }} 2>&1 | tee ci-logs/agent-identity.log
+      - name: Bridge and events smoke
+        timeout-minutes: 5
+        run: python scripts/bridge_events_smoke.py target/release/crew${{ matrix.ext }} 2>&1 | tee ci-logs/bridge-events.log
+      - name: Upload test logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: ci-logs-${{ matrix.runner }}
+          path: ci-logs/
+          if-no-files-found: error
+          retention-days: 14
+
+  gate:
+    name: Crew CI Gate
+    if: ${{ always() }}
+    needs: [test]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every platform
+        env:
+          PLATFORM_RESULT: ${{ needs.test.result }}
+        run: |
+          if [ "$PLATFORM_RESULT" != success ]; then
+            echo "Required platform jobs did not all succeed: $PLATFORM_RESULT" >&2
+            exit 1
+          fi

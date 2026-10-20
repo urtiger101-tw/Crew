@@ -23,7 +23,7 @@ pub(super) fn check_count(
     if (min..=max).contains(&words.len()) {
         Ok(())
     } else {
-        Err(format!("usage: tmuxlike {usage}"))
+        Err(format!("usage: crew {usage}"))
     }
 }
 

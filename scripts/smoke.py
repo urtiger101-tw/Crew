@@ -9,11 +9,14 @@ import os, subprocess, sys, time, re
 
 exe = sys.argv[1] if len(sys.argv) > 1 else os.path.join("target", "release", "tmuxlike" + (".exe" if os.name == "nt" else ""))
 import tempfile
-LOG = os.path.join(tempfile.gettempdir(), "tmuxlike-smoke.log")
-if os.path.exists(LOG):
-    os.remove(LOG)
-env = dict(os.environ, TMUXLIKE_SOCKET="tmuxlike-smoke-%d.sock" % os.getpid(), TMUXLIKE_LOG=LOG)
-env.pop("TMUXLIKE", None)
+WORK = tempfile.TemporaryDirectory(prefix="crew-smoke-")
+LOG = os.path.join(WORK.name, "server.log")
+CONFIG = os.path.join(WORK.name, "config.toml")
+with open(CONFIG, "w", encoding="utf-8") as config:
+    config.write('lang = "en"\n')
+env = {k: v for k, v in os.environ.items() if not k.upper().startswith(("CREW", "TMUXLIKE"))}
+env.update(CREW_SOCKET="crew-smoke-%d.sock" % os.getpid(), CREW_LOG=LOG,
+           CREW_CONFIG=CONFIG, CREW_STATE=os.path.join(WORK.name, "state.json"))
 win = os.name == "nt"
 
 
@@ -59,3 +62,5 @@ finally:
     if os.path.exists(LOG):
         print("---- server log ----")
         print(open(LOG, encoding="utf-8", errors="replace").read()[-6000:])
+
+    WORK.cleanup()

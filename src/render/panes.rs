@@ -588,6 +588,7 @@ mod tests {
     #[test]
     fn title_name_prefers_agent_name_then_kind_then_label() {
         let mut a = AgentInfo {
+            instance: 0,
             source: "s".into(),
             agent: "claude".into(),
             state: crate::api::Status::Blocked,

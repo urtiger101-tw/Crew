@@ -1,7 +1,21 @@
 [package]
-name = "tmuxlike"
-version = "0.2.1"
+name = "crew"
+version = "0.3.0"
 edition = "2024"
+default-run = "crew"
+description = "Cross-platform terminal workspaces for coding agent teams"
+license = "MIT"
+repository = "https://github.com/urtiger101-tw/Crew"
+
+[[bin]]
+name = "crew"
+path = "src/main.rs"
+
+[[bin]]
+name = "tmuxlike"
+path = "src/bin/tmuxlike.rs"
+test = false
+bench = false
 
 [dependencies]
 anyhow = "1.0.104"
