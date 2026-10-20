@@ -56,6 +56,7 @@ fn session_snapshot(st: &State, s: &Session) -> Value {
         "name": s.name,
         "workspace_id": crate::workspace::workspace_id_str(s.id),
         "tokens": st.metadata.values(crate::metadata::Key::Workspace(s.id), std::time::Instant::now()),
+        "display": st.sessions.iter().position(|item| item.id == s.id).map(|si| crate::metadata::display::workspace(st, si)),
         "cols": s.cols,
         "rows": s.rows,
         "attached": attached_count(st, &s.name),
