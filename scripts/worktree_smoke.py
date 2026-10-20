@@ -175,11 +175,24 @@ def main():
 
             gitfile = checkout / ".git"
             original_pointer = gitfile.read_bytes()
+            if WIN:
+                print(f"gitfile attributes before mutation: {getattr(gitfile.stat(), 'st_file_attributes', None)!r}", flush=True)
+
+            def write_pointer(contents):
+                # Avoid CREATE_ALWAYS with normal attributes, which rejects hidden files on Windows.
+                with gitfile.open("r+b") as stream:
+                    stream.seek(0)
+                    stream.write(contents)
+                    stream.truncate()
+
             try:
-                gitfile.write_text("gitdir: " + str(other / ".git") + "\n", encoding="utf-8")
+                write_pointer(("gitdir: " + str(other / ".git") + "\n").encode("utf-8"))
                 error("worktree_mismatch", "worktree", "remove", "--repo", str(repo), "--path", str(checkout))
             finally:
-                gitfile.write_bytes(original_pointer)
+                write_pointer(original_pointer)
+                check(gitfile.read_bytes() == original_pointer, "restored .git pointer bytes changed")
+                if WIN:
+                    print(f"gitfile attributes after restore: {getattr(gitfile.stat(), 'st_file_attributes', None)!r}", flush=True)
             passed("changed .git pointer prevents removal")
 
             removed = data("worktree", "remove", "--repo", str(repo), "--path", str(checkout))
