@@ -370,7 +370,11 @@ fn agent_list(st: &State) -> Value {
         .flat_map(|s| s.windows.iter())
         .flat_map(|w| w.panes())
     {
-        if st.panes.get(&pid).is_some_and(|p| p.agent.is_some()) {
+        if st
+            .panes
+            .get(&pid)
+            .is_some_and(|p| p.agent.is_some() || p.detected_agent.is_some())
+        {
             agents.extend(pane_json(st, pid));
         }
     }

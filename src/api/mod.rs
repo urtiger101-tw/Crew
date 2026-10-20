@@ -101,7 +101,7 @@ pub enum Request {
     Workspace(crate::workspace::Request),
     Worktree(crate::worktree::Request),
     Events(crate::events::Request),
-    Metadata(crate::metadata::Request),
+    Metadata(Box<crate::metadata::Request>),
     ApiSnapshot,
     SessionList,
     ServerStop,
@@ -346,6 +346,9 @@ pub fn pane_json(st: &State, pid: usize) -> Option<Value> {
         "rows": p.rect.h,
         "status": agent::status(p, &st.cfg).as_str(),
         "agent": agent,
+        "detected_agent": p.detected_agent,
+        "process_detection": {"enabled": st.cfg.agent_detection, "backend": crate::agent_detection::backend(), "kind_only": true},
+        "display": crate::metadata::display::pane(st, pid, crate::i18n::Lang::En),
         "tokens": st.metadata.values(crate::metadata::Key::Pane(pid), std::time::Instant::now()),
     }))
 }
@@ -356,7 +359,7 @@ pub fn handle(shared: &Shared, req: Request) -> ApiResult {
         Request::Workspace(req) => crate::workspace::handle(shared, req),
         Request::Worktree(req) => crate::worktree::handle(shared, req),
         Request::Events(req) => crate::events::handle(shared, req),
-        Request::Metadata(req) => crate::metadata::handle(shared, req),
+        Request::Metadata(req) => crate::metadata::handle(shared, *req),
         Request::ServerStop => {
             // keep persisted state so the next server start restores the layout;
             // the connection handler exits the process after sending this reply
