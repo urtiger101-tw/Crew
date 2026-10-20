@@ -1,0 +1,36 @@
+{
+  "task_id": "VERIFY-stage2",
+  "revision": 2,
+  "actor_instance": "/root/reference_audit",
+  "recipient": "/root",
+  "role": "independent_reviewer",
+  "base_sha": "12be9e307e47a56d3bfd669ab7bddb1ee7466e09",
+  "head_sha": "a421a6bd3808f5930a00e4dd921298d98ddd449b",
+  "tested_sha": "a421a6bd3808f5930a00e4dd921298d98ddd449b",
+  "scope": ["brand compatibility", "workspace/tab", "persistence", "worktree", "events", "bridge/client", "smoke isolation"],
+  "excluded": ["self-authored agent/integrations implementation", "CI/release/package changes"],
+  "platform": "Linux x86_64",
+  "cwd": "/workspace/scratch/21396cda8665/wt-review",
+  "status": "PASS",
+  "findings": [
+    {"id": "R1", "severity": "P1", "status": "PASS", "disposition": "fixed and independently verified", "fix": "b2a6918"},
+    {"id": "R2", "severity": "P1", "status": "PASS", "disposition": "fixed and independently verified with inherited sentinel server", "fix": "cb85172"},
+    {"id": "R3", "severity": "P2", "status": "PASS", "disposition": "fixed; exact-head live cwd regression passed", "fix": "cb85172"},
+    {"id": "R4", "severity": "P2", "status": "PASS", "disposition": "fixed; both caller-context names and explicit scope passed", "fix": "3e24e5c"},
+    {"id": "R6", "severity": "P2", "status": "PASS", "disposition": "fixed; deterministic barrier and reservation cleanup passed", "fix": "a421a6b"}
+  ],
+  "commands": [
+    {"command": "cargo build --offline --locked --bins", "status": "PASS", "exit_code": 0, "environment": "CARGO_HOME/RUSTUP_HOME in workspace toolchain; CARGO_TARGET_DIR=target-review"},
+    {"command": "python3 scripts/workspace_smoke.py /workspace/scratch/21396cda8665/target-review/debug/crew", "status": "PASS", "exit_code": 0},
+    {"command": "python3 scripts/worktree_smoke.py /workspace/scratch/21396cda8665/target-review/debug/crew", "status": "PASS", "exit_code": 0},
+    {"command": "python3 scripts/bridge_events_smoke.py /workspace/scratch/21396cda8665/target-review/debug/crew", "status": "PASS", "exit_code": 0},
+    {"command": "python3 /tmp/crew-review-stage2/worktree_race_linux.py /workspace/scratch/21396cda8665/target-review/debug/crew", "status": "PASS", "exit_code": 0}
+  ],
+  "artifacts": [
+    {"path": "/tmp/crew-review-stage2/worktree_race_linux.py", "sha256": "6f3c10369e268fc7e1285a1e81e81add2a2f53b260ce69704832db93980e2bd1"},
+    {"path": "/workspace/scratch/21396cda8665/target-review/debug/crew", "sha256": "a7b7bd7a6491fc3beaa4d55a17047bd64aacc25ef4da6bbf3f5eb14be19f27cc"}
+  ],
+  "not_run": ["Windows/macOS execution", "GitHub CI", "e2e_linux.py interactive scenario", "final-head full unit/clippy by this reviewer", "later delivery changes"],
+  "external_side_effects": {"executed": false},
+  "next_action": "Coordinator integrates Linux regression, combines AGENT/delivery independent reviews and validates latest candidate CI."
+}
