@@ -49,8 +49,8 @@ pub const ENTRIES: &[Entry] = &[
     ),
     (
         "render.sidebar.empty",
-        "no agent reports {dash} see: tmuxlike pane report-agent --help",
-        "尚無代理回報 {dash} 請見：tmuxlike pane report-agent --help",
+        "no agent reports {dash} see: crew pane report-agent --help",
+        "尚無代理回報 {dash} 請見：crew pane report-agent --help",
     ),
     ("render.sidebar.more", "{ell} +{n} more", "{ell} +{n} 更多"),
     // chooser (overlay)

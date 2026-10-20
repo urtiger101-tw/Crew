@@ -8,48 +8,48 @@ use super::super::Entry;
 pub const ENTRIES: &[Entry] = &[
     (
         "cli.help",
-        r#"tmuxlike - a cross-platform terminal multiplexer
+        r#"crew - a cross-platform terminal multiplexer
 
 USAGE:
-  tmuxlike                       attach to the last session, or create one
-  tmuxlike new [-d] [-s NAME]    create a new session and attach (-d: in background)
-  tmuxlike attach [-t NAME]      attach to an existing session (alias: a)
-  tmuxlike ls                    list sessions
-  tmuxlike kill-session -t NAME  kill a session
-  tmuxlike kill-server           kill the server and all sessions
-  tmuxlike keys                  show default key bindings
-  tmuxlike capture-pane -p [-t S] print the active pane of a session
-  tmuxlike send-keys [-t S] KEYS  type text / keys (Enter, C-c, ...) into it
-  tmuxlike source-file [PATH]    reload config in the running server
-  tmuxlike <command> [args]      run any server command, e.g. `tmuxlike set mouse off`
+  crew                       attach to the last session, or create one
+  crew new [-d] [-s NAME]    create a new session and attach (-d: in background)
+  crew attach [-t NAME]      attach to an existing session (alias: a)
+  crew ls                    list sessions
+  crew kill-session -t NAME  kill a session
+  crew kill-server           kill the server and all sessions
+  crew keys                  show default key bindings
+  crew capture-pane -p [-t S] print the active pane of a session
+  crew send-keys [-t S] KEYS  type text / keys (Enter, C-c, ...) into it
+  crew source-file [PATH]    reload config in the running server
+  crew <command> [args]      run any server command, e.g. `crew set mouse off`
 
-AUTOMATION (herdr-style, JSON output; see `tmuxlike pane --help`):
-  tmuxlike pane list|get|split|read|send-text|send-keys|run|wait-output|...
-  tmuxlike agent list|get|read|prompt|wait|rename|focus|send-keys
-  tmuxlike session list   tmuxlike api snapshot   tmuxlike server [stop]
+AUTOMATION (herdr-style, JSON output; see `crew pane --help`):
+  crew pane list|get|split|read|send-text|send-keys|run|wait-output|...
+  crew agent list|get|read|prompt|wait|rename|focus|send-keys
+  crew session list   crew api snapshot   crew server [stop]
 
-Config: $TMUXLIKE_CONFIG or <config_dir>/tmuxlike/config.toml"#,
-        r#"tmuxlike - 跨平台終端多工器
+Config: $TMUXLIKE_CONFIG or <config_dir>/crew/config.toml"#,
+        r#"crew - 跨平台終端多工器
 
 用法 USAGE:
-  tmuxlike                       連線到最近的工作階段，若無則建立一個
-  tmuxlike new [-d] [-s NAME]    建立新工作階段並連線（-d：在背景建立）
-  tmuxlike attach [-t NAME]      連線到既有的工作階段（別名 alias：a）
-  tmuxlike ls                    列出工作階段
-  tmuxlike kill-session -t NAME  關閉一個工作階段
-  tmuxlike kill-server           關閉伺服器與所有工作階段
-  tmuxlike keys                  顯示預設按鍵
-  tmuxlike capture-pane -p [-t S] 印出工作階段的使用中窗格
-  tmuxlike send-keys [-t S] KEYS  將文字或按鍵（Enter、C-c 等）輸入到窗格
-  tmuxlike source-file [PATH]    在執行中的伺服器重新載入設定
-  tmuxlike <command> [args]      執行任何伺服器指令，例如 `tmuxlike set mouse off`
+  crew                       連線到最近的工作階段，若無則建立一個
+  crew new [-d] [-s NAME]    建立新工作階段並連線（-d：在背景建立）
+  crew attach [-t NAME]      連線到既有的工作階段（別名 alias：a）
+  crew ls                    列出工作階段
+  crew kill-session -t NAME  關閉一個工作階段
+  crew kill-server           關閉伺服器與所有工作階段
+  crew keys                  顯示預設按鍵
+  crew capture-pane -p [-t S] 印出工作階段的使用中窗格
+  crew send-keys [-t S] KEYS  將文字或按鍵（Enter、C-c 等）輸入到窗格
+  crew source-file [PATH]    在執行中的伺服器重新載入設定
+  crew <command> [args]      執行任何伺服器指令，例如 `crew set mouse off`
 
-自動化 AUTOMATION（herdr 風格，JSON 輸出；見 `tmuxlike pane --help`）：
-  tmuxlike pane list|get|split|read|send-text|send-keys|run|wait-output|...
-  tmuxlike agent list|get|read|prompt|wait|rename|focus|send-keys
-  tmuxlike session list   tmuxlike api snapshot   tmuxlike server [stop]
+自動化 AUTOMATION（herdr 風格，JSON 輸出；見 `crew pane --help`）：
+  crew pane list|get|split|read|send-text|send-keys|run|wait-output|...
+  crew agent list|get|read|prompt|wait|rename|focus|send-keys
+  crew session list   crew api snapshot   crew server [stop]
 
-設定檔 Config：$TMUXLIKE_CONFIG，或 <config_dir>/tmuxlike/config.toml"#,
+設定檔 Config：$TMUXLIKE_CONFIG，或 <config_dir>/crew/config.toml"#,
     ),
     (
         "cli.keys",
@@ -101,7 +101,7 @@ Custom bindings: [bind] in config.toml, or `bind-key KEY COMMAND` at the : promp
     ),
     (
         "cli.api_help",
-        r#"tmuxlike pane|agent|api|session|server  (herdr-style JSON automation)
+        r#"crew pane|agent|api|session|server  (herdr-style JSON automation)
 
 Pane ids: p<N> (tmux-style %<N> also accepted). Pane TARGET is one of:
   <id>  |  --pane ID  |  --current   (--current = $TMUXLIKE_PANE_ID inside a pane)
@@ -143,7 +143,7 @@ agent rename <target> <name>  |  agent rename <target> --clear
 <target> = pane id or agent name [a-z][a-z0-9_-]{0,31} (a name may not look like a pane id, e.g. p1).
 --until S: idle|working|blocked|done|unknown; repeatable (default: idle, done, blocked).
 --timeout MS: milliseconds; omitted = wait without limit."#,
-        r#"tmuxlike pane|agent|api|session|server  （herdr 風格 JSON 自動化）
+        r#"crew pane|agent|api|session|server  （herdr 風格 JSON 自動化）
 
 窗格 ID：p<N>（也接受 tmux 風格的 %<N>）。窗格目標 TARGET 為下列其一：
   <id>  |  --pane ID  |  --current   （--current 指窗格內的 $TMUXLIKE_PANE_ID）
