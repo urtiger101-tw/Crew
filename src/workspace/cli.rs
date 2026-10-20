@@ -126,6 +126,9 @@ pub fn parse(
     }
     if sub == "move" {
         allowed.push("--index");
+        if !workspace {
+            allowed.push("--to-workspace");
+        }
     }
     let mut a = scan(args, &allowed)?;
     let scope = a.values.remove("--workspace");
@@ -216,25 +219,38 @@ pub fn parse(
         }
         "move" => {
             count(&a, 1, 1, &format!("{group} move ID|NAME --index N"))?;
-            let raw = a
+            let insert_index = a
                 .values
                 .remove("--index")
-                .ok_or("move requires --index N")?;
-            if raw.is_empty() || !raw.bytes().all(|b| b.is_ascii_digit()) {
-                return Err("--index must be a nonnegative integer".into());
-            }
-            let insert_index = raw.parse::<usize>().map_err(|_| "--index is too large")?;
+                .map(|raw| {
+                    if raw.is_empty() || !raw.bytes().all(|b| b.is_ascii_digit()) {
+                        return Err("--index must be a nonnegative integer");
+                    }
+                    raw.parse::<usize>().map_err(|_| "--index is too large")
+                })
+                .transpose()?;
             let target = a.positional.remove(0);
-            if workspace {
+            if let Some(to_workspace) = a.values.remove("--to-workspace") {
+                if to_workspace.is_empty() {
+                    return Err("--to-workspace requires a workspace ID or exact name".into());
+                }
+                Request::TabTransfer {
+                    tab: target,
+                    workspace: scope,
+                    to_workspace,
+                    insert_index,
+                    current,
+                }
+            } else if workspace {
                 Request::WorkspaceMove {
                     workspace: target,
-                    insert_index,
+                    insert_index: insert_index.ok_or("move requires --index N")?,
                 }
             } else {
                 Request::TabMove {
                     tab: target,
                     workspace: scope,
-                    insert_index,
+                    insert_index: insert_index.ok_or("move requires --index N")?,
                     current,
                 }
             }
