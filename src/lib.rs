@@ -11,6 +11,7 @@ macro_rules! log {
     }};
 }
 
+mod agent_detection;
 mod api;
 mod brand;
 mod bridge;
@@ -27,8 +28,10 @@ mod keys;
 mod layout;
 mod metadata;
 mod persist;
+mod plugins;
 mod process_path;
 mod proto;
+mod remote;
 mod render;
 mod server;
 mod theme;
@@ -50,8 +53,17 @@ pub fn run() {
     let lang = client::lang();
     let res = match sub {
         "__server" => server::run(),
+        "__remote-api" => remote::transport_serve(),
+        "machine" | "federation" | "--machine" => match remote::run(&args) {
+            Ok(code) => std::process::exit(code),
+            Err(e) => Err(e),
+        },
         "server" if args.len() == 1 => server::run(),
         "integration" => match integrations::run(&args[1..]) {
+            Ok(code) => std::process::exit(code),
+            Err(e) => Err(e),
+        },
+        "plugin" => match plugins::run(&args[1..]) {
             Ok(code) => std::process::exit(code),
             Err(e) => Err(e),
         },
@@ -102,6 +114,8 @@ pub fn run() {
         }
         "new" | "new-session" => client::attach(flag(&args, "-s"), true),
         "attach" | "a" | "attach-session" => client::attach(flag(&args, "-t"), false),
+        "attach-workspace" if args.len() == 2 => client::attach_workspace(&args[1]),
+        "attach-workspace" => Err(anyhow::anyhow!("usage: crew attach-workspace wN")),
         "ls" | "list-sessions" => client::simple(Command::List),
         "kill-session" => match flag(&args, "-t") {
             Some(s) => client::simple(Command::Kill { session: s }),
@@ -119,22 +133,17 @@ pub fn run() {
         "-h" | "--help" | "help" => {
             println!("{}", tr(lang, "cli.help"));
             println!(
-                "\ncrew workspace|tab|worktree|events|integration --help\n{}",
+                "\ncrew workspace|tab|worktree|events|integration|plugin --help\n{}",
                 bridge::HELP
             );
+            println!("\n{}", remote::HELP);
             Ok(())
         }
         _ => {
             // any other tmux-style command is sent to the running server (e.g. source-file, set, bind-key)
             let line = args
                 .iter()
-                .map(|a| {
-                    if a.contains(' ') {
-                        format!("\"{a}\"")
-                    } else {
-                        a.clone()
-                    }
-                })
+                .map(|a| commands::quote(a))
                 .collect::<Vec<_>>()
                 .join(" ");
             match commands::parse(&line) {

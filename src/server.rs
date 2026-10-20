@@ -29,6 +29,8 @@ pub struct Pane {
     pub copy: Option<CopyState>,
     /// reported agent state (herdr-style `pane report-agent`)
     pub agent: Option<crate::api::AgentInfo>,
+    /// Inferred process identity; never substitutes for a reported lifecycle authority.
+    pub detected_agent: Option<crate::agent_detection::Detection>,
     /// user label (`pane rename`)
     pub label: Option<String>,
     /// working directory the pane was started in
@@ -349,9 +351,22 @@ impl State {
     }
 
     fn pane_has_info(&self, pid: usize) -> bool {
-        self.panes
-            .get(&pid)
-            .is_some_and(|p| p.agent.is_some() || p.label.as_deref().is_some_and(|l| !l.is_empty()))
+        self.panes.get(&pid).is_some_and(|p| {
+            p.agent.is_some()
+                || p.detected_agent.is_some()
+                || p.label.as_deref().is_some_and(|l| !l.is_empty())
+                || (!self.cfg.pane_template.is_empty()
+                    && !self
+                        .metadata
+                        .values(crate::metadata::Key::Pane(pid), Instant::now())
+                        .is_empty())
+                || crate::metadata::display::pane(self, pid, crate::i18n::Lang::En).is_some_and(
+                    |display| {
+                        display.presentation.title.is_some()
+                            || display.presentation.display_agent.is_some()
+                    },
+                )
+        })
     }
 
     /// Panes whose layout rect starts with a title row.
@@ -530,6 +545,7 @@ impl State {
             started: Instant::now(),
             copy: None,
             agent: None,
+            detected_agent: None,
             label: None,
             cwd: start_dir,
             env: env.clone(),
@@ -1449,6 +1465,29 @@ fn handle_conn(shared: Shared, cid: usize, stream: interprocess::local_socket::S
     let Ok(ClientMsg::Hello(cmd)) = read_msg::<ClientMsg>(&mut r) else {
         return;
     };
+    // Normalize only the transport fields; preserve the stable-ID selector until
+    // the same lock that registers the client. Never resolve the ID to a name
+    // in a separate API request where rename/deletion could race attachment.
+    let (cmd, workspace_id) = match cmd {
+        Command::AttachWorkspace {
+            workspace_id,
+            cols,
+            rows,
+            env,
+        } => (
+            Command::Attach {
+                session: None,
+                create: false,
+                cols,
+                rows,
+                cwd: None,
+                detached: false,
+                env,
+            },
+            Some(workspace_id),
+        ),
+        other => (other, None),
+    };
     match cmd {
         Command::List => {
             let st = crate::api::lock(&shared);
@@ -1537,16 +1576,24 @@ fn handle_conn(shared: Shared, cid: usize, stream: interprocess::local_socket::S
             env,
         } => {
             let mut st = crate::api::lock(&shared);
-            let name = match session {
-                Some(n) if st.sidx(&n).is_some() && !create => Ok(n),
-                Some(n) if !create => Err(anyhow!("can't find session: {n}")),
-                None if !create => st
+            let name = match workspace_id {
+                Some(id) => st
                     .sessions
                     .iter()
-                    .max_by_key(|s| (s.last_used, s.id))
+                    .find(|session| session.id == id)
                     .map(|s| s.name.clone())
-                    .ok_or_else(|| anyhow!("no sessions")),
-                n => st.new_session(&shared, n, cols, rows, cwd),
+                    .ok_or_else(|| anyhow!("can't find workspace: w{id}")),
+                None => match session {
+                    Some(n) if st.sidx(&n).is_some() && !create => Ok(n),
+                    Some(n) if !create => Err(anyhow!("can't find session: {n}")),
+                    None if !create => st
+                        .sessions
+                        .iter()
+                        .max_by_key(|s| (s.last_used, s.id))
+                        .map(|s| s.name.clone())
+                        .ok_or_else(|| anyhow!("no sessions")),
+                    n => st.new_session(&shared, n, cols, rows, cwd),
+                },
             };
             let name = match name {
                 Ok(n) => n,
@@ -1599,6 +1646,7 @@ fn handle_conn(shared: Shared, cid: usize, stream: interprocess::local_socket::S
             }
             crate::api::lock(&shared).clients.remove(&cid);
         }
+        Command::AttachWorkspace { .. } => unreachable!("stable-ID attach was normalized above"),
     }
 }
 
@@ -1653,6 +1701,9 @@ pub fn run() -> Result<()> {
             let _ = rx.recv_timeout(Duration::from_millis(500));
             std::thread::sleep(Duration::from_millis(8));
             while rx.try_recv().is_ok() {}
+            if last_tick.elapsed() > Duration::from_millis(500) {
+                crate::agent_detection::refresh(&sh);
+            }
             let mut st = crate::api::lock(&sh);
             let tick = last_tick.elapsed() > Duration::from_millis(500);
             if tick {

@@ -156,6 +156,20 @@ pub fn new_detached(session: Option<String>) -> Result<()> {
 }
 
 pub fn attach(session: Option<String>, create: bool) -> Result<()> {
+    attach_target(session, None, create)
+}
+
+/// The selector must carry a stable ID all the way to the daemon's attach lock.
+pub fn attach_workspace(workspace: &str) -> Result<()> {
+    let id = workspace
+        .strip_prefix('w')
+        .and_then(|digits| digits.parse::<usize>().ok())
+        .filter(|id| *id > 0 && format!("w{id}") == workspace)
+        .ok_or_else(|| anyhow!("workspace ID must be w followed by a positive integer"))?;
+    attach_target(None, Some(id), false)
+}
+
+fn attach_target(session: Option<String>, workspace_id: Option<usize>, create: bool) -> Result<()> {
     let lang = lang();
     if crate::brand::env_os("").is_some() {
         return Err(anyhow!(tr(lang, "cli.err.nested")));
@@ -166,9 +180,14 @@ pub fn attach(session: Option<String>, create: bool) -> Result<()> {
     let cwd = std::env::current_dir()
         .ok()
         .map(|p| p.to_string_lossy().into_owned());
-    write_msg(
-        &mut w,
-        &ClientMsg::Hello(Command::Attach {
+    let command = match workspace_id {
+        Some(workspace_id) => Command::AttachWorkspace {
+            workspace_id,
+            cols,
+            rows,
+            env: crate::theme::ClientEnv::detect(),
+        },
+        None => Command::Attach {
             session,
             create,
             cols,
@@ -176,8 +195,9 @@ pub fn attach(session: Option<String>, create: bool) -> Result<()> {
             cwd,
             detached: false,
             env: crate::theme::ClientEnv::detect(),
-        }),
-    )?;
+        },
+    };
+    write_msg(&mut w, &ClientMsg::Hello(command))?;
 
     // Wait for the first message so errors print on a normal terminal.
     let first: ServerMsg = read_msg(&mut r)?;

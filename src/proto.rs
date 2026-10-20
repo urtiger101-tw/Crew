@@ -17,6 +17,16 @@ pub enum Command {
         #[serde(default)]
         env: crate::theme::ClientEnv,
     },
+    /// Attach one existing stable ID. A distinct variant makes older daemons
+    /// reject the request instead of ignoring an unknown field and choosing a
+    /// different session. Legacy name-based Attach remains wire-compatible.
+    AttachWorkspace {
+        workspace_id: usize,
+        cols: u16,
+        rows: u16,
+        #[serde(default)]
+        env: crate::theme::ClientEnv,
+    },
     List,
     Kill {
         session: String,

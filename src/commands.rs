@@ -169,10 +169,10 @@ pub fn tokenize(s: &str) -> Vec<String> {
     out
 }
 
-fn quote(s: &str) -> String {
+pub(crate) fn quote(s: &str) -> String {
     if s.is_empty()
         || s.chars()
-            .any(|c| c.is_whitespace() || c == '"' || c == '\'' || c == '#')
+            .any(|c| c.is_whitespace() || c == '"' || c == '\'' || c == '#' || c == '\\')
     {
         format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
     } else {
