@@ -313,7 +313,7 @@ fn native_request(req: crate::api::Request, socket: Option<&str>) -> crate::api:
 }
 
 fn execute(request: Request) -> crate::api::ApiResult {
-    use crate::api::{ApiError, Reply};
+    use crate::api::ApiError;
     if request.protocol != PROTOCOL {
         return Err(ApiError::new("protocol_mismatch", "expected crew-ssh-v1"));
     }
@@ -327,20 +327,10 @@ fn execute(request: Request) -> crate::api::ApiResult {
         if !request.args.is_empty() {
             return Err(ApiError::invalid("summary takes no command arguments"));
         }
-        let workspaces = crate::api::cli::parse(&["workspace".into(), "list".into()], None)
-            .map_err(ApiError::invalid)?;
-        let agents = crate::api::cli::parse(&["agent".into(), "list".into()], None)
-            .map_err(ApiError::invalid)?;
-        let Reply::Json(workspaces) = native_request(workspaces, request.socket.as_deref())? else {
-            unreachable!()
-        };
-        let Reply::Json(agents) = native_request(agents, request.socket.as_deref())? else {
-            unreachable!()
-        };
-        return Ok(Reply::Json(
-            json!({"workspaces": workspaces["workspaces"], "agents": agents["agents"],
-            "version": env!("CARGO_PKG_VERSION")}),
-        ));
+        return native_request(
+            crate::api::Request::FederationSnapshot,
+            request.socket.as_deref(),
+        );
     }
     // Never inherit a pane id from the SSH login environment.
     let req = crate::api::cli::parse(&request.args, None).map_err(ApiError::invalid)?;

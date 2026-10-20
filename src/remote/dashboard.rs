@@ -58,6 +58,7 @@ impl Drop for Screen {
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Target {
     machine: String,
+    epoch: String,
     workspace: String,
     name: String,
 }
@@ -90,14 +91,22 @@ fn rows(views: &[Value]) -> Vec<(String, Option<Target>)> {
         if state != "reachable" {
             continue;
         }
+        let epoch = text(&machine["data"]["epoch"]);
+        if epoch.is_empty() {
+            rows.push((
+                "  Attachment unavailable: daemon identity missing; update Crew.".into(),
+                None,
+            ));
+        }
         if let Some(workspaces) = machine["data"]["workspaces"].as_array() {
             for workspace in workspaces {
                 let wid = text(&workspace["workspace_id"]);
                 let name = text(&workspace["name"]);
                 rows.push((
                     format!("  {wid}  {name}"),
-                    Some(Target {
+                    (!epoch.is_empty()).then(|| Target {
                         machine: id.into(),
+                        epoch: epoch.into(),
                         workspace: wid.into(),
                         name: name.into(),
                     }),
@@ -310,8 +319,13 @@ pub fn run(duration: u64) -> Result<i32> {
                                 Some(catalog.select(&target.machine, true)?.clone())
                             };
                             screen.suspend()?;
-                            let outcome =
-                                attach(machine.as_ref(), AttachTarget::Id(&target.workspace));
+                            let outcome = attach(
+                                machine.as_ref(),
+                                AttachTarget::Snapshot {
+                                    workspace: &target.workspace,
+                                    epoch: &target.epoch,
+                                },
+                            );
                             screen.resume()?;
                             message = match outcome {
                                 Ok(0) => {
@@ -349,7 +363,7 @@ mod tests {
     #[test]
     fn offline_rows_cannot_be_selected_and_terminal_controls_are_removed() {
         let rows = rows(&[
-            json!({"machine_id":"m1","label":"Live","state":"reachable","data":{"workspaces":[{"workspace_id":"w1","name":"work"}],"agents":[{"workspace_id":"w1","pane_id":"p1","status":"working","agent":{"agent":"codex"}}]}}),
+            json!({"machine_id":"m1","label":"Live","state":"reachable","data":{"epoch":"live-epoch","workspaces":[{"workspace_id":"w1","name":"work"}],"agents":[{"workspace_id":"w1","pane_id":"p1","status":"working","agent":{"agent":"codex"}}]}}),
             json!({"machine_id":"m2","label":"Offline","state":"unavailable","data":{"workspaces":[{"workspace_id":"w1","name":"stale"}]}}),
         ]);
         let selected: Vec<_> = rows.iter().filter_map(|(_, t)| t.as_ref()).collect();
@@ -357,5 +371,17 @@ mod tests {
         assert_eq!(selected[0].machine, "m1");
         assert!(rows.iter().any(|(s, _)| s.contains("codex")));
         assert_eq!(clean("中文abc\x1b\r", 5), "中文a");
+    }
+
+    #[test]
+    fn legacy_summary_without_daemon_identity_cannot_be_attached() {
+        let rows = rows(&[json!({"machine_id":"old","state":"reachable","data":{
+            "workspaces":[{"workspace_id":"w1","name":"work"}],"agents":[]
+        }})]);
+        assert!(rows.iter().all(|(_, target)| target.is_none()));
+        assert!(
+            rows.iter()
+                .any(|(line, _)| line.contains("daemon identity missing"))
+        );
     }
 }
