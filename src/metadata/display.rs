@@ -3,12 +3,131 @@ use super::{Key, presentation};
 use crate::api::agent;
 use crate::i18n::{Lang, tr};
 use crate::server::State;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::time::Instant;
 
 const MAX_TEMPLATE: usize = 512;
 const MAX_OUTPUT: usize = 512;
+const MAX_SEGMENTS: usize = 16;
+
+/// A literal text template, optionally styled for one sidebar occurrence.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub enum SidebarSegment {
+    Template(String),
+    Styled(StyledSegment),
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StyledSegment {
+    pub template: String,
+    pub fg: Option<String>,
+    pub bold: Option<bool>,
+    pub dim: Option<bool>,
+}
+
+/// Plain text shared by API and TUI. Styles never contain terminal escape codes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DisplaySpan {
+    pub text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fg: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bold: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dim: Option<bool>,
+}
+
+impl DisplaySpan {
+    fn plain(text: String) -> Self {
+        Self {
+            text,
+            fg: None,
+            bold: None,
+            dim: None,
+        }
+    }
+}
+
+/// Strict ASCII CSS-style RGB; neither ANSI sequences nor theme token names are accepted.
+pub fn segment_rgb(value: &str) -> Option<(u8, u8, u8)> {
+    let hex = value.strip_prefix('#')?;
+    if !matches!(hex.len(), 3 | 6) || !hex.bytes().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    let component = |i| u8::from_str_radix(&hex[i..i + 2], 16).ok();
+    if hex.len() == 6 {
+        Some((component(0)?, component(2)?, component(4)?))
+    } else {
+        let mut values = hex.chars().map(|c| c.to_digit(16).map(|n| n as u8 * 17));
+        Some((values.next()??, values.next()??, values.next()??))
+    }
+}
+
+pub fn validate_segments(segments: &[SidebarSegment]) -> Result<(), String> {
+    if segments.len() > MAX_SEGMENTS {
+        return Err("sidebar_pane_segments must contain at most 16 segments".into());
+    }
+    for segment in segments {
+        let pattern = match segment {
+            SidebarSegment::Template(pattern) => pattern,
+            SidebarSegment::Styled(style) => {
+                if style
+                    .fg
+                    .as_deref()
+                    .is_some_and(|fg| segment_rgb(fg).is_none())
+                {
+                    return Err("sidebar segment fg must be #RGB or #RRGGBB".into());
+                }
+                &style.template
+            }
+        };
+        validate_template(pattern)?;
+    }
+    Ok(())
+}
+
+/// Drop empty values before adding separators; the combined text stays bounded.
+fn render_segments(
+    segments: &[SidebarSegment],
+    values: &BTreeMap<String, String>,
+) -> Vec<DisplaySpan> {
+    let mut spans = Vec::new();
+    let mut remaining = MAX_OUTPUT;
+    for segment in segments.iter().take(MAX_SEGMENTS) {
+        let (pattern, style) = match segment {
+            SidebarSegment::Template(pattern) => (pattern, None),
+            SidebarSegment::Styled(style) => (&style.template, Some(style)),
+        };
+        let text = template(pattern, values);
+        if text.is_empty() {
+            continue;
+        }
+        let separator = if spans.is_empty() { "" } else { " · " };
+        let separator_len = separator.chars().count();
+        if remaining <= separator_len {
+            break;
+        }
+        if !separator.is_empty() {
+            spans.push(DisplaySpan::plain(separator.into()));
+            remaining -= separator_len;
+        }
+        let text: String = text.chars().take(remaining).collect();
+        remaining -= text.chars().count();
+        spans.push(DisplaySpan {
+            text,
+            fg: style.and_then(|s| s.fg.clone()),
+            bold: style.and_then(|s| s.bold),
+            dim: style.and_then(|s| s.dim),
+        });
+        if remaining == 0 {
+            break;
+        }
+    }
+    spans
+}
 
 pub fn validate_template(value: &str) -> Result<(), String> {
     if value.chars().count() > MAX_TEMPLATE
@@ -91,6 +210,8 @@ pub struct PaneDisplay {
     pub agent: Option<String>,
     pub state_label: String,
     pub sidebar: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub sidebar_spans: Vec<DisplaySpan>,
     pub kind_source: &'static str,
     pub presentation: presentation::Presentation,
 }
@@ -161,11 +282,21 @@ pub fn pane(st: &State, pid: usize, lang: Lang) -> Option<PaneDisplay> {
         crate::workspace::workspace_id_str(s.id),
     );
     values.insert("tab_id".into(), crate::workspace::tab_id_str(w.id));
+    let sidebar_spans = render_segments(&st.cfg.sidebar_pane_segments, &values);
+    let sidebar = if sidebar_spans.is_empty() {
+        with_fallback(&st.cfg.sidebar_pane_template, &values, title)
+    } else {
+        sidebar_spans
+            .iter()
+            .map(|span| span.text.as_str())
+            .collect()
+    };
     Some(PaneDisplay {
         title: with_fallback(&st.cfg.pane_template, &values, title),
         agent: effective_agent.map(str::to_string),
         state_label: state_label.to_string(),
-        sidebar: with_fallback(&st.cfg.sidebar_pane_template, &values, title),
+        sidebar,
+        sidebar_spans,
         kind_source: if explicit.is_some() {
             "explicit-report"
         } else if detected.is_some() {
@@ -245,5 +376,88 @@ mod tests {
         }
         assert!(validate_template(&"x".repeat(513)).is_err());
         assert_eq!(with_fallback("$missing", &BTreeMap::new(), "p1"), "p1");
+    }
+
+    #[test]
+    fn sidebar_segments_drop_empty_values_and_keep_literal_styles() {
+        let config: crate::config::Config = toml::from_str(
+            r##"
+sidebar_pane_segments = [
+    "$missing",
+    { template = "$left", fg = "#3aF", bold = false, dim = true },
+    "${absent}",
+    { template = "$right", bold = true, dim = false },
+]
+"##,
+        )
+        .unwrap();
+        validate_segments(&config.sidebar_pane_segments).unwrap();
+        let values = BTreeMap::from([
+            ("left".into(), "$right\u{1b}台\u{202e}灣".into()),
+            ("right".into(), "完成".into()),
+        ]);
+        let spans = render_segments(&config.sidebar_pane_segments, &values);
+        assert_eq!(spans.len(), 3);
+        assert_eq!(spans[0].text, "$right台灣");
+        assert_eq!(spans[0].fg.as_deref(), Some("#3aF"));
+        assert_eq!(spans[0].bold, Some(false));
+        assert_eq!(spans[0].dim, Some(true));
+        assert_eq!(spans[1], DisplaySpan::plain(" · ".into()));
+        assert_eq!(spans[2].text, "完成");
+        let json = serde_json::to_value(&spans).unwrap();
+        assert_eq!(json[0]["bold"], false);
+        assert_eq!(json[1], serde_json::json!({"text": " · "}));
+        assert_eq!(
+            spans.iter().map(|s| s.text.as_str()).collect::<String>(),
+            "$right台灣 · 完成"
+        );
+        assert!(
+            render_segments(&[SidebarSegment::Template("$missing".into())], &values).is_empty()
+        );
+    }
+
+    #[test]
+    fn sidebar_segment_limit_applies_to_the_complete_row_without_orphan_separator() {
+        let values = BTreeMap::from([("long".into(), "界".repeat(510))]);
+        let segments = vec![
+            SidebarSegment::Template("$long".into()),
+            SidebarSegment::Template("tail".into()),
+        ];
+        let spans = render_segments(&segments, &values);
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].text.chars().count(), 510);
+        let values = BTreeMap::from([("long".into(), "界".repeat(508))]);
+        let spans = render_segments(&segments, &values);
+        let plain: String = spans.iter().map(|s| s.text.as_str()).collect();
+        assert_eq!(plain.chars().count(), 512);
+        assert!(plain.ends_with(" · t"));
+        assert_eq!(
+            render_segments(&[SidebarSegment::Template("x".repeat(700))], &values)[0]
+                .text
+                .chars()
+                .count(),
+            512
+        );
+    }
+
+    #[test]
+    fn sidebar_segment_rgb_is_strict_ascii_and_expands_short_values() {
+        assert_eq!(segment_rgb("#3aF"), Some((51, 170, 255)));
+        assert_eq!(segment_rgb("#012aEF"), Some((1, 42, 239)));
+        for bad in [
+            "",
+            "red",
+            "reset",
+            "#12",
+            "#1234",
+            "#1234567",
+            "#ff00gg",
+            " #123",
+            "#１２３",
+            "#123\n",
+            "\u{1b}[31m",
+        ] {
+            assert_eq!(segment_rgb(bad), None, "accepted {bad:?}");
+        }
     }
 }

@@ -194,3 +194,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+    from sidebar_style_smoke import run_smoke
+    run_smoke(EXE)

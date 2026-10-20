@@ -7,6 +7,7 @@ use super::{BOLD, Cell, Ctx, DIM, Grid, cut};
 use crate::api::Status;
 use crate::api::agent::status as agent_status;
 use crate::i18n::{Lang, tr, trf};
+use crate::metadata::display::{DisplaySpan, segment_rgb};
 use crate::server::{Session, State};
 use crate::theme::{Theme, UNICODE};
 use crossterm::style::Color;
@@ -73,6 +74,7 @@ struct PaneView {
     pid: usize,
     status: Status,
     name: String,
+    spans: Vec<DisplaySpan>,
     state_label: Option<String>,
     /// agent message, only for a blocked pane
     message: Option<String>,
@@ -153,6 +155,9 @@ fn pane_views(st: &State, sess: &Session, open: bool, lang: Lang) -> Vec<PaneVie
                 name: display
                     .as_ref()
                     .map_or_else(|| clean(name), |d| d.sidebar.clone()),
+                spans: display
+                    .as_ref()
+                    .map_or_else(Vec::new, |d| d.sidebar_spans.clone()),
                 state_label: display.map(|d| d.state_label),
                 message,
                 focused: open && wi == sess.active && pid == wnd.active,
@@ -549,6 +554,7 @@ fn dim_if_mono(t: &Theme) -> u8 {
 /// Where the sidebar draws: text origin and width, plus the theme and the prefix key.
 struct Lane<'a> {
     t: &'a Theme,
+    custom_colors: bool,
     tx: u16,
     tw: u16,
     prefix: String,
@@ -579,6 +585,7 @@ pub(super) fn draw_sidebar(g: &mut Grid, cx: &Ctx) {
     let groups = group_views(st, s, cx.lang);
     let lane = Lane {
         t,
+        custom_colors: custom_foregrounds(t, &cx.c.env),
         tx: sx + TEXT_INSET,
         tw,
         prefix: st.cfg.prefix_name(),
@@ -719,17 +726,8 @@ fn draw_pane(g: &mut Grid, l: &Lane, y: u16, p: &PaneView) {
     let show_word = room >= word_w + 1 + MIN_NAME;
     let name_room = if show_word { room - word_w - 1 } else { room };
     if name_room > 0 {
-        let name = cut(&p.name, name_room as usize, t.g.ellipsis);
         let attr = if p.focused { BOLD } else { 0 };
-        g.text(
-            l.tx + PANE_PREFIX,
-            y,
-            name_room,
-            &name,
-            Color::Reset,
-            Color::Reset,
-            attr,
-        );
+        draw_pane_name(g, l, y, name_room, p, attr);
     }
     if show_word {
         let x = l.tx + l.tw - word_w;
@@ -743,6 +741,55 @@ fn draw_pane(g: &mut Grid, l: &Lane, y: u16, p: &PaneView) {
             dim_if_mono(t),
         );
     }
+}
+
+/// Explicit color presets keep their old behavior, but custom label colors still
+/// respect each attaching client's NO_COLOR/TERM=dumb request.
+fn custom_foregrounds(t: &Theme, env: &crate::theme::ClientEnv) -> bool {
+    !t.mono && !env.no_color && !env.dumb
+}
+
+fn draw_pane_name(g: &mut Grid, l: &Lane, y: u16, room: u16, p: &PaneView, base: u8) {
+    let name = cut(&p.name, room as usize, l.t.g.ellipsis);
+    let mut x = l.tx + PANE_PREFIX;
+    let end = x + room;
+    if p.spans.is_empty() {
+        g.text(x, y, room, &name, Color::Reset, Color::Reset, base);
+        return;
+    }
+    // Cut the complete label once, then split its unchanged prefix at span byte
+    // boundaries. Ellipsis is contextual, rather than inheriting the last style.
+    let (prefix, ellipsis) = if p.name.width() > room as usize {
+        name.strip_suffix(l.t.g.ellipsis)
+            .map_or((name.as_str(), ""), |prefix| (prefix, l.t.g.ellipsis))
+    } else {
+        (name.as_str(), "")
+    };
+    let mut offset = 0;
+    for span in &p.spans {
+        if offset >= prefix.len() {
+            break;
+        }
+        let next = (offset + span.text.len()).min(prefix.len());
+        let text = &prefix[offset..next];
+        let fg = span
+            .fg
+            .as_deref()
+            .filter(|_| l.custom_colors)
+            .and_then(segment_rgb)
+            .map_or(Color::Reset, |(r, g, b)| Color::Rgb { r, g, b });
+        let mut attrs = base;
+        for (flag, bit) in [(span.bold, BOLD), (span.dim, DIM)] {
+            match flag {
+                Some(true) => attrs |= bit,
+                Some(false) => attrs &= !bit,
+                None => {}
+            }
+        }
+        x += g.text(x, y, end - x, text, fg, Color::Reset, attrs);
+        offset = next;
+    }
+    g.text(x, y, end - x, ellipsis, Color::Reset, Color::Reset, base);
 }
 
 #[cfg(test)]

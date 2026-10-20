@@ -126,11 +126,54 @@ tokens used by a configured pane template has display information for `auto` mod
 The sidebar templates apply to the corresponding rows when the sidebar is
 enabled. The status bar's workspace/tab names remain stable navigation labels.
 
+## Style one sidebar pane label
+
+`sidebar_pane_segments` is an optional configuration-file setting for one line of
+pane label text. It accepts at most 16 string templates or inline style tables:
+
+```toml
+sidebar_pane_segments = [
+  "$agent",
+  { template = "$task", fg = "#89b4fa", bold = true, dim = false },
+  { template = "$summary", fg = "#3af", bold = false },
+]
+```
+
+Each template uses the literal substitution and built-ins above. Rendered values
+are trimmed individually; empty values disappear together with their separators.
+Nonempty values are joined with ` · `, so do not add a separate separator segment.
+The complete label, including separators, is limited to 512 Unicode characters.
+Substituted values cannot inject ANSI styling or expand another token.
+
+`fg` accepts exactly `#RGB` or `#RRGGBB` with ASCII hexadecimal digits. `bold` and
+`dim` accept booleans. Omitted fields preserve the focused label's contextual
+style; explicit `false` clears that modifier on the segment. The focus pointer
+remains visible. Separators retain the contextual style, and segment styles never
+change state icons, state words, detail messages, backgrounds or mouse targets.
+Custom foregrounds are suppressed for clients with `NO_COLOR`, `TERM=dumb`, or
+the `mono` theme. Terminal-column clipping and the existing Unicode/ASCII
+ellipsis apply once to the complete label; this is not grapheme-aware shaping.
+
+When the setting is absent, empty, or renders entirely empty, the existing
+`sidebar_pane_template` and normal-name fallback still apply. Changing metadata
+updates configured segments immediately. The segment layout itself is loaded
+from the configuration file; it has no new `crew set` option. Invalid colors,
+unknown style keys and control/bidi characters in templates fail configuration
+validation. As with other configuration errors, normal startup reports the error
+and uses the default configuration.
+
+This is Crew's single-line styled label subset. It does not add multiple rows,
+grids, conditional style rules or Herdr configuration compatibility.
+
 ## API, events and verification
 
 `pane get/list`, `agent get/list`, workspace/tab responses and `api snapshot`
 include a `display` object. Pane display contains `title`, `sidebar`, `agent`,
-`state_label`, `kind_source`, and the eligible raw `presentation`. Workspace display
+`state_label`, `kind_source`, and the eligible raw `presentation`. Active styled
+labels also include `sidebar_spans`: plain `text` plus optional `fg`, `bold`, and
+`dim` fields. Concatenating span text exactly reproduces `sidebar`; separator
+spans have no style overrides. The field is omitted when the old fallback applies.
+Workspace display
 contains `title`, `sidebar`, and `presentation`. Machine snapshots use English for
 the default `state_label`; the TUI follows the client's language. User-supplied
 labels are literal in both.
@@ -148,5 +191,7 @@ python scripts/presentation_smoke.py /path/to/native/crew
 The smoke checks a real rendered terminal frame, API consistency, guards, clears,
 sequence rejection, TTL, explicit wait identity, JSON-lines access and restart
 cleanup. It requires local PTY/socket permission and launches no vendor agent.
-The string template syntax is Crew's implementation; it does not implement
-Herdr's full styled row/grid template configuration.
+It also runs `sidebar_style_smoke.py` against a separate isolated server to verify
+RGB and modifier SGR, API/snapshot/plain-text agreement, monochrome rendering,
+metadata updates, Unicode clipping and fallback. Both template forms are Crew's
+implementation; they do not implement Herdr's full styled row/grid configuration.

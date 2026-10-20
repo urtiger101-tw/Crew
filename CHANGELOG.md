@@ -1,12 +1,15 @@
 # Changelog
 
-## Unreleased — Windows native acceptance
+## Unreleased — Local validation and sidebar labels
 
 - Run PowerShell/pwsh workspace and tab startup commands through one-time native
   shell arguments, avoiding the ConPTY initialization/input race. Keep the shell
   interactive and preserve cwd/env; split and cold restore do not replay commands.
 - Load signature verification from Windows PowerShell's own security module so
   an inherited PowerShell 7 module path cannot break pinned Inno preparation.
+- Add optional single-line sidebar pane segments with literal metadata expansion,
+  strict RGB foregrounds and per-segment bold/dim overrides. Share plain text and
+  spans with the API; preserve semantic status, layout and monochrome clients.
 
 ## 0.5.0 — Presentation, federation and local validation
 

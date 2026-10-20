@@ -39,6 +39,8 @@ pub struct Config {
     /// Literal display templates; $name / ${name} substitute metadata or built-in fields.
     pub pane_template: String,
     pub sidebar_pane_template: String,
+    /// Optional single-line pane label segments; empty values use the legacy template.
+    pub sidebar_pane_segments: Vec<crate::metadata::display::SidebarSegment>,
     pub sidebar_workspace_template: String,
     /// Infer kind from live pane processes, without claiming a semantic lifecycle authority.
     pub agent_detection: bool,
@@ -69,6 +71,7 @@ impl Default for Config {
             pane_titles: "auto".into(),
             pane_template: String::new(),
             sidebar_pane_template: String::new(),
+            sidebar_pane_segments: Vec::new(),
             sidebar_workspace_template: String::new(),
             agent_detection: true,
             theme: crate::theme::ThemeCfg::default(),
@@ -113,6 +116,7 @@ impl Config {
         ] {
             crate::metadata::display::validate_template(template)?;
         }
+        crate::metadata::display::validate_segments(&config.sidebar_pane_segments)?;
         Ok(config)
     }
 
@@ -225,6 +229,62 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn load_text(text: &str) -> Result<Config, String> {
+        use std::io::Write;
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "crew-sidebar-config-{}-{stamp}.toml",
+            std::process::id()
+        ));
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .unwrap();
+        file.write_all(text.as_bytes()).unwrap();
+        drop(file);
+        let result = Config::load_from(&path);
+        std::fs::remove_file(path).unwrap();
+        result
+    }
+
+    #[test]
+    fn sidebar_segments_config_validates_before_use_and_preserves_legacy_templates() {
+        let config = load_text(
+            r##"
+sidebar_pane_template = "legacy:$title"
+sidebar_pane_segments = ["$workspace", {template="$task", fg="#abc", bold=false, dim=true}]
+"##,
+        )
+        .unwrap();
+        assert_eq!(config.sidebar_pane_template, "legacy:$title");
+        assert_eq!(config.sidebar_pane_segments.len(), 2);
+        assert!(
+            load_text("sidebar_pane_template='old'")
+                .unwrap()
+                .sidebar_pane_segments
+                .is_empty()
+        );
+        for input in [
+            r##"sidebar_pane_segments = [{template="$task", fg="red"}]"##.to_string(),
+            r##"sidebar_pane_segments = [{template="$task", bould=true}]"##.to_string(),
+            r##"sidebar_pane_segments = [{template="$task", bold="false"}]"##.to_string(),
+            "sidebar_pane_segments = [\"\\u001b[31m\"]".into(),
+            "sidebar_pane_segments = [\"\\u202e$task\"]".into(),
+            format!("sidebar_pane_segments = [{}]", vec!["'x'"; 17].join(",")),
+            format!("sidebar_pane_segments = ['{}']", "x".repeat(513)),
+        ] {
+            assert!(
+                load_text(&input).is_err(),
+                "accepted invalid config {input}"
+            );
+        }
+    }
+
     #[test]
     fn parse_config() {
         let c: Config = toml::from_str(

@@ -9,9 +9,174 @@ fn pv(pid: usize, status: Status, name: &str, message: Option<&str>, focused: bo
         pid,
         status,
         name: name.into(),
+        spans: Vec::new(),
         state_label: None,
         message: message.map(String::from),
         focused,
+    }
+}
+
+fn styled_pane() -> PaneView {
+    let mut pane = pv(1, Status::Idle, "L · R", None, true);
+    pane.spans = vec![
+        DisplaySpan {
+            text: "L".into(),
+            fg: Some("#3af".into()),
+            bold: Some(false),
+            dim: Some(true),
+        },
+        DisplaySpan {
+            text: " · ".into(),
+            fg: None,
+            bold: None,
+            dim: None,
+        },
+        DisplaySpan {
+            text: "R".into(),
+            fg: Some("#123456".into()),
+            bold: Some(true),
+            dim: Some(false),
+        },
+    ];
+    pane
+}
+
+#[test]
+fn styled_label_only_overrides_its_occurrence_and_preserves_focus_and_state() {
+    let pane = styled_pane();
+    let t = Theme::terminal();
+    let lane = Lane {
+        t: &t,
+        custom_colors: true,
+        tx: 0,
+        tw: 25,
+        prefix: "C-b".into(),
+        lang: Lang::En,
+    };
+    let mut styled = blank(25, 1);
+    draw_pane(&mut styled, &lane, 0, &pane);
+    let mut plain_pane = pane.clone();
+    plain_pane.spans.clear();
+    let mut plain = blank(25, 1);
+    draw_pane(&mut plain, &lane, 0, &plain_pane);
+    assert_eq!(row_text(&styled, 0), row_text(&plain, 0));
+    assert_eq!(cell(&styled, 0, 0).attrs, BOLD);
+    assert_eq!(cell(&styled, 4, 0).attrs, DIM);
+    assert_eq!(
+        cell(&styled, 4, 0).fg,
+        Color::Rgb {
+            r: 51,
+            g: 170,
+            b: 255
+        }
+    );
+    for x in 5..8 {
+        assert_eq!(cell(&styled, x, 0).attrs, BOLD);
+        assert_eq!(cell(&styled, x, 0).fg, Color::Reset);
+    }
+    assert_eq!(cell(&styled, 8, 0).attrs, BOLD);
+    assert_eq!(
+        cell(&styled, 8, 0).fg,
+        Color::Rgb {
+            r: 18,
+            g: 52,
+            b: 86
+        }
+    );
+    for x in (0..4).chain(9..25) {
+        assert_eq!(
+            cell(&styled, x, 0).fg,
+            cell(&plain, x, 0).fg,
+            "outside label at {x}"
+        );
+        assert_eq!(
+            cell(&styled, x, 0).attrs,
+            cell(&plain, x, 0).attrs,
+            "outside label at {x}"
+        );
+    }
+}
+
+#[test]
+fn styled_label_clips_the_complete_unicode_line_once_without_style_leak() {
+    let mut pane = styled_pane();
+    pane.spans[0].text = "甲乙".into();
+    pane.spans[2].text = "丙丁Z".into();
+    pane.name = pane.spans.iter().map(|s| s.text.as_str()).collect();
+    let t = Theme::terminal();
+    let lane = Lane {
+        t: &t,
+        custom_colors: true,
+        tx: 0,
+        tw: 25,
+        prefix: "C-b".into(),
+        lang: Lang::En,
+    };
+    for room in 0..=14 {
+        let mut grid = blank(25, 1);
+        draw_pane_name(&mut grid, &lane, 0, room, &pane, BOLD);
+        assert_eq!(
+            row_text(&grid, 0).trim_start(),
+            cut(&pane.name, room as usize, t.g.ellipsis),
+            "budget {room}"
+        );
+        for x in PANE_PREFIX + room..25 {
+            assert_eq!(cell(&grid, x, 0).s, " ");
+            assert_eq!(cell(&grid, x, 0).fg, Color::Reset);
+            assert_eq!(cell(&grid, x, 0).attrs, 0);
+        }
+        if pane.name.width() > room as usize && room > 0 {
+            let ell = grid.cells.iter().find(|c| c.s == t.g.ellipsis).unwrap();
+            assert_eq!(ell.fg, Color::Reset);
+            assert_eq!(ell.attrs, BOLD);
+        }
+    }
+}
+
+#[test]
+fn styled_foregrounds_respect_each_clients_no_color_even_with_explicit_presets() {
+    use crate::theme::{ClientEnv, ThemeCfg};
+    let pane = styled_pane();
+    for preset in ["terminal", "dark", "light", "mono"] {
+        let cfg = ThemeCfg {
+            preset: preset.into(),
+            ..ThemeCfg::default()
+        };
+        for env in [
+            ClientEnv::default(),
+            ClientEnv {
+                no_color: true,
+                ..ClientEnv::default()
+            },
+            ClientEnv {
+                dumb: true,
+                ..ClientEnv::default()
+            },
+        ] {
+            let theme = Theme::resolve(&cfg, &env);
+            let lane = Lane {
+                t: &theme,
+                custom_colors: custom_foregrounds(&theme, &env),
+                tx: 0,
+                tw: 25,
+                prefix: "C-b".into(),
+                lang: Lang::En,
+            };
+            let mut grid = blank(25, 1);
+            draw_pane(&mut grid, &lane, 0, &pane);
+            let expected = if preset == "mono" || env.no_color || env.dumb {
+                Color::Reset
+            } else {
+                Color::Rgb {
+                    r: 51,
+                    g: 170,
+                    b: 255,
+                }
+            };
+            assert_eq!(cell(&grid, 4, 0).fg, expected, "{preset} / {env:?}");
+            assert_eq!(cell(&grid, 4, 0).attrs, DIM);
+            assert_eq!(cell(&grid, 0, 0).attrs, BOLD);
+        }
     }
 }
 
@@ -58,6 +223,7 @@ fn draw_with(
     let rows = layout_rows(groups, any, hints, width, height, Lang::En);
     let lane = Lane {
         t,
+        custom_colors: !t.mono,
         tx: 0,
         tw: width,
         prefix: "C-b".into(),
@@ -597,6 +763,7 @@ fn draw_in(
     let rows = layout_rows(groups, any, true, width, height, lang);
     let lane = Lane {
         t,
+        custom_colors: !t.mono,
         tx: 0,
         tw: width,
         prefix: "C-b".into(),
