@@ -155,10 +155,13 @@ fn hit_columns_are_exactly_the_drawn_labels() {
 
 fn session_with(name: &str, windows: &[&str]) -> Session {
     Session {
+        id: 1,
+        env: Default::default(),
         name: name.into(),
         windows: windows
             .iter()
             .map(|w| Window {
+                id: 1,
                 name: (*w).into(),
                 manual_name: false,
                 layout: Node::Leaf(0),
@@ -254,7 +257,7 @@ fn message_glyph_info_is_neutral_and_ok_is_for_copied_or_sourced() {
         }
     );
     assert_eq!(
-        g("sourced ~/.tmuxlike.conf", false),
+        g("sourced ~/.crew.conf", false),
         Glyph {
             text: "✓",
             tone: Tone::Ok
