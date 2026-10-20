@@ -98,6 +98,9 @@ pub struct WaitSpec {
 /// `None` pane targets mean "the focused pane of the most recently used session".
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum Request {
+    Workspace(crate::workspace::Request),
+    Worktree(crate::worktree::Request),
+    Events(crate::events::Request),
     ApiSnapshot,
     SessionList,
     ServerStop,
@@ -208,6 +211,8 @@ pub enum Request {
 /// Reported agent state stored on a pane (`Pane::agent`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct AgentInfo {
+    /// Occupant identity, changed when an agent is released or replaced.
+    pub instance: u64,
     /// reporter id (`--source`)
     pub source: String,
     /// agent kind label (`--agent`, e.g. "claude")
@@ -317,6 +322,7 @@ pub fn pane_json(st: &State, pid: usize) -> Option<Value> {
     let w = &s.windows[wi];
     let agent = p.agent.as_ref().map(|a| {
         json!({
+            "instance": a.instance,
             "source": a.source,
             "agent": a.agent,
             "state": a.state.as_str(),
@@ -326,6 +332,8 @@ pub fn pane_json(st: &State, pid: usize) -> Option<Value> {
     });
     Some(json!({
         "pane_id": pane_id_str(pid),
+        "workspace_id": crate::workspace::workspace_id_str(s.id),
+        "tab_id": crate::workspace::tab_id_str(w.id),
         "session": s.name,
         "window": wi,
         "window_name": w.name,
@@ -343,6 +351,9 @@ pub fn pane_json(st: &State, pid: usize) -> Option<Value> {
 /// Server entry point for every API request. Long waits must not hold the lock.
 pub fn handle(shared: &Shared, req: Request) -> ApiResult {
     match req {
+        Request::Workspace(req) => crate::workspace::handle(shared, req),
+        Request::Worktree(req) => crate::worktree::handle(shared, req),
+        Request::Events(req) => crate::events::handle(shared, req),
         Request::ServerStop => {
             // keep persisted state so the next server start restores the layout;
             // the connection handler exits the process after sending this reply
