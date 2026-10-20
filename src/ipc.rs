@@ -5,12 +5,13 @@ use interprocess::local_socket::{
 use std::io;
 
 pub fn base_name() -> String {
-    if let Ok(s) = std::env::var("TMUXLIKE_SOCKET") {
+    if let Ok(s) = crate::brand::env_var("SOCKET") {
         return s;
     }
     let user = std::env::var("USER")
         .or_else(|_| std::env::var("USERNAME"))
         .unwrap_or_else(|_| "default".into());
+    // Preserve the endpoint namespace so legacy and new executables share one server.
     format!("tmuxlike-{user}.sock")
 }
 

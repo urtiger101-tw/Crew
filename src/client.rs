@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 /// `lang` config option through each client's detected locale.
 pub fn lang() -> Lang {
     lang_for(
-        std::env::var("TMUXLIKE_LANG").ok().as_deref(),
+        crate::brand::env_var("LANG").ok().as_deref(),
         Lang::detect(),
     )
 }
@@ -157,7 +157,7 @@ pub fn new_detached(session: Option<String>) -> Result<()> {
 
 pub fn attach(session: Option<String>, create: bool) -> Result<()> {
     let lang = lang();
-    if std::env::var_os("TMUXLIKE").is_some() {
+    if crate::brand::env_os("").is_some() {
         return Err(anyhow!(tr(lang, "cli.err.nested")));
     }
     let s = connect(create, lang)?;
@@ -255,36 +255,48 @@ pub fn attach(session: Option<String>, create: bool) -> Result<()> {
 
 /// herdr-style API command: prints `{"result": ...}` JSON (or raw text) on stdout and
 /// returns 0; on failure prints `{"error": {code, message}}` on stderr and returns 1.
-pub fn api(req: crate::api::Request) -> Result<i32> {
-    use crate::api::{ApiError, Reply};
-    let s = match connect(false, Lang::En) {
-        Ok(s) => s,
-        Err(e) => {
-            let err = ApiError::new("server_not_running", e.to_string());
-            eprintln!("{}", serde_json::json!({ "error": err }));
-            return Ok(1);
-        }
+pub fn request(req: crate::api::Request) -> crate::api::ApiResult {
+    use crate::api::ApiError;
+    let start = match &req {
+        crate::api::Request::Workspace(r) => crate::workspace::starts_server(r),
+        crate::api::Request::Worktree(_) => true,
+        _ => false,
     };
+    let s =
+        connect(start, Lang::En).map_err(|e| ApiError::new("server_not_running", e.to_string()))?;
     let (mut r, mut w) = s.split();
-    write_msg(&mut w, &ClientMsg::Hello(Command::Api(req)))?;
-    match read_msg::<ServerMsg>(&mut r)? {
-        ServerMsg::Api(Ok(Reply::Json(v))) => {
+    write_msg(&mut w, &ClientMsg::Hello(Command::Api(req)))
+        .map_err(|e| ApiError::new("transport_error", e.to_string()))?;
+    match read_msg::<ServerMsg>(&mut r)
+        .map_err(|e| ApiError::new("transport_error", e.to_string()))?
+    {
+        ServerMsg::Api(result) => result,
+        ServerMsg::Error(e) => Err(ApiError::new("server_error", e)),
+        _ => Err(ApiError::new(
+            "transport_error",
+            "unexpected reply from server",
+        )),
+    }
+}
+
+pub fn api(req: crate::api::Request) -> Result<i32> {
+    use crate::api::Reply;
+    match request(req) {
+        Ok(Reply::Json(v)) => {
             println!("{}", serde_json::json!({ "result": v }));
             Ok(0)
         }
-        ServerMsg::Api(Ok(Reply::Text(t))) => {
+        Ok(Reply::Text(t)) => {
             print!("{t}");
             if !t.is_empty() && !t.ends_with('\n') {
                 println!();
             }
             Ok(0)
         }
-        ServerMsg::Api(Err(e)) => {
+        Err(e) => {
             eprintln!("{}", serde_json::json!({ "error": e }));
             Ok(1)
         }
-        ServerMsg::Error(e) => Err(anyhow!(e)),
-        _ => Err(anyhow!("unexpected reply from server")),
     }
 }
 

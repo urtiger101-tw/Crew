@@ -33,6 +33,8 @@ pub struct Pane {
     pub label: Option<String>,
     /// working directory the pane was started in
     pub cwd: Option<String>,
+    /// Explicit environment overrides, inherited by splits and persisted with the pane.
+    pub env: BTreeMap<String, String>,
 }
 
 impl Pane {
@@ -110,6 +112,8 @@ pub fn contain_vt<R>(
 }
 
 pub struct Window {
+    /// Stable tab identifier, independent of its display name and vector index.
+    pub id: usize,
     pub name: String,
     pub manual_name: bool,
     pub layout: Node,
@@ -126,6 +130,8 @@ impl Window {
 }
 
 pub struct Session {
+    /// Stable workspace identifier, preserved when renamed and restored.
+    pub id: usize,
     pub name: String,
     pub windows: Vec<Window>,
     pub active: usize,
@@ -133,6 +139,7 @@ pub struct Session {
     pub rows: u16,
     pub sidebar: bool,
     pub cwd: Option<String>,
+    pub env: BTreeMap<String, String>,
     pub last_used: Instant,
 }
 
@@ -218,6 +225,9 @@ pub struct Client {
 }
 
 pub struct State {
+    pub events: crate::events::Journal,
+    /// Canonical checkouts reserved by an in-flight removal; pane creation shares this lock.
+    pub removing_worktrees: std::collections::HashSet<std::path::PathBuf>,
     pub cfg: Config,
     pub bindings: BTreeMap<String, String>,
     pub buffer: Option<String>,
@@ -227,6 +237,9 @@ pub struct State {
     pub sessions: Vec<Session>,
     pub clients: HashMap<usize, Client>,
     pub next_id: usize,
+    /// Last allocated stable workspace/tab ids; also persisted after deletions.
+    pub next_workspace_id: usize,
+    pub next_tab_id: usize,
     pub dirty: bool,
     notify: mpsc::Sender<()>,
 }
@@ -409,6 +422,17 @@ impl State {
         cols: u16,
         cwd: Option<&str>,
     ) -> Result<usize> {
+        self.spawn_pane_with_env(shared, rows, cols, cwd, &BTreeMap::new())
+    }
+
+    pub(crate) fn spawn_pane_with_env(
+        &mut self,
+        shared: &Shared,
+        rows: u16,
+        cols: u16,
+        cwd: Option<&str>,
+        env: &BTreeMap<String, String>,
+    ) -> Result<usize> {
         let id = self.id();
         let pty = native_pty_system();
         let size = PtySize {
@@ -425,14 +449,32 @@ impl State {
             cmd.arg(a);
         }
         cmd.env("TERM", "xterm-256color");
+        for (key, value) in env {
+            cmd.env(key, value);
+        }
+        cmd.env("CREW", format!("{id}"));
+        cmd.env("CREW_PANE_ID", crate::api::pane_id_str(id));
+        cmd.env("CREW_SOCKET", ipc::base_name());
         cmd.env("TMUXLIKE", format!("{id}"));
         cmd.env("TMUXLIKE_PANE_ID", crate::api::pane_id_str(id));
         cmd.env("TMUXLIKE_SOCKET", ipc::base_name());
-        let start_dir = match cwd.filter(|d| std::path::Path::new(d).is_dir()) {
-            Some(d) => Some(d.to_string()),
+        let start_dir = match cwd {
+            Some(d) if std::path::Path::new(d).is_dir() => Some(d.to_string()),
+            Some(d) => return Err(anyhow!("cwd is not a directory: {d}")),
             None => dirs::home_dir().map(|h| h.to_string_lossy().into_owned()),
         };
         if let Some(d) = &start_dir {
+            let canonical = std::path::Path::new(d).canonicalize()?;
+            if self
+                .removing_worktrees
+                .iter()
+                .any(|path| canonical.starts_with(path))
+            {
+                return Err(anyhow!(
+                    "worktree removal is in progress: {}",
+                    canonical.display()
+                ));
+            }
             cmd.cwd(d);
         }
         crate::log!("pane {id}: spawning {shell:?} {}x{}", size.cols, size.rows);
@@ -462,8 +504,11 @@ impl State {
             agent: None,
             label: None,
             cwd: start_dir,
+            env: env.clone(),
         };
         self.panes.insert(id, pane);
+        self.events
+            .record("pane.created", Some(id), serde_json::json!({}));
         let shared = shared.clone();
         std::thread::spawn(move || {
             let mut buf = [0u8; 16384];
@@ -509,6 +554,8 @@ impl State {
                         if p.started.elapsed() >= ATTENTION_GRACE {
                             p.attention = true;
                         }
+                        st.events
+                            .record("pane.output", Some(id), serde_json::json!({"bytes": n}));
                         st.dirty = true;
                         let _ = st.notify.send(());
                     }
@@ -540,6 +587,34 @@ impl State {
         rows: u16,
         cwd: Option<String>,
     ) -> Result<String> {
+        self.new_workspace(shared, name, (cols, rows), cwd, BTreeMap::new(), true)
+    }
+
+    pub(crate) fn allocate_workspace_id(&mut self) -> Result<usize> {
+        self.next_workspace_id = self
+            .next_workspace_id
+            .checked_add(1)
+            .ok_or_else(|| anyhow!("workspace identifiers exhausted"))?;
+        Ok(self.next_workspace_id)
+    }
+
+    pub(crate) fn allocate_tab_id(&mut self) -> Result<usize> {
+        self.next_tab_id = self
+            .next_tab_id
+            .checked_add(1)
+            .ok_or_else(|| anyhow!("tab identifiers exhausted"))?;
+        Ok(self.next_tab_id)
+    }
+
+    pub(crate) fn new_workspace(
+        &mut self,
+        shared: &Shared,
+        name: Option<String>,
+        size: (u16, u16),
+        cwd: Option<String>,
+        env: BTreeMap<String, String>,
+        focus: bool,
+    ) -> Result<String> {
         let name = match name {
             Some(n) => {
                 if self.sidx(&n).is_some() {
@@ -552,15 +627,19 @@ impl State {
                 .find(|n| self.sidx(n).is_none())
                 .unwrap(),
         };
+        let id = self.allocate_workspace_id()?;
+        let old_recent = self.sessions.iter().map(|s| s.last_used).min();
         let sidebar = self.cfg.sidebar;
         self.sessions.push(Session {
+            id,
             name: name.clone(),
             windows: vec![],
             active: 0,
-            cols: cols.max(10),
-            rows: rows.max(3),
+            cols: size.0.max(10),
+            rows: size.1.max(3),
             sidebar,
             cwd,
+            env,
             last_used: Instant::now(),
         });
         let si = self.sessions.len() - 1;
@@ -568,6 +647,16 @@ impl State {
             self.sessions.pop();
             return Err(e);
         }
+        if !focus && let Some(old) = old_recent {
+            self.sessions[si].last_used = old.checked_sub(Duration::from_nanos(1)).unwrap_or(old);
+        }
+        self.events.record(
+            "workspace.created",
+            None,
+            serde_json::json!({
+                "workspace_id": crate::workspace::workspace_id_str(id), "name": name,
+            }),
+        );
         Ok(name)
     }
 
@@ -577,22 +666,53 @@ impl State {
         si: usize,
         name: Option<String>,
     ) -> Result<()> {
+        self.new_tab(shared, si, name, None, BTreeMap::new(), true)
+            .map(|_| ())
+    }
+
+    /// Create a tab with optional cwd/env overrides without changing another tab's identity.
+    pub(crate) fn new_tab(
+        &mut self,
+        shared: &Shared,
+        si: usize,
+        name: Option<String>,
+        cwd: Option<String>,
+        overrides: BTreeMap<String, String>,
+        focus: bool,
+    ) -> Result<usize> {
         let area = self.pane_area(&self.sessions[si]);
-        let cwd = self.sessions[si].cwd.clone();
-        let id = self.spawn_pane(shared, area.h, area.w, cwd.as_deref())?;
+        let cwd = cwd.or_else(|| self.sessions[si].cwd.clone());
+        let env = crate::workspace::merged_env(&self.sessions[si].env, overrides);
+        let tid = self.allocate_tab_id()?;
+        let id = if env.is_empty() {
+            self.spawn_pane(shared, area.h, area.w, cwd.as_deref())?
+        } else {
+            self.spawn_pane_with_env(shared, area.h, area.w, cwd.as_deref(), &env)?
+        };
         let manual = name.is_some();
         let name = name.unwrap_or_else(|| self.shell_name());
         let s = &mut self.sessions[si];
         s.windows.push(Window {
+            id: tid,
             name,
             manual_name: manual,
             layout: Node::Leaf(id),
             active: id,
             zoomed: false,
         });
-        s.active = s.windows.len() - 1;
+        if focus {
+            s.active = s.windows.len() - 1;
+        }
+        self.events.record(
+            "tab.created",
+            Some(id),
+            serde_json::json!({
+                "workspace_id": crate::workspace::workspace_id_str(s.id),
+                "tab_id": crate::workspace::tab_id_str(tid),
+            }),
+        );
         self.relayout(si);
-        Ok(())
+        Ok(tid)
     }
 
     fn split(&mut self, shared: &Shared, si: usize, dir: Dir) -> Result<()> {
@@ -622,7 +742,12 @@ impl State {
         let cwd = cwd
             .or_else(|| self.panes.get(&pid).and_then(|p| p.cwd.clone()))
             .or_else(|| self.sessions[si].cwd.clone());
-        let id = self.spawn_pane(shared, h, wd, cwd.as_deref())?;
+        let env = self
+            .panes
+            .get(&pid)
+            .map(|p| p.env.clone())
+            .unwrap_or_default();
+        let id = self.spawn_pane_with_env(shared, h, wd, cwd.as_deref(), &env)?;
         let w = &mut self.sessions[si].windows[wi];
         w.layout
             .split_with(pid, id, dir, ratio.unwrap_or(0.5).clamp(0.05, 0.95));
@@ -671,20 +796,22 @@ impl State {
         }
         let scrollback = self.cfg.scrollback;
         for (id, r) in all {
-            if let Some(p) = self.panes.get_mut(&id) {
-                if p.rect != r && r.w > 0 && r.h > 0 {
-                    p.rect = r;
-                    p.vt(scrollback, |vt| vt.screen_mut().set_size(r.h, r.w));
-                    let _ = p.master.resize(PtySize {
-                        rows: r.h,
-                        cols: r.w,
-                        pixel_width: 0,
-                        pixel_height: 0,
-                    });
-                    if let Some(c) = &mut p.copy {
-                        c.cx = c.cx.min(r.w - 1);
-                        c.cy = c.cy.min(r.h - 1);
-                    }
+            if let Some(p) = self.panes.get_mut(&id)
+                && p.rect != r
+                && r.w > 0
+                && r.h > 0
+            {
+                p.rect = r;
+                p.vt(scrollback, |vt| vt.screen_mut().set_size(r.h, r.w));
+                let _ = p.master.resize(PtySize {
+                    rows: r.h,
+                    cols: r.w,
+                    pixel_width: 0,
+                    pixel_height: 0,
+                });
+                if let Some(c) = &mut p.copy {
+                    c.cx = c.cx.min(r.w - 1);
+                    c.cy = c.cy.min(r.h - 1);
                 }
             }
         }
@@ -734,6 +861,8 @@ impl State {
     /// Remove a pane (after its process exited or it was killed) and clean up empty windows/sessions.
     pub fn pane_exited(&mut self, pid: usize) {
         if let Some(mut p) = self.panes.remove(&pid) {
+            self.events
+                .record("pane.closed", Some(pid), serde_json::json!({}));
             let _ = p.child.kill();
         }
         let Some((si, wi)) = self.locate(pid) else {
@@ -742,8 +871,16 @@ impl State {
         let s = &mut self.sessions[si];
         let w = &mut s.windows[wi];
         if matches!(w.layout, Node::Leaf(_)) {
-            s.windows.remove(wi);
-            if s.active >= s.windows.len() && s.active > 0 {
+            let closed = s.windows.remove(wi);
+            self.events.record(
+                "tab.closed",
+                Some(pid),
+                serde_json::json!({
+                    "workspace_id": crate::workspace::workspace_id_str(s.id),
+                    "tab_id": crate::workspace::tab_id_str(closed.id),
+                }),
+            );
+            if (wi < s.active || s.active >= s.windows.len()) && s.active > 0 {
                 s.active -= 1;
             }
         } else {
@@ -754,8 +891,11 @@ impl State {
             w.zoomed = false;
         }
         if self.sessions[si].windows.is_empty() {
-            let name = self.sessions.remove(si).name;
-            self.drop_clients_of(&name, "exited");
+            let closed = self.sessions.remove(si);
+            self.events.record("workspace.closed", None, serde_json::json!({
+                "workspace_id": crate::workspace::workspace_id_str(closed.id), "name": closed.name,
+            }));
+            self.drop_clients_of(&closed.name, "exited");
         } else {
             self.relayout(si);
         }
@@ -804,13 +944,31 @@ impl State {
     pub(crate) fn kill_session(&mut self, si: usize) {
         let s = self.sessions.remove(si);
         for w in &s.windows {
+            self.events.record(
+                "tab.closed",
+                None,
+                serde_json::json!({
+                    "workspace_id": crate::workspace::workspace_id_str(s.id),
+                    "tab_id": crate::workspace::tab_id_str(w.id),
+                }),
+            );
             for pid in w.panes() {
                 if let Some(mut p) = self.panes.remove(&pid) {
+                    self.events
+                        .record("pane.closed", Some(pid), serde_json::json!({}));
                     let _ = p.child.kill();
                 }
             }
         }
+        self.events.record(
+            "workspace.closed",
+            None,
+            serde_json::json!({
+                "workspace_id": crate::workspace::workspace_id_str(s.id), "name": s.name,
+            }),
+        );
         self.drop_clients_of(&s.name, "session killed");
+        self.mark_dirty();
     }
 
     pub(crate) fn write_pane(&mut self, pid: usize, bytes: &[u8]) {
@@ -1423,6 +1581,8 @@ pub fn run() -> Result<()> {
     let cfg = Config::load();
     let (bindings, _) = cfg.bindings();
     let shared: Shared = Arc::new(Mutex::new(State {
+        events: crate::events::Journal::default(),
+        removing_worktrees: Default::default(),
         cfg,
         bindings,
         buffer: None,
@@ -1431,11 +1591,18 @@ pub fn run() -> Result<()> {
         sessions: vec![],
         clients: HashMap::new(),
         next_id: 0,
+        next_workspace_id: 0,
+        next_tab_id: 0,
         dirty: false,
         notify: tx,
     }));
     {
         let mut st = crate::api::lock(&shared);
+        st.events.record(
+            "server.started",
+            None,
+            serde_json::json!({"version": env!("CARGO_PKG_VERSION")}),
+        );
         for c in st.cfg.commands.clone() {
             let _ = commands::parse(&c).and_then(|cmd| st.exec_global(cmd));
         }
@@ -1486,11 +1653,11 @@ pub fn run() -> Result<()> {
                             }
                             if let Some(n) =
                                 st.panes.get(&w.active).and_then(|p| p.foreground_name())
+                                && !n.is_empty()
+                                && n != w.name
                             {
-                                if !n.is_empty() && n != w.name {
-                                    w.name = n;
-                                    st.dirty = true;
-                                }
+                                w.name = n;
+                                st.dirty = true;
                             }
                         }
                     }
@@ -1532,11 +1699,11 @@ pub fn run() -> Result<()> {
             let mut clients = std::mem::take(&mut st.clients);
             let mut gone = vec![];
             for (id, c) in clients.iter_mut() {
-                if let Some(out) = render_client(&st, c) {
-                    if !out.is_empty() && write_msg(&mut c.sender, &ServerMsg::Output(out)).is_err()
-                    {
-                        gone.push(*id);
-                    }
+                if let Some(out) = render_client(&st, c)
+                    && !out.is_empty()
+                    && write_msg(&mut c.sender, &ServerMsg::Output(out)).is_err()
+                {
+                    gone.push(*id);
                 }
             }
             for id in gone {
@@ -1546,11 +1713,9 @@ pub fn run() -> Result<()> {
         }
     });
 
-    let mut cid = 0;
-    for conn in listener.incoming().flatten() {
-        cid += 1;
+    for (cid, conn) in listener.incoming().flatten().enumerate() {
         let sh = shared.clone();
-        let id = cid;
+        let id = cid + 1;
         std::thread::spawn(move || handle_conn(sh, id, conn));
     }
     Ok(())

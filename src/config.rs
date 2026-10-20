@@ -68,10 +68,10 @@ impl Default for Config {
 }
 
 pub fn config_path() -> Option<PathBuf> {
-    if let Ok(p) = std::env::var("TMUXLIKE_CONFIG") {
+    if let Ok(p) = crate::brand::env_var("CONFIG") {
         return Some(PathBuf::from(p));
     }
-    dirs::config_dir().map(|d| d.join("tmuxlike").join("config.toml"))
+    dirs::config_dir().map(|d| crate::brand::compatible_file(&d, "config.toml"))
 }
 
 fn parse_bool(v: &str) -> Result<bool, String> {
@@ -86,7 +86,7 @@ impl Config {
     pub fn load() -> Config {
         match config_path().filter(|p| p.exists()) {
             Some(p) => Config::load_from(&p).unwrap_or_else(|e| {
-                eprintln!("tmuxlike: {e}");
+                eprintln!("crew: {e}");
                 Config::default()
             }),
             None => Config::default(),
