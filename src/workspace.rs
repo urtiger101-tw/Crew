@@ -2,6 +2,9 @@
 //! CLI and raw API requests share validation; directory checks precede creation.
 mod cli;
 #[cfg(test)]
+mod move_tests;
+mod order;
+#[cfg(test)]
 mod tests;
 use crate::api::{ApiError, ApiResult, Reply, lock, pane_id_str, pane_json};
 use crate::server::{Shared, State};
@@ -15,16 +18,20 @@ pub const HELP: &str = r#"WORKSPACES AND TABS (stable wN / tN identifiers):
   crew workspace list|get [ID|NAME]
   crew workspace create [NAME] [--cwd PATH] [--env KEY=VALUE] [--command TEXT] [--focus]
   crew workspace rename ID|NAME NEW_NAME
+  crew workspace move ID|NAME --index N
   crew workspace focus|close ID|NAME
   crew tab list|get [ID|NAME] [--workspace ID|NAME]
   crew tab create [NAME] [--workspace ID|NAME] [--cwd PATH] [--env KEY=VALUE]
                   [--command TEXT] [--focus|--no-focus]
   crew tab rename ID|NAME NEW_NAME [--workspace ID|NAME]
+  crew tab move ID|NAME --index N [--workspace ID|NAME]
   crew tab focus|close ID|NAME [--workspace ID|NAME]
 Creation defaults to --no-focus. A workspace defaults to the caller's current directory;
 a tab inherits its workspace's directory and environment. --env can be repeated.
 IDs survive rename, unrelated deletion and restart. Processes do not survive a restart.
 Names are exact, including periods and colons. Use name:NAME for legacy ID-shaped names.
+Move uses insertion slots 0..count in the original list; count appends. It never changes
+focus or moves a tab between workspaces. Adjacent slots around an item are no-ops.
 "#;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -44,6 +51,10 @@ pub enum Request {
     WorkspaceRename {
         workspace: String,
         name: String,
+    },
+    WorkspaceMove {
+        workspace: String,
+        insert_index: usize,
     },
     WorkspaceFocus {
         workspace: String,
@@ -73,6 +84,12 @@ pub enum Request {
         tab: String,
         workspace: Option<String>,
         name: String,
+        current: Option<usize>,
+    },
+    TabMove {
+        tab: String,
+        workspace: Option<String>,
+        insert_index: usize,
         current: Option<usize>,
     },
     TabFocus {
@@ -305,6 +322,7 @@ pub fn workspace_json(st: &State, si: usize) -> Value {
     json!({
         "workspace_id": workspace_id_str(s.id), "name": s.name, "cwd": s.cwd,
         "env_keys": s.env.keys().collect::<Vec<_>>(),
+        "tokens": st.metadata.values(crate::metadata::Key::Workspace(s.id), Instant::now()),
         "active_tab": s.windows.get(s.active).map(|w| tab_id_str(w.id)),
         "focused": st.target_session(None).ok() == Some(si),
         "attached": st.clients.values().filter(|c| c.session == s.name).count(),
@@ -490,6 +508,13 @@ fn handle_existing(shared: &Shared, req: Request) -> ApiResult {
             focus_workspace(&mut st, si, previous);
             json!({"workspace": workspace_json(&st, si)})
         }
+        Request::WorkspaceMove {
+            workspace,
+            insert_index,
+        } => {
+            let si = workspace_index(&st, &workspace)?;
+            order::workspace(&mut st, si, insert_index)?
+        }
         Request::WorkspaceClose { workspace } => {
             let si = workspace_index(&st, &workspace)?;
             let id = st.sessions[si].id;
@@ -553,6 +578,15 @@ fn handle_existing(shared: &Shared, req: Request) -> ApiResult {
             st.events
                 .record("tab.focused", Some(pid), json!({"tab_id": tab_id_str(id)}));
             json!({"tab": tab_json(&st, si, wi)})
+        }
+        Request::TabMove {
+            tab,
+            workspace,
+            insert_index,
+            current,
+        } => {
+            let (si, wi) = tab_index(&st, Some(&tab), workspace.as_deref(), current)?;
+            order::tab(&mut st, si, wi, insert_index)?
         }
         Request::TabClose {
             tab,

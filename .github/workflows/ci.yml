@@ -31,9 +31,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: Linux x86_64, runner: ubuntu-24.04, ext: '' }
-          - { name: Windows x86_64, runner: windows-2025, ext: '.exe' }
-          - { name: macOS arm64, runner: macos-15, ext: '' }
+          - { name: Linux x86_64, runner: ubuntu-24.04, target: x86_64-unknown-linux-gnu, ext: '' }
+          - { name: Windows x86_64, runner: windows-2025, target: x86_64-pc-windows-msvc, ext: '.exe' }
+          - { name: macOS arm64, runner: macos-15, target: aarch64-apple-darwin, ext: '' }
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Repository guard
@@ -59,25 +59,41 @@ jobs:
       - name: Release tooling tests
         run: python scripts/package_release.py self-test 2>&1 | tee ci-logs/release-tooling.log
       - name: Build both executables
-        run: cargo build --locked --release --bins 2>&1 | tee ci-logs/build.log
+        env:
+          RUSTFLAGS: ${{ runner.os == 'Windows' && '-C target-feature=+crt-static' || '' }}
+        run: cargo build --locked --release --bins --target ${{ matrix.target }} 2>&1 | tee ci-logs/build.log
       - name: Legacy PTY smoke
         timeout-minutes: 5
-        run: python scripts/smoke.py target/release/tmuxlike${{ matrix.ext }} 2>&1 | tee ci-logs/legacy-pty.log
+        run: python scripts/smoke.py target/${{ matrix.target }}/release/tmuxlike${{ matrix.ext }} 2>&1 | tee ci-logs/legacy-pty.log
       - name: Automation API smoke
         timeout-minutes: 8
-        run: python scripts/api_smoke.py target/release/crew${{ matrix.ext }} 2>&1 | tee ci-logs/api.log
+        run: python scripts/api_smoke.py target/${{ matrix.target }}/release/crew${{ matrix.ext }} 2>&1 | tee ci-logs/api.log
       - name: Workspace smoke
         timeout-minutes: 5
-        run: python scripts/workspace_smoke.py target/release/crew${{ matrix.ext }} 2>&1 | tee ci-logs/workspace.log
+        run: python scripts/workspace_smoke.py target/${{ matrix.target }}/release/crew${{ matrix.ext }} 2>&1 | tee ci-logs/workspace.log
+      - name: Workspace move smoke
+        timeout-minutes: 5
+        run: python scripts/workspace_move_smoke.py target/${{ matrix.target }}/release/crew${{ matrix.ext }} 2>&1 | tee ci-logs/workspace-move.log
+      - name: Metadata smoke
+        timeout-minutes: 5
+        run: python scripts/metadata_smoke.py target/${{ matrix.target }}/release/crew${{ matrix.ext }} 2>&1 | tee ci-logs/metadata.log
       - name: Worktree smoke
         timeout-minutes: 5
-        run: python scripts/worktree_smoke.py target/release/crew${{ matrix.ext }} 2>&1 | tee ci-logs/worktree.log
+        run: python scripts/worktree_smoke.py target/${{ matrix.target }}/release/crew${{ matrix.ext }} 2>&1 | tee ci-logs/worktree.log
       - name: Agent identity smoke
         timeout-minutes: 5
-        run: python scripts/agent_identity_smoke.py target/release/crew${{ matrix.ext }} 2>&1 | tee ci-logs/agent-identity.log
+        run: python scripts/agent_identity_smoke.py target/${{ matrix.target }}/release/crew${{ matrix.ext }} 2>&1 | tee ci-logs/agent-identity.log
       - name: Bridge and events smoke
         timeout-minutes: 5
-        run: python scripts/bridge_events_smoke.py target/release/crew${{ matrix.ext }} 2>&1 | tee ci-logs/bridge-events.log
+        run: python scripts/bridge_events_smoke.py target/${{ matrix.target }}/release/crew${{ matrix.ext }} 2>&1 | tee ci-logs/bridge-events.log
+      - name: Build Windows installer
+        if: runner.os == 'Windows'
+        timeout-minutes: 8
+        run: python scripts/windows_installer.py --output installer-dist --logs ci-logs/installer 2>&1 | tee ci-logs/installer-build.log
+      - name: Windows installer lifecycle smoke
+        if: runner.os == 'Windows'
+        timeout-minutes: 10
+        run: python scripts/windows_installer_smoke.py --input installer-dist --logs ci-logs/installer 2>&1 | tee ci-logs/installer-lifecycle.log
       - name: Upload test logs
         if: ${{ always() }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0

@@ -23,6 +23,23 @@ retrying; there is no force removal option.
 
 ## Explicit agent lifecycle
 
+Workspace and tab ordering is available through `workspace move TARGET --index N`
+and `tab move TARGET --index N [--workspace TARGET]`. `N` is a slot in the original
+ordered list, from zero through its length. The operation preserves IDs and live
+processes; it does not transfer a tab to another workspace. See
+[ordering](workspace-move.md) for examples, focus and event semantics.
+
+Display-only progress is separate from lifecycle reports:
+
+```sh
+crew pane report-metadata p1 --source task:hook --token "task=review changes" --seq 1 --ttl-ms 60000
+crew workspace report-metadata w1 --source build:ci --token build=running --seq 1
+```
+
+These bounded patches appear in `tokens` maps and metadata update/expiry events.
+They do not complete agent waits or change agent state. See [metadata](metadata.md)
+for expiry, clearing, source sequencing and restart behavior.
+
 Inside a Crew pane, a hook can use:
 
 ```sh

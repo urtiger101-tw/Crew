@@ -226,6 +226,7 @@ pub struct Client {
 
 pub struct State {
     pub events: crate::events::Journal,
+    pub metadata: crate::metadata::Store,
     /// Canonical checkouts reserved by an in-flight removal; pane creation shares this lock.
     pub removing_worktrees: std::collections::HashSet<std::path::PathBuf>,
     pub cfg: Config,
@@ -248,6 +249,31 @@ pub struct State {
 const ATTENTION_GRACE: Duration = Duration::from_secs(2);
 
 pub type Shared = Arc<Mutex<State>>;
+
+/// In-memory state for handler tests; no listener, PTY or background thread is started.
+#[cfg(test)]
+pub(crate) fn test_state() -> State {
+    let cfg = Config::default();
+    let (bindings, _) = cfg.bindings();
+    let (notify, _) = mpsc::channel();
+    State {
+        events: crate::events::Journal::default(),
+        metadata: crate::metadata::Store::default(),
+        removing_worktrees: Default::default(),
+        cfg,
+        bindings,
+        buffer: None,
+        history: Vec::new(),
+        panes: HashMap::new(),
+        sessions: Vec::new(),
+        clients: HashMap::new(),
+        next_id: 0,
+        next_workspace_id: 0,
+        next_tab_id: 0,
+        dirty: false,
+        notify,
+    }
+}
 
 /// `pane-titles` policy.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -909,7 +935,7 @@ impl State {
         let other = self
             .sessions
             .iter()
-            .max_by_key(|s| s.last_used)
+            .max_by_key(|s| (s.last_used, s.id))
             .map(|s| s.name.clone());
         let ids: Vec<usize> = self
             .clients
@@ -1093,7 +1119,7 @@ impl State {
                 .sessions
                 .iter()
                 .enumerate()
-                .max_by_key(|(_, s)| s.last_used)
+                .max_by_key(|(_, s)| (s.last_used, s.id))
                 .map(|(i, _)| i)
                 .ok_or_else(|| "no sessions".to_string()),
         }
@@ -1517,7 +1543,7 @@ fn handle_conn(shared: Shared, cid: usize, stream: interprocess::local_socket::S
                 None if !create => st
                     .sessions
                     .iter()
-                    .max_by_key(|s| s.last_used)
+                    .max_by_key(|s| (s.last_used, s.id))
                     .map(|s| s.name.clone())
                     .ok_or_else(|| anyhow!("no sessions")),
                 n => st.new_session(&shared, n, cols, rows, cwd),
@@ -1584,6 +1610,7 @@ pub fn run() -> Result<()> {
     let (bindings, _) = cfg.bindings();
     let shared: Shared = Arc::new(Mutex::new(State {
         events: crate::events::Journal::default(),
+        metadata: crate::metadata::Store::default(),
         removing_worktrees: Default::default(),
         cfg,
         bindings,
@@ -1630,6 +1657,7 @@ pub fn run() -> Result<()> {
             let tick = last_tick.elapsed() > Duration::from_millis(500);
             if tick {
                 last_tick = Instant::now();
+                crate::metadata::sweep(&mut st, last_tick);
                 // detect exited children (ConPTY may not deliver EOF)
                 let dead: Vec<usize> = st
                     .panes

@@ -1,0 +1,238 @@
+{
+  "head": "d9b87f1451044e5222971eb192acadb42f2c9faa",
+  "tree": "31eede3a1d8fa5fc850516a91a86d294e123d830",
+  "platform": "linux",
+  "commands": [
+    {
+      "name": "format",
+      "argv": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--check"
+      ],
+      "cwd": "/workspace/scratch/21396cda8665/tmuxlike",
+      "exit_code": 0,
+      "elapsed_seconds": 0.26,
+      "log": "/tmp/crew-v04-validation/format.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "clippy",
+      "argv": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--offline",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "cwd": "/workspace/scratch/21396cda8665/tmuxlike",
+      "exit_code": 0,
+      "elapsed_seconds": 6.39,
+      "log": "/tmp/crew-v04-validation/clippy.log",
+      "log_sha256": "ab681bf03fc83b944750e6b5e84130561c096569509cd824b2323b900901515d"
+    },
+    {
+      "name": "unit",
+      "argv": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline"
+      ],
+      "cwd": "/workspace/scratch/21396cda8665/tmuxlike",
+      "exit_code": 0,
+      "elapsed_seconds": 11.61,
+      "log": "/tmp/crew-v04-validation/unit.log",
+      "log_sha256": "b2998fc26b4d6ec3b9de5c52f813a4385c2f5f783094b33b750f8960175a10d8"
+    },
+    {
+      "name": "build",
+      "argv": [
+        "cargo",
+        "build",
+        "--locked",
+        "--offline",
+        "--release",
+        "--bins"
+      ],
+      "cwd": "/workspace/scratch/21396cda8665/tmuxlike",
+      "exit_code": 0,
+      "elapsed_seconds": 52.58,
+      "log": "/tmp/crew-v04-validation/build.log",
+      "log_sha256": "9abe37de47d69fa2b38b60731b9249eeb84b2c78e45458d60ad1ca81137ccdf7"
+    },
+    {
+      "name": "metadata_smoke",
+      "argv": [
+        "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "scripts/metadata_smoke.py",
+        "/workspace/scratch/21396cda8665/target-v04-root/release/crew"
+      ],
+      "cwd": "/workspace/scratch/21396cda8665/tmuxlike",
+      "exit_code": 0,
+      "elapsed_seconds": 1.15,
+      "log": "/tmp/crew-v04-validation/metadata_smoke.log",
+      "log_sha256": "1bbad0b7f414d45473234e5b757b5c3ed61f7ba546e508734a63c0603a63f5a2"
+    },
+    {
+      "name": "workspace_move_smoke",
+      "argv": [
+        "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "scripts/workspace_move_smoke.py",
+        "/workspace/scratch/21396cda8665/target-v04-root/release/crew"
+      ],
+      "cwd": "/workspace/scratch/21396cda8665/tmuxlike",
+      "exit_code": 0,
+      "elapsed_seconds": 1.27,
+      "log": "/tmp/crew-v04-validation/workspace_move_smoke.log",
+      "log_sha256": "7b6555fb48795fb726b076cc9cf11b16b3ce0a1e61791db28aeb6a0f939058d1"
+    },
+    {
+      "name": "smoke",
+      "argv": [
+        "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "scripts/smoke.py",
+        "/workspace/scratch/21396cda8665/target-v04-root/release/tmuxlike"
+      ],
+      "cwd": "/workspace/scratch/21396cda8665/tmuxlike",
+      "exit_code": 0,
+      "elapsed_seconds": 0.14,
+      "log": "/tmp/crew-v04-validation/smoke.log",
+      "log_sha256": "d63db85b0682edf7aa313688573fcbf5d03f7eee8470009c30324f39c3b8314a"
+    },
+    {
+      "name": "api_smoke",
+      "argv": [
+        "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "scripts/api_smoke.py",
+        "/workspace/scratch/21396cda8665/target-v04-root/release/crew"
+      ],
+      "cwd": "/workspace/scratch/21396cda8665/tmuxlike",
+      "exit_code": 0,
+      "elapsed_seconds": 6.42,
+      "log": "/tmp/crew-v04-validation/api_smoke.log",
+      "log_sha256": "0dc3e11a93c8b5ec2fa5477f8bdf14e2fdfa2b9dd2bbde9d320b282fc4d12900"
+    },
+    {
+      "name": "workspace_smoke",
+      "argv": [
+        "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "scripts/workspace_smoke.py",
+        "/workspace/scratch/21396cda8665/target-v04-root/release/crew"
+      ],
+      "cwd": "/workspace/scratch/21396cda8665/tmuxlike",
+      "exit_code": 0,
+      "elapsed_seconds": 1.65,
+      "log": "/tmp/crew-v04-validation/workspace_smoke.log",
+      "log_sha256": "842549502a311a72f395c46cfee1ddd1eb8e49ffce4c58b3f4e7de3790d6b97f"
+    },
+    {
+      "name": "worktree_smoke",
+      "argv": [
+        "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "scripts/worktree_smoke.py",
+        "/workspace/scratch/21396cda8665/target-v04-root/release/crew"
+      ],
+      "cwd": "/workspace/scratch/21396cda8665/tmuxlike",
+      "exit_code": 0,
+      "elapsed_seconds": 2.48,
+      "log": "/tmp/crew-v04-validation/worktree_smoke.log",
+      "log_sha256": "fc838d2fd9510ab5c45477ef4fdd0083b2c50007868eb4764923fd1153dae79f"
+    },
+    {
+      "name": "agent_identity_smoke",
+      "argv": [
+        "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "scripts/agent_identity_smoke.py",
+        "/workspace/scratch/21396cda8665/target-v04-root/release/crew"
+      ],
+      "cwd": "/workspace/scratch/21396cda8665/tmuxlike",
+      "exit_code": 0,
+      "elapsed_seconds": 2.44,
+      "log": "/tmp/crew-v04-validation/agent_identity_smoke.log",
+      "log_sha256": "5989d6537fa98ea1dade9c976531ea7d683a9deec2cff2ab9244a2261ef79745"
+    },
+    {
+      "name": "bridge_events_smoke",
+      "argv": [
+        "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3",
+        "scripts/bridge_events_smoke.py",
+        "/workspace/scratch/21396cda8665/target-v04-root/release/crew"
+      ],
+      "cwd": "/workspace/scratch/21396cda8665/tmuxlike",
+      "exit_code": 0,
+      "elapsed_seconds": 0.46,
+      "log": "/tmp/crew-v04-validation/bridge_events_smoke.log",
+      "log_sha256": "5cf3e66d8daddeabb382df11374d33a0cf37ecf495388de0e13a5023a6cd77c7"
+    }
+  ],
+  "stage": "pre-CI local integrated validation",
+  "rust_test_count": 342,
+  "additional_checks": [
+    {
+      "name": "metadata projection and ordering assertions",
+      "source_commit": "421e9dce422be99de77e64a3c7e5bdcd6db6ccf0",
+      "argv": [
+        "python3",
+        "scripts/metadata_smoke.py",
+        "/workspace/scratch/21396cda8665/target-v04-root/release/crew"
+      ],
+      "exit_code": 0,
+      "log_sha256": "1bbad0b7f414d45473234e5b757b5c3ed61f7ba546e508734a63c0603a63f5a2",
+      "binary_source_unchanged_from": "d9b87f1451044e5222971eb192acadb42f2c9faa"
+    },
+    {
+      "name": "integrated release tooling self-tests",
+      "source_commit": "72f5f0067e388876015b3537a79059ec3bfde9cd",
+      "argv": [
+        "python3",
+        "scripts/package_release.py",
+        "self-test"
+      ],
+      "exit_code": 0,
+      "count": 9,
+      "log_sha256": "ba66fd048f97dc3d2150363dadc9165fdab92440dc0e0500ccd992fee92375da"
+    }
+  ],
+  "binary_sha256": {
+    "crew": "ee8a506b50f3d8f68266e86ac4a31f160b8c442338585ce7a5c4c888c413e10f",
+    "tmuxlike": "ee8a506b50f3d8f68266e86ac4a31f160b8c442338585ce7a5c4c888c413e10f"
+  },
+  "pending": [
+    "Native Windows and macOS CI",
+    "Native Inno Setup compilation and installer lifecycle",
+    "Merged main CI",
+    "Published release and independent public download verification"
+  ],
+  "independent_review": [
+    {
+      "artifact": "core-review.md",
+      "sha256": "667edcd867d4d1efbbf6210f5b87ce1f5b20ef8966516a85b95c2c357159ebd6"
+    },
+    {
+      "artifact": "metadata-review.md",
+      "sha256": "01d0afa29d012df5221259407fc940ece71cfa5270322b9f28d62fc93c8d5cfb"
+    },
+    {
+      "artifact": "metadata-integration-review.md",
+      "sha256": "6926a1dbb884f5aca13040345253dd83023ecfb5f26738664e392ed84894105c"
+    },
+    {
+      "artifact": "docs-smoke-review.md",
+      "sha256": "c0ccb45a48211d4e273e98e0c792341df2b44a3a8254cdba7322f4ef40f59c60"
+    },
+    {
+      "artifact": "installer-review.md",
+      "sha256": "9ce18c1a62a12749e862def1c566feaafdd4129211dbbfb91b7389fe47fb3c93"
+    },
+    {
+      "artifact": "installer-integration-review.md",
+      "sha256": "96a4beca3107a5b4a869e1d222533d17cac24734ff1f6dc435878333ef0955bd"
+    }
+  ],
+  "installer_integration_commit": "72f5f0067e388876015b3537a79059ec3bfde9cd"
+}

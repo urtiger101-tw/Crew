@@ -42,6 +42,7 @@ pub fn parse(args: &[String], current: Option<usize>) -> Result<Request, String>
         return Err(HELP.to_string());
     }
     match group.as_str() {
+        "workspace" | "pane" if sub == "report-metadata" => crate::metadata::parse(group, rest),
         "workspace" | "tab" => crate::workspace::parse(group, sub, rest, current),
         "worktree" => crate::worktree::parse(sub, rest),
         "events" => crate::events::parse(sub, rest),

@@ -25,6 +25,7 @@ mod integrations;
 mod ipc;
 mod keys;
 mod layout;
+mod metadata;
 mod persist;
 mod process_path;
 mod proto;
@@ -81,10 +82,11 @@ pub fn run() {
                 Err(help) if help == api::cli::HELP => {
                     println!("{}", tr(lang, "cli.api_help"));
                     println!(
-                        "\n{}\n{}\n{}",
+                        "\n{}\n{}\n{}\n{}",
                         workspace::HELP,
                         worktree::HELP,
-                        bridge::HELP
+                        bridge::HELP,
+                        metadata::HELP
                     );
                     Ok(())
                 }
