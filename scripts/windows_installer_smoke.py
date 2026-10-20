@@ -141,10 +141,16 @@ def native_smoke(args):
             shortcut_env = dict(env, CREW_SHORTCUT=str(shortcut), CREW_EXPECTED_BINARY=str(directory / "crew.exe"))
             target = execute(["powershell", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
                               "$ErrorActionPreference='Stop'; "
-                              "$t=(New-Object -ComObject WScript.Shell).CreateShortcut($env:CREW_SHORTCUT).TargetPath; "
+                              "$s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:CREW_SHORTCUT); $t=$s.TargetPath; "
                               "if (-not [string]::Equals([IO.Path]::GetFullPath($t), "
                               "[IO.Path]::GetFullPath($env:CREW_EXPECTED_BINARY), [StringComparison]::OrdinalIgnoreCase)) "
-                              "{ throw 'Start Menu shortcut points elsewhere' }; Write-Output 'CREW_SHORTCUT_OK'"],
+                              "{ throw 'Start Menu shortcut points elsewhere' }; "
+                              "$p=[Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile); $w=$s.WorkingDirectory; "
+                              "if ([string]::IsNullOrWhiteSpace($p) -or [string]::IsNullOrWhiteSpace($w) -or "
+                              "-not [IO.Directory]::Exists($p) -or -not [string]::Equals([IO.Path]::GetFullPath($w), "
+                              "[IO.Path]::GetFullPath($p), [StringComparison]::OrdinalIgnoreCase)) "
+                              "{ throw 'Start Menu shortcut working directory is not the user profile' }; "
+                              "Write-Output 'CREW_SHORTCUT_OK'"],
                              env=shortcut_env)
             require(target == "CREW_SHORTCUT_OK", "Start Menu shortcut validation did not complete")
 
