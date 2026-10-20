@@ -36,6 +36,12 @@ pub struct Config {
     pub confirm_close: bool,
     /// Pane title rows: off | auto | always
     pub pane_titles: String,
+    /// Literal display templates; $name / ${name} substitute metadata or built-in fields.
+    pub pane_template: String,
+    pub sidebar_pane_template: String,
+    pub sidebar_workspace_template: String,
+    /// Infer kind from live pane processes, without claiming a semantic lifecycle authority.
+    pub agent_detection: bool,
     /// Colors and glyphs (`[theme]` table)
     pub theme: crate::theme::ThemeCfg,
     /// UI language: auto (from each client's locale) | en | zh-TW
@@ -61,6 +67,10 @@ impl Default for Config {
             hints: true,
             confirm_close: true,
             pane_titles: "auto".into(),
+            pane_template: String::new(),
+            sidebar_pane_template: String::new(),
+            sidebar_workspace_template: String::new(),
+            agent_detection: true,
             theme: crate::theme::ThemeCfg::default(),
             lang: "auto".into(),
         }
@@ -95,7 +105,15 @@ impl Config {
 
     pub fn load_from(p: &std::path::Path) -> Result<Config, String> {
         let s = std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?;
-        toml::from_str(&s).map_err(|e| format!("config error: {e}"))
+        let config: Config = toml::from_str(&s).map_err(|e| format!("config error: {e}"))?;
+        for template in [
+            &config.pane_template,
+            &config.sidebar_pane_template,
+            &config.sidebar_workspace_template,
+        ] {
+            crate::metadata::display::validate_template(template)?;
+        }
+        Ok(config)
     }
 
     pub fn default_shell(&self) -> String {
@@ -157,6 +175,15 @@ impl Config {
             "mouse" => self.mouse = parse_bool(val)?,
             "sidebar" => self.sidebar = parse_bool(val)?,
             "sidebar-width" => self.sidebar_width = num(val)?.clamp(10.0, 100.0) as u16,
+            "agent-detection" => self.agent_detection = parse_bool(val)?,
+            "pane-template" | "sidebar-pane-template" | "sidebar-workspace-template" => {
+                crate::metadata::display::validate_template(val)?;
+                match key.replace('_', "-").as_str() {
+                    "pane-template" => self.pane_template = val.to_string(),
+                    "sidebar-pane-template" => self.sidebar_pane_template = val.to_string(),
+                    _ => self.sidebar_workspace_template = val.to_string(),
+                }
+            }
             "scrollback" | "history-limit" => self.scrollback = num(val)? as usize,
             "busy-secs" => self.busy_secs = num(val)? as f32,
             "automatic-rename" => self.automatic_rename = parse_bool(val)?,

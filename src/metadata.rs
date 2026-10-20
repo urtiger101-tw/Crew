@@ -1,5 +1,8 @@
-//! Ephemeral display tokens. They never participate in agent lifecycle or waits.
+//! Ephemeral display tokens and presentation. Never participates in agent lifecycle or waits.
 mod cli;
+pub(crate) mod display;
+mod presentation;
+pub use presentation::TextPatch;
 #[cfg(test)]
 mod tests;
 
@@ -12,15 +15,25 @@ use std::time::{Duration, Instant};
 
 pub use cli::parse;
 
-pub const HELP: &str = r#"DISPLAY TOKENS (independent of agent status):
+pub const HELP: &str = r#"DISPLAY METADATA (independent of agent status):
   crew pane report-metadata pN --source ID [--token KEY=VALUE] [--clear-token KEY]
+                            [--title TEXT|--clear-title]
+                            [--display-agent TEXT|--clear-display-agent]
+                            [--state-label STATE=TEXT] [--clear-state-label STATE]
+                            [--agent KIND] [--applies-to-source ID] [--clear-presentation]
                             [--seq N] [--ttl-ms N]
   crew workspace report-metadata ID|NAME --source ID [--token KEY=VALUE]
+                                 [--title TEXT|--clear-title] [--clear-presentation]
                                  [--clear-token KEY] [--seq N] [--ttl-ms N]
-Repeat --token / --clear-token to patch distinct keys; omitted keys remain unchanged.
-TTL is 1..86400000 ms and applies only to keys set by that report. Omit it to keep
-values until replaced, cleared, the resource closes, or the server restarts.
-Tokens appear in get/list/snapshot responses and metadata_updated events.
+Repeat token/state-label flags to patch distinct keys; omitted fields remain unchanged.
+TTL is 1..86400000 ms: per updated token, or the source's whole presentation when
+any presentation field is patched. Token-only reports do not extend presentation TTL.
+Omit TTL to keep updated values until replaced, cleared, closed, or server restart.
+Guards restrict presentation to the current agent kind / explicit report source.
+clear-presentation removes only this source's presentation and guards, keeping tokens.
+get/list/snapshot expose tokens and computed display; metadata_updated emits changes.
+Config: pane_template, sidebar_pane_template, sidebar_workspace_template use literal
+$token / ${token} substitution and $$ escaping. Empty results use normal display names.
 "#;
 
 const MAX_PATCH: usize = 16;
@@ -42,25 +55,33 @@ pub struct Request {
     pub tokens: BTreeMap<String, Option<String>>,
     pub seq: Option<u64>,
     pub ttl_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "TextPatch::missing")]
+    pub title: TextPatch,
+    #[serde(default, skip_serializing_if = "TextPatch::missing")]
+    pub display_agent: TextPatch,
+    #[serde(default)]
+    pub state_labels: BTreeMap<String, Option<String>>,
+    #[serde(default)]
+    pub agent: Option<String>,
+    #[serde(default)]
+    pub applies_to_source: Option<String>,
+    #[serde(default)]
+    pub clear_presentation: bool,
 }
 
 impl Request {
     /// The same validation is used by the CLI and the native daemon API.
     fn validate(&self) -> Result<(), ApiError> {
-        if self.source.is_empty()
-            || self.source.len() > 80
-            || !self
-                .source
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b':' | b'.' | b'_' | b'-'))
-        {
+        if !presentation::source_valid(&self.source) {
             return Err(ApiError::invalid(
                 "source must be 1..80 of A-Za-z0-9 : . _ -",
             ));
         }
-        if !(1..=MAX_PATCH).contains(&self.tokens.len()) {
+        self.validate_presentation()?;
+        if self.tokens.len() > MAX_PATCH || (self.tokens.is_empty() && !self.patches_presentation())
+        {
             return Err(ApiError::invalid(
-                "a metadata patch must contain 1..16 distinct keys",
+                "a metadata patch needs presentation fields or 1..16 distinct token keys",
             ));
         }
         for key in self.tokens.keys() {
@@ -105,11 +126,13 @@ struct Resource {
     tokens: BTreeMap<String, Token>,
     // Kept until the resource closes, even after every token has expired or cleared.
     sequences: BTreeMap<String, u64>,
+    presentations: BTreeMap<String, presentation::Entry>,
 }
 
 #[derive(Default, Debug)]
 pub struct Store {
     resources: BTreeMap<Key, Resource>,
+    revision: u64,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -157,6 +180,17 @@ impl Store {
                 "resource already has 32 sequenced sources",
             ));
         }
+        if req.patches_presentation()
+            && !req.clear_presentation
+            && previous.is_some_and(|r| {
+                !r.presentations.contains_key(&req.source) && r.presentations.len() >= MAX_SOURCES
+            })
+        {
+            return Err(ApiError::new(
+                "metadata_source_limit",
+                "resource already has 32 presentation sources",
+            ));
+        }
         let deadline = req
             .ttl_ms
             .map(|ms| {
@@ -170,7 +204,7 @@ impl Store {
             .map(|(name, value)| {
                 (
                     name.clone(),
-                    value.as_deref().and_then(|v| clean_text(v, 80)),
+                    value.as_deref().and_then(|v| presentation::clean(v, 80)),
                 )
             })
             .collect();
@@ -191,8 +225,16 @@ impl Store {
 
         // Commit only after all validation/capacity checks; a rejected report never
         // advances seq or applies only a prefix of a patch.
+        let revision = self
+            .revision
+            .checked_add(1)
+            .ok_or_else(|| ApiError::new("internal", "metadata revision counter exhausted"))?;
+        self.revision = revision;
         let resource = self.resources.entry(key).or_default();
         let mut changed = Vec::new();
+        if presentation::patch(resource, req, now, deadline, revision) {
+            changed.push("@presentation".into());
+        }
         for (name, value) in patch {
             match value {
                 Some(value) => {
@@ -221,16 +263,23 @@ impl Store {
     fn expire(&mut self, now: Instant) -> Vec<(Key, Vec<String>)> {
         let mut changed = Vec::new();
         for (key, resource) in &mut self.resources {
-            let expired: Vec<String> = resource
+            let mut expired: Vec<String> = resource
                 .tokens
                 .iter()
                 .filter(|(_, token)| !token.alive(now))
                 .map(|(name, _)| name.clone())
                 .collect();
+            for name in &expired {
+                resource.tokens.remove(name);
+            }
+            let before = resource.presentations.len();
+            resource
+                .presentations
+                .retain(|_, entry| entry.deadline.is_none_or(|deadline| now < deadline));
+            if resource.presentations.len() != before {
+                expired.push("@presentation".into());
+            }
             if !expired.is_empty() {
-                for name in &expired {
-                    resource.tokens.remove(name);
-                }
                 changed.push((*key, expired));
             }
         }
@@ -242,7 +291,12 @@ impl Store {
     }
 }
 
-fn record(st: &mut State, key: Key, reason: &str, changed: Vec<String>) {
+fn record(st: &mut State, key: Key, reason: &str, mut changed: Vec<String>) {
+    let presentation_changed = changed.iter().any(|key| key == "@presentation");
+    changed.retain(|key| key != "@presentation");
+    if let Key::Pane(id) = key {
+        st.relayout_pane(id);
+    }
     let (kind, pane, data) = match key {
         Key::Pane(id) => {
             let Some(pane) = pane_json(st, id) else {
@@ -251,7 +305,7 @@ fn record(st: &mut State, key: Key, reason: &str, changed: Vec<String>) {
             (
                 "pane.metadata_updated",
                 Some(id),
-                json!({"reason": reason, "changed_keys": changed, "pane": pane}),
+                json!({"reason": reason, "changed_keys": changed, "presentation_changed": presentation_changed, "pane": pane}),
             )
         }
         Key::Workspace(id) => {
@@ -261,7 +315,7 @@ fn record(st: &mut State, key: Key, reason: &str, changed: Vec<String>) {
             (
                 "workspace.metadata_updated",
                 None,
-                json!({"reason": reason, "changed_keys": changed,
+                json!({"reason": reason, "changed_keys": changed, "presentation_changed": presentation_changed,
                 "workspace": crate::workspace::workspace_json(st, si)}),
             )
         }

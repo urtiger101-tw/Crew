@@ -6,6 +6,8 @@ mod move_tests;
 mod order;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod transfer_tests;
 use crate::api::{ApiError, ApiResult, Reply, lock, pane_id_str, pane_json};
 use crate::server::{Shared, State};
 pub use cli::parse;
@@ -25,13 +27,16 @@ pub const HELP: &str = r#"WORKSPACES AND TABS (stable wN / tN identifiers):
                   [--command TEXT] [--focus|--no-focus]
   crew tab rename ID|NAME NEW_NAME [--workspace ID|NAME]
   crew tab move ID|NAME --index N [--workspace ID|NAME]
+  crew tab move ID|NAME --to-workspace ID|NAME [--index N] [--workspace ID|NAME]
   crew tab focus|close ID|NAME [--workspace ID|NAME]
 Creation defaults to --no-focus. A workspace defaults to the caller's current directory;
 a tab inherits its workspace's directory and environment. --env can be repeated.
 IDs survive rename, unrelated deletion and restart. Processes do not survive a restart.
 Names are exact, including periods and colons. Use name:NAME for legacy ID-shaped names.
-Move uses insertion slots 0..count in the original list; count appends. It never changes
-focus or moves a tab between workspaces. Adjacent slots around an item are no-ops.
+Move uses insertion slots 0..count in the original list; count appends. Adjacent slots
+around an item are no-ops. --to-workspace transfers a live tab; omitted index appends.
+--workspace always scopes the source. Transfers keep destination focus and close an
+empty source workspace without stopping the transferred panes.
 "#;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -90,6 +95,13 @@ pub enum Request {
         tab: String,
         workspace: Option<String>,
         insert_index: usize,
+        current: Option<usize>,
+    },
+    TabTransfer {
+        tab: String,
+        workspace: Option<String>,
+        to_workspace: String,
+        insert_index: Option<usize>,
         current: Option<usize>,
     },
     TabFocus {
@@ -323,6 +335,7 @@ pub fn workspace_json(st: &State, si: usize) -> Value {
         "workspace_id": workspace_id_str(s.id), "name": s.name, "cwd": s.cwd,
         "env_keys": s.env.keys().collect::<Vec<_>>(),
         "tokens": st.metadata.values(crate::metadata::Key::Workspace(s.id), Instant::now()),
+        "display": crate::metadata::display::workspace(st, si),
         "active_tab": s.windows.get(s.active).map(|w| tab_id_str(w.id)),
         "focused": st.target_session(None).ok() == Some(si),
         "attached": st.clients.values().filter(|c| c.session == s.name).count(),
@@ -587,6 +600,17 @@ fn handle_existing(shared: &Shared, req: Request) -> ApiResult {
         } => {
             let (si, wi) = tab_index(&st, Some(&tab), workspace.as_deref(), current)?;
             order::tab(&mut st, si, wi, insert_index)?
+        }
+        Request::TabTransfer {
+            tab,
+            workspace,
+            to_workspace,
+            insert_index,
+            current,
+        } => {
+            let (si, wi) = tab_index(&st, Some(&tab), workspace.as_deref(), current)?;
+            let destination = workspace_index(&st, &to_workspace)?;
+            order::transfer(&mut st, si, wi, destination, insert_index)?
         }
         Request::TabClose {
             tab,

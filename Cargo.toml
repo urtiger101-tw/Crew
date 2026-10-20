@@ -1,6 +1,6 @@
 [package]
 name = "crew"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 default-run = "crew"
 description = "Cross-platform terminal workspaces for coding agent teams"
@@ -39,4 +39,4 @@ codegen-units = 1
 strip = true
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Globalization", "Win32_System_Console"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Globalization", "Win32_System_Console", "Win32_System_Diagnostics_ToolHelp"] }

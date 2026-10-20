@@ -1,0 +1,93 @@
+{
+  "schema": 1,
+  "reviewer": "/root/v05_transfer",
+  "author_of_reviewed_changes": false,
+  "base": "5e7e208bca5bf388aded7631aff0d8846b47363f",
+  "initial_head": "f722c48fc0d5dd7b558a79e648011767f2dc5e98",
+  "presentation_fix": "2424819fbe905a69c077d8ecce2f1a6caa6ab586",
+  "cli_fix": "14a4f64608134f56022ea6abbe10cb209b11e692",
+  "cli_scope": [
+    "src/commands.rs",
+    "src/lib.rs",
+    "src/commands/tests.rs",
+    "scripts/presentation_smoke.py"
+  ],
+  "initial_decision": "REQUEST_CHANGES",
+  "final_decision": "NO_OUTSTANDING_BLOCKING_FINDINGS_IN_REVIEWED_SCOPE",
+  "findings": [
+    {
+      "id": "presentation-guard-loss",
+      "priority": "P2",
+      "status": "RESOLVED",
+      "fixed_by": "2424819fbe905a69c077d8ecce2f1a6caa6ab586"
+    },
+    {
+      "id": "template-boundary-control-validation",
+      "priority": "P3",
+      "status": "RESOLVED",
+      "fixed_by": "2424819fbe905a69c077d8ecce2f1a6caa6ab586"
+    },
+    {
+      "id": "cli-template-literal-transport",
+      "priority": "P2",
+      "status": "RESOLVED",
+      "fixed_by": "14a4f64608134f56022ea6abbe10cb209b11e692"
+    }
+  ],
+  "native_platforms": {
+    "linux": "FOCUSED_TESTS_PASS",
+    "macos": "NOT_RUN",
+    "windows": "NOT_RUN"
+  },
+  "full_integrated_validator": "NOT_RUN_BY_REVIEWER",
+  "binary_provenance": "Supplied by authors; reviewer independently hashed and executed; not rebuilt by reviewer. Root owns source-bound integrated validation.",
+  "binaries": {
+    "initial": "1713304b919ba0e322b52ecd1dc91903aa8fa085aa8ef164796a1efb82a5813b",
+    "presentation_fix": "f6690b6c95377ed7368f28d49efdc48f74d604a32bc984ff99c41f9cc719b4a5",
+    "cli_fix": "f7d343be5deb7fff29ebc5cf01a190b5a461fbcca83ef54ba06c65a20ef1644b"
+  },
+  "evidence": [
+    {
+      "path": "/tmp/crew-v05-presentation-review-repro-before.log",
+      "bytes": 681,
+      "sha256": "863f5a86140cb39b604d8d15582cbb0d6c0bfeb17466c27e690f8c4b9cce5136",
+      "exit_code": 0
+    },
+    {
+      "path": "/tmp/crew-v05-presentation-review-repro-after.log",
+      "bytes": 284,
+      "sha256": "4911a69d9d315d393213264e60da7ea33a6c5f3df6663b16d3704616c2e2f693",
+      "exit_code": 1
+    },
+    {
+      "path": "/tmp/crew-v05-presentation-review-repro-after-quoted.log",
+      "bytes": 981,
+      "sha256": "97299cacc349a1174aba72fbe6e97a74313603248b88f686a5b53929e9c073ab",
+      "exit_code": 0
+    },
+    {
+      "path": "/tmp/crew-v05-presentation-review-cli14a4f64.log",
+      "bytes": 945,
+      "sha256": "519c27dc61958eacfe0d579dbaed52f8b28a7d62288bd10220a9774506e0a078",
+      "exit_code": 0
+    },
+    {
+      "path": "/tmp/crew-v05-presentation-review-cli14a4f64-literals.log",
+      "bytes": 1278,
+      "sha256": "cc531af236b3c48363902d27f906da5918bd78ebd892d0450bf5dd128e51e953",
+      "exit_code": 0
+    }
+  ],
+  "reproducer": {
+    "path": "/tmp/crew-v05-presentation-review-repro.py",
+    "bytes": 4927,
+    "sha256": "e857ffac646be9afacc5f1894f33fa5a7b0b0cd24ae24593cc07d35bfda593e3"
+  },
+  "report": {
+    "path": "/tmp/crew-v05-presentation-independent-review.md",
+    "bytes": 8182,
+    "sha256": "5e5fd88128ba459ff3bda5ef5d2a3ea66d7278d3b5d0332a70ff3e22aa022e33"
+  },
+  "self_authored_slices_approved": false,
+  "github_writes": false
+}

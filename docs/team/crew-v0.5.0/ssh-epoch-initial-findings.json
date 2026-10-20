@@ -1,0 +1,45 @@
+{
+  "task_id": "crew-v05-ssh-epoch-review",
+  "actor_instance": "/root/v05_presentation",
+  "receiver_instance": "/root",
+  "head_sha": "923033dfaa79df448b37050dc0bc72ed59b98675",
+  "tested_sha": "923033dfaa79df448b37050dc0bc72ed59b98675",
+  "binary_sha256": "f5f794745948b55bc2ac04741face70cc5f202f6702b4c4d9182fc3313c3b8b3",
+  "triggering_integrated_sha": "276ad68338af7562add672a7b461d9772fbd4b1b",
+  "result": "FAIL",
+  "findings": [
+    {
+      "id": "SSH-P2-3",
+      "priority": "P2",
+      "status": "OPEN",
+      "path": "src/remote/dashboard.rs",
+      "start_line": 58,
+      "end_line": 63,
+      "title": "Bind cached workspace selection to the daemon epoch",
+      "reproducer": "/tmp/crew-ssh-review-923033d-restart-repro.py",
+      "evidence": "/tmp/crew-ssh-review-923033d-restart-repro.log",
+      "simulation": false,
+      "platform": "linux",
+      "old_epoch": "136892-1792498074716044348",
+      "new_epoch": "136917-1792498075094770778",
+      "old_and_new_workspace_id": "w1",
+      "replacement_received_input": true
+    }
+  ],
+  "separate_fixture_issue": {
+    "path": "scripts/ssh_federation_smoke.py",
+    "line": 383,
+    "head_sha": "276ad68338af7562add672a7b461d9772fbd4b1b",
+    "cause": "closing last workspace restarts daemon and resets allocator",
+    "minimal_fix": "create and retain keeper for same-daemon removed-ID test"
+  },
+  "checks": [
+    {
+      "name": "stale-selector-crosses-daemon-epoch",
+      "result": "FAIL",
+      "exit_code": 0,
+      "meaning": "native reproducer demonstrated the product defect"
+    }
+  ],
+  "next_owner": "/root/v05_remote"
+}

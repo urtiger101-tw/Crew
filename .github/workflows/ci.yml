@@ -1,11 +1,13 @@
 name: CI
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  merge_group:
-    types: [checks_requested]
+  # Hosted minutes are exhausted. Normal pushes/PRs use scripts/validate_local.py.
+  workflow_dispatch:
+    inputs:
+      allow_hosted_minutes:
+        description: 'Explicitly authorize GitHub-hosted runner usage for this run'
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -25,6 +27,7 @@ defaults:
 
 jobs:
   test:
+    if: ${{ inputs.allow_hosted_minutes == true }}
     name: ${{ matrix.name }}
     timeout-minutes: 35
     strategy:
@@ -58,6 +61,8 @@ jobs:
         run: cargo test --locked 2>&1 | tee ci-logs/unit.log
       - name: Release tooling tests
         run: python scripts/package_release.py self-test 2>&1 | tee ci-logs/release-tooling.log
+      - name: Local validation tooling tests
+        run: python -B scripts/test_local_validation.py 2>&1 | tee ci-logs/local-tooling.log
       - name: Build both executables
         env:
           RUSTFLAGS: ${{ runner.os == 'Windows' && '-C target-feature=+crt-static' || '' }}
@@ -86,6 +91,24 @@ jobs:
       - name: Bridge and events smoke
         timeout-minutes: 5
         run: python scripts/bridge_events_smoke.py target/${{ matrix.target }}/release/crew${{ matrix.ext }} 2>&1 | tee ci-logs/bridge-events.log
+      - name: Workspace transfer smoke
+        timeout-minutes: 5
+        run: python scripts/workspace_transfer_smoke.py target/${{ matrix.target }}/release/crew${{ matrix.ext }} 2>&1 | tee ci-logs/workspace-transfer.log
+      - name: Metadata presentation smoke
+        timeout-minutes: 5
+        run: python scripts/presentation_smoke.py target/${{ matrix.target }}/release/crew${{ matrix.ext }} 2>&1 | tee ci-logs/presentation.log
+      - name: Agent detection smoke
+        timeout-minutes: 5
+        run: python scripts/agent_detection_smoke.py target/${{ matrix.target }}/release/crew${{ matrix.ext }} 2>&1 | tee ci-logs/agent-detection.log
+      - name: Plugin lifecycle smoke
+        timeout-minutes: 5
+        run: python scripts/plugin_smoke.py target/${{ matrix.target }}/release/crew${{ matrix.ext }} 2>&1 | tee ci-logs/plugin.log
+      - name: SSH federation smoke
+        if: runner.os == 'Linux'
+        timeout-minutes: 5
+        run: |
+          sudo install -d -m 0755 /run/sshd
+          python scripts/ssh_federation_smoke.py "$PWD/target/${{ matrix.target }}/release/crew${{ matrix.ext }}" --logs ci-logs/ssh-federation 2>&1 | tee ci-logs/ssh-federation.log
       - name: Build Windows installer
         if: runner.os == 'Windows'
         timeout-minutes: 8
@@ -105,7 +128,7 @@ jobs:
 
   gate:
     name: Crew CI Gate
-    if: ${{ always() }}
+    if: ${{ always() && inputs.allow_hosted_minutes == true }}
     needs: [test]
     runs-on: ubuntu-24.04
     timeout-minutes: 5

@@ -29,6 +29,8 @@ pub struct Pane {
     pub copy: Option<CopyState>,
     /// reported agent state (herdr-style `pane report-agent`)
     pub agent: Option<crate::api::AgentInfo>,
+    /// Inferred process identity; never substitutes for a reported lifecycle authority.
+    pub detected_agent: Option<crate::agent_detection::Detection>,
     /// user label (`pane rename`)
     pub label: Option<String>,
     /// working directory the pane was started in
@@ -349,9 +351,22 @@ impl State {
     }
 
     fn pane_has_info(&self, pid: usize) -> bool {
-        self.panes
-            .get(&pid)
-            .is_some_and(|p| p.agent.is_some() || p.label.as_deref().is_some_and(|l| !l.is_empty()))
+        self.panes.get(&pid).is_some_and(|p| {
+            p.agent.is_some()
+                || p.detected_agent.is_some()
+                || p.label.as_deref().is_some_and(|l| !l.is_empty())
+                || (!self.cfg.pane_template.is_empty()
+                    && !self
+                        .metadata
+                        .values(crate::metadata::Key::Pane(pid), Instant::now())
+                        .is_empty())
+                || crate::metadata::display::pane(self, pid, crate::i18n::Lang::En).is_some_and(
+                    |display| {
+                        display.presentation.title.is_some()
+                            || display.presentation.display_agent.is_some()
+                    },
+                )
+        })
     }
 
     /// Panes whose layout rect starts with a title row.
@@ -530,6 +545,7 @@ impl State {
             started: Instant::now(),
             copy: None,
             agent: None,
+            detected_agent: None,
             label: None,
             cwd: start_dir,
             env: env.clone(),
@@ -1444,10 +1460,67 @@ impl State {
     }
 }
 
+// The caller must keep this State lock through client registration. A daemon
+// restart may reuse an ID even when the replacement also has the old name.
+fn workspace_attach_name(st: &State, id: usize, epoch: Option<&str>) -> Result<String> {
+    if epoch.is_some_and(|expected| expected != st.events.epoch()) {
+        return Err(anyhow!(
+            "server changed since selection; refresh federation and select again"
+        ));
+    }
+    st.sessions
+        .iter()
+        .find(|session| session.id == id)
+        .map(|s| s.name.clone())
+        .ok_or_else(|| anyhow!("can't find workspace: w{id}"))
+}
+
 fn handle_conn(shared: Shared, cid: usize, stream: interprocess::local_socket::Stream) {
     let (mut r, mut w) = stream.split();
     let Ok(ClientMsg::Hello(cmd)) = read_msg::<ClientMsg>(&mut r) else {
         return;
+    };
+    // Keep both the stable ID and the observed daemon epoch until the same lock
+    // that registers the client. Separate preflight reads could race a restart.
+    let (cmd, workspace_id, expected_epoch) = match cmd {
+        Command::AttachWorkspaceEpoch {
+            workspace_id,
+            epoch,
+            cols,
+            rows,
+            env,
+        } => (
+            Command::Attach {
+                session: None,
+                create: false,
+                cols,
+                rows,
+                cwd: None,
+                detached: false,
+                env,
+            },
+            Some(workspace_id),
+            Some(epoch),
+        ),
+        Command::AttachWorkspace {
+            workspace_id,
+            cols,
+            rows,
+            env,
+        } => (
+            Command::Attach {
+                session: None,
+                create: false,
+                cols,
+                rows,
+                cwd: None,
+                detached: false,
+                env,
+            },
+            Some(workspace_id),
+            None,
+        ),
+        other => (other, None, None),
     };
     match cmd {
         Command::List => {
@@ -1537,16 +1610,19 @@ fn handle_conn(shared: Shared, cid: usize, stream: interprocess::local_socket::S
             env,
         } => {
             let mut st = crate::api::lock(&shared);
-            let name = match session {
-                Some(n) if st.sidx(&n).is_some() && !create => Ok(n),
-                Some(n) if !create => Err(anyhow!("can't find session: {n}")),
-                None if !create => st
-                    .sessions
-                    .iter()
-                    .max_by_key(|s| (s.last_used, s.id))
-                    .map(|s| s.name.clone())
-                    .ok_or_else(|| anyhow!("no sessions")),
-                n => st.new_session(&shared, n, cols, rows, cwd),
+            let name = match workspace_id {
+                Some(id) => workspace_attach_name(&st, id, expected_epoch.as_deref()),
+                None => match session {
+                    Some(n) if st.sidx(&n).is_some() && !create => Ok(n),
+                    Some(n) if !create => Err(anyhow!("can't find session: {n}")),
+                    None if !create => st
+                        .sessions
+                        .iter()
+                        .max_by_key(|s| (s.last_used, s.id))
+                        .map(|s| s.name.clone())
+                        .ok_or_else(|| anyhow!("no sessions")),
+                    n => st.new_session(&shared, n, cols, rows, cwd),
+                },
             };
             let name = match name {
                 Ok(n) => n,
@@ -1598,6 +1674,9 @@ fn handle_conn(shared: Shared, cid: usize, stream: interprocess::local_socket::S
                 }
             }
             crate::api::lock(&shared).clients.remove(&cid);
+        }
+        Command::AttachWorkspace { .. } | Command::AttachWorkspaceEpoch { .. } => {
+            unreachable!("workspace attachment was normalized above")
         }
     }
 }
@@ -1653,6 +1732,9 @@ pub fn run() -> Result<()> {
             let _ = rx.recv_timeout(Duration::from_millis(500));
             std::thread::sleep(Duration::from_millis(8));
             while rx.try_recv().is_ok() {}
+            if last_tick.elapsed() > Duration::from_millis(500) {
+                crate::agent_detection::refresh(&sh);
+            }
             let mut st = crate::api::lock(&sh);
             let tick = last_tick.elapsed() > Duration::from_millis(500);
             if tick {
@@ -1754,6 +1836,52 @@ pub fn run() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{TitleMode, contain_vt, wants_title};
+
+    #[test]
+    fn epoch_attachment_rejects_reused_ids_and_preserves_same_daemon_ids() {
+        let mut st = super::test_state();
+        let epoch = st.events.epoch().to_owned();
+        st.sessions.push(super::Session {
+            id: 1,
+            name: "original".into(),
+            windows: vec![],
+            active: 0,
+            cols: 80,
+            rows: 24,
+            sidebar: false,
+            cwd: None,
+            env: Default::default(),
+            last_used: std::time::Instant::now(),
+        });
+        assert_eq!(
+            super::workspace_attach_name(&st, 1, Some(&epoch)).unwrap(),
+            "original"
+        );
+        st.sessions[0].name = "renamed".into();
+        assert_eq!(
+            super::workspace_attach_name(&st, 1, Some(&epoch)).unwrap(),
+            "renamed"
+        );
+        assert!(super::workspace_attach_name(&st, 2, Some(&epoch)).is_err());
+
+        // A new daemon can have the same ID and name; neither makes an old
+        // cached selection valid in the new lifetime.
+        st.events = crate::events::Journal::default();
+        st.sessions[0].name = "original".into();
+        assert_ne!(st.events.epoch(), epoch);
+        let error = super::workspace_attach_name(&st, 1, Some(&epoch)).unwrap_err();
+        assert!(error.to_string().contains("server changed since selection"));
+        assert!(st.clients.is_empty());
+        assert_eq!(
+            super::workspace_attach_name(&st, 1, Some(st.events.epoch())).unwrap(),
+            "original"
+        );
+        // Explicit legacy ID attachment retains its existing contract.
+        assert_eq!(
+            super::workspace_attach_name(&st, 1, None).unwrap(),
+            "original"
+        );
+    }
 
     #[test]
     fn title_policy_auto_needs_split_height_and_info() {

@@ -1,4 +1,4 @@
-use super::{Request, Target};
+use super::{Request, Target, TextPatch};
 use crate::api::{Request as ApiRequest, parse_pane_id};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -6,6 +6,10 @@ pub fn parse(group: &str, args: &[String]) -> Result<ApiRequest, String> {
     let mut positional = Vec::new();
     let mut opts = BTreeMap::new();
     let mut tokens = BTreeMap::new();
+    let mut state_labels = BTreeMap::new();
+    let mut title = TextPatch::default();
+    let mut display_agent = TextPatch::default();
+    let mut clear_presentation = false;
     let mut seen = BTreeSet::new();
     let mut i = 0;
     while i < args.len() {
@@ -24,12 +28,46 @@ pub fn parse(group: &str, args: &[String]) -> Result<ApiRequest, String> {
             .map_or((item.as_str(), None), |(k, v)| (k, Some(v)));
         if !matches!(
             flag,
-            "--source" | "--seq" | "--ttl-ms" | "--token" | "--clear-token"
+            "--source"
+                | "--seq"
+                | "--ttl-ms"
+                | "--token"
+                | "--clear-token"
+                | "--title"
+                | "--clear-title"
+                | "--display-agent"
+                | "--clear-display-agent"
+                | "--state-label"
+                | "--clear-state-label"
+                | "--agent"
+                | "--applies-to-source"
+                | "--clear-presentation"
         ) {
             return Err(format!("unknown option: {flag}"));
         }
-        if !matches!(flag, "--token" | "--clear-token") && !seen.insert(flag) {
+        if !matches!(
+            flag,
+            "--token" | "--clear-token" | "--state-label" | "--clear-state-label"
+        ) && !seen.insert(flag)
+        {
             return Err(format!("duplicate option: {flag}"));
+        }
+        if matches!(
+            flag,
+            "--clear-title" | "--clear-display-agent" | "--clear-presentation"
+        ) {
+            if inline.is_some() {
+                return Err(format!("{flag} does not accept a value"));
+            }
+            match flag {
+                "--clear-title" if title.missing() => title = TextPatch::clear(),
+                "--clear-display-agent" if display_agent.missing() => {
+                    display_agent = TextPatch::clear()
+                }
+                "--clear-presentation" => clear_presentation = true,
+                _ => return Err(format!("duplicate presentation field: {flag}")),
+            }
+            continue;
         }
         let value = match inline {
             Some(v) => v.to_string(),
@@ -41,24 +79,42 @@ pub fn parse(group: &str, args: &[String]) -> Result<ApiRequest, String> {
                 value.clone()
             }
         };
-        if matches!(flag, "--token" | "--clear-token") {
-            let (key, value) = if flag == "--token" {
-                let (key, value) = value.split_once('=').ok_or("--token requires KEY=VALUE")?;
+        if matches!(
+            flag,
+            "--token" | "--clear-token" | "--state-label" | "--clear-state-label"
+        ) {
+            let (key, value) = if matches!(flag, "--token" | "--state-label") {
+                let (key, value) = value.split_once('=').ok_or("option requires KEY=VALUE")?;
                 (key.to_string(), Some(value.to_string()))
             } else {
                 (value, None)
             };
-            if tokens.contains_key(&key) {
-                return Err(format!("duplicate token key: {key}"));
+            let values = if matches!(flag, "--state-label" | "--clear-state-label") {
+                &mut state_labels
+            } else {
+                &mut tokens
+            };
+            if values.contains_key(&key) {
+                return Err(format!("duplicate metadata key: {key}"));
             }
-            tokens.insert(key, value);
+            values.insert(key, value);
+        } else if flag == "--title" {
+            if !title.missing() {
+                return Err("duplicate title".into());
+            }
+            title = TextPatch::set(value);
+        } else if flag == "--display-agent" {
+            if !display_agent.missing() {
+                return Err("duplicate display-agent".into());
+            }
+            display_agent = TextPatch::set(value);
         } else {
             opts.insert(flag, value);
         }
     }
     if positional.len() != 1 {
         return Err(format!(
-            "usage: crew {group} report-metadata TARGET --source ID --token KEY=VALUE [OPTIONS]"
+            "usage: crew {group} report-metadata TARGET --source ID [--token KEY=VALUE|--title TEXT|PRESENTATION_OPTIONS]"
         ));
     }
     let target = positional.pop().unwrap();
@@ -87,7 +143,13 @@ pub fn parse(group: &str, args: &[String]) -> Result<ApiRequest, String> {
         tokens,
         seq: number("--seq")?,
         ttl_ms: number("--ttl-ms")?,
+        title,
+        display_agent,
+        state_labels,
+        agent: opts.get("--agent").cloned(),
+        applies_to_source: opts.get("--applies-to-source").cloned(),
+        clear_presentation,
     };
     req.validate().map_err(|e| e.message)?;
-    Ok(ApiRequest::Metadata(req))
+    Ok(ApiRequest::Metadata(Box::new(req)))
 }

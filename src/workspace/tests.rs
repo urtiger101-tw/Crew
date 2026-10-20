@@ -216,3 +216,46 @@ fn move_parser_rejects_missing_negative_overflow_and_extra_arguments() {
     );
     assert!(parse("workspace", "list", &args(&["--index=0"]), None).is_err());
 }
+
+#[test]
+fn transfer_parser_keeps_source_scope_and_optional_destination_slot() {
+    for (extra, index) in [(vec![], json!(null)), (vec!["--index=2"], json!(2))] {
+        let mut argv = vec![
+            "review.first:中文",
+            "--workspace=w1",
+            "--to-workspace",
+            "project.destination:中文",
+        ];
+        argv.extend(extra);
+        let req = parse("tab", "move", &args(&argv), Some(12)).unwrap();
+        assert_eq!(
+            serde_json::to_value(req).unwrap(),
+            json!({"Workspace":{"TabTransfer":{
+                "tab":"review.first:中文","workspace":"w1","to_workspace":"project.destination:中文",
+                "insert_index":index,"current":12,
+            }}})
+        );
+    }
+    for bad in [
+        vec!["t1", "--to-workspace"],
+        vec!["t1", "--to-workspace="],
+        vec!["t1", "--to-workspace=w1", "--to-workspace=w2"],
+        vec!["t1", "--to-workspace=w1", "--index=-1"],
+        vec!["t1", "--to-workspace=w1", "--index=184467440737095516160"],
+        vec!["t1", "--to-workspace=w1", "--index=0", "--index=1"],
+        vec!["t1", "extra", "--to-workspace=w1"],
+        vec!["t1", "--to-workspace=w1", "--focus"],
+    ] {
+        assert!(parse("tab", "move", &args(&bad), None).is_err(), "{bad:?}");
+    }
+    assert!(
+        parse(
+            "workspace",
+            "move",
+            &args(&["w1", "--to-workspace=w2", "--index=0"]),
+            None
+        )
+        .is_err()
+    );
+    assert!(parse("tab", "get", &args(&["t1", "--to-workspace=w2"]), None).is_err());
+}

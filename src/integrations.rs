@@ -22,7 +22,8 @@ done becomes the server's done badge only when the completion is unseen.
 Use one unique source ID per agent process and report exit before reusing it.
 Omitted --pane uses CREW_PANE_ID, then TMUXLIKE_PANE_ID; it never guesses a pane.
 Arguments after -- are saved as resume argv, not executed by this command.
-explain distinguishes explicit reports from output-activity heuristics.
+explain distinguishes explicit reports, live process-kind hints and PTY activity.
+Kind hints never provide lifecycle completion or create an agent wait identity.
 doctor checks executable files on PATH only; it does not prove hooks are installed.
 This is Crew's generic event contract, not a Claude/Codex official hook format.";
 
@@ -161,7 +162,9 @@ pub fn run(args: &[String]) -> Result<i32> {
             "contract_version": 1,
             "delivery": "explicit-generic-hook",
             "automatic_installation": false,
-            "automatic_detection": false,
+            "automatic_detection": crate::agent_detection::backend() != "unsupported",
+            "detection_backend": crate::agent_detection::backend(),
+            "detection_scope": "Process-kind hint only. Configuration may disable it; explicit reports retain lifecycle authority.",
             "agents": REGISTRY.iter().map(|d| json!({"agent": d.id, "executable_names": d.commands})).collect::<Vec<_>>(),
             "custom_agents": true,
             "events": {"start": "working", "working": "working", "blocked": "blocked", "idle": "idle", "done": "idle", "unknown": "unknown", "exit": "release"}
@@ -185,13 +188,17 @@ pub fn run(args: &[String]) -> Result<i32> {
             Ok(value) => {
                 let pane = &value["agent"];
                 let reported = pane["agent"].is_object();
+                let detected = pane["detected_agent"].is_object();
                 print_json(json!({
                     "pane": pane,
-                    "classification_source": if reported { "explicit-report" } else { "output-activity-heuristic" },
+                    "classification_source": if reported { "explicit-report" } else if detected { "process-detection" } else { "output-activity-heuristic" },
                     "reported": reported,
-                    "process_detection": false,
+                    "process_detection": detected,
+                    "detection_backend": pane["process_detection"]["backend"],
+                    "detection_enabled": pane["process_detection"]["enabled"],
                     "evidence": if reported { "The server received report-agent from the displayed source; Crew has not independently verified the process identity." }
-                        else { "No agent report exists. Status only reflects recent PTY output and unseen output; agent kind and task completion are unknown." }
+                        else if detected { "A live pane process matched a known executable or script. This identifies a kind hint, not task completion or semantic lifecycle state; agent waits still require an explicit report." }
+                        else { "No report or unambiguous supported process evidence exists. Status only reflects PTY activity; agent kind and task completion are unknown." }
                 }))
             }
             Err(error) => {

@@ -1,5 +1,8 @@
 # Metadata tokens
 
+Crew 0.5.0 新增來源範圍的標題、agent 顯示名稱、狀態標籤與 `$token` 模板，詳見
+[metadata-display.md](metadata-display.md)。以下 token 的逐鍵期限與排序契約保持相容。
+
 Crew 0.4.0 可以在 pane 或 workspace 保存短文字標記，例如任務摘要、建置進度或
 分支名稱。標記可以自行到期。它們不會改變 agent 的 `working`、`blocked`、`idle`
 狀態、occupant instance，或讓 `agent wait`／`agent prompt --wait` 提前完成。
@@ -63,8 +66,9 @@ JSON-lines bridge 接受與 CLI 相同的獨立參數，沒有 shell 展開：
 ```
 
 Crew 使用 `crew-json-lines-v1` 的 CLI argument array；這不是 Herdr 的原生 socket
-協定。此版對齊 Herdr 0.9.5 的 **token 子集**，未提供 presentation title、display
-agent、state label 覆寫，也未新增 sidebar token 模板。既有 agent 狀態顯示照常運作。
+協定。0.4.0 實作 token 子集，0.5.0 新增 presentation title、display agent、state
+label 覆寫與 Crew 的字串模板，詳見 [metadata-display.md](metadata-display.md)。
+這些呈現功能仍與 agent 生命週期分開。
 
 參考行為：[Herdr 0.9.5 socket API metadata](https://github.com/herdrdev/herdr/blob/143bf5fd4781d164260c63fe28e7dc08054ad32f/docs/versions/0.9.5/website/src/content/docs/socket-api.mdx)。
 Crew 為獨立實作。

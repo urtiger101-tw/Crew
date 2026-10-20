@@ -41,14 +41,18 @@ CI_STEPS = {
     "Unit tests", "Release tooling tests", "Build both executables", "Legacy PTY smoke",
     "Automation API smoke", "Workspace smoke", "Worktree smoke", "Agent identity smoke",
     "Bridge and events smoke", "Workspace move smoke", "Metadata smoke",
+    "Local validation tooling tests", "Workspace transfer smoke", "Metadata presentation smoke",
+    "Agent detection smoke", "Plugin lifecycle smoke",
 }
 WINDOWS_CI_STEPS = {"Build Windows installer", "Windows installer lifecycle smoke"}
+LINUX_CI_STEPS = {"SSH federation smoke"}
 
 
 def required_ci_steps(name):
     if name == "Crew CI Gate":
         return {"Require every platform"}
-    return CI_STEPS | (WINDOWS_CI_STEPS if name == "Windows x86_64" else set())
+    return (CI_STEPS | (WINDOWS_CI_STEPS if name == "Windows x86_64" else set())
+            | (LINUX_CI_STEPS if name == "Linux x86_64" else set()))
 
 
 def require(condition, message):
@@ -165,11 +169,11 @@ def validate_ci_jobs(jobs):
 def verify_ci(sha, ci_run_id=None, ci_attempt=None):
     """Read the latest run and its actual jobs, including immediately before publication."""
     revision(sha)
-    query = urllib.parse.urlencode({"head_sha": sha, "branch": "main", "event": "push", "per_page": 100})
+    query = urllib.parse.urlencode({"head_sha": sha, "branch": "main", "per_page": 100})
     runs = api(f"/repos/{REPOSITORY}/actions/workflows/ci.yml/runs?{query}")["workflow_runs"]
     runs = [item for item in runs if item["head_sha"] == sha and item["head_branch"] == "main"
-            and item["event"] == "push" and item["head_repository"]["full_name"] == REPOSITORY]
-    require(runs, "no CI push run exists for this main SHA; run CI before releasing")
+            and item["event"] in {"push", "workflow_dispatch"} and item["head_repository"]["full_name"] == REPOSITORY]
+    require(runs, "no main CI run exists for this SHA; a fully successful explicitly authorized hosted run is required for this hosted release path")
     latest = max(runs, key=lambda item: item["id"])
     require(latest["status"] == "completed" and latest["conclusion"] == "success",
             "latest CI run for the source SHA is not successful; wait for or fix CI")
@@ -810,7 +814,8 @@ class ReleaseChecks(unittest.TestCase):
         meta = {"tag": "v0.3.0", "sha": sha, "ci_run_id": 7, "ci_attempt": 1}
         names = release_asset_names(meta["tag"])
         expected = {name: {"size": len(name), "digest": "sha256:" + digest(name.encode())} for name in names}
-        modes = ["success", "ci_failed", "ci_running", "ci_new_attempt", "ci_new_run",
+        modes = ["success", "manual_success", "ci_pr_event", "ci_wrong_branch", "ci_wrong_repository",
+                 "ci_failed", "ci_running", "ci_new_attempt", "ci_new_run",
                  "ci_job_skipped", "ci_step_skipped", "asset_missing", "asset_state",
                  "asset_size", "asset_digest", "asset_digest_missing", "tag_changed"]
         for mode in modes:
@@ -845,7 +850,9 @@ class ReleaseChecks(unittest.TestCase):
                     if "/actions/workflows/ci.yml/runs?" in path:
                         return {"workflow_runs": [{
                             "id": 8 if mode == "ci_new_run" else 7, "head_sha": sha,
-                            "head_branch": "main", "event": "push", "head_repository": {"full_name": REPOSITORY},
+                            "head_branch": "feature" if mode == "ci_wrong_branch" else "main",
+                            "event": "workflow_dispatch" if mode == "manual_success" else "pull_request" if mode == "ci_pr_event" else "push",
+                            "head_repository": {"full_name": "fixture/other" if mode == "ci_wrong_repository" else REPOSITORY},
                             "status": "in_progress" if mode == "ci_running" else "completed",
                             "conclusion": "failure" if mode == "ci_failed" else "success",
                             "run_attempt": 2 if mode in {"ci_failed", "ci_new_attempt"} else 1,
@@ -856,12 +863,12 @@ class ReleaseChecks(unittest.TestCase):
 
                 with mock.patch.dict(globals(), {"api": fake_api,
                                                 "tag_commit": lambda tag: "b" * 40 if mode == "tag_changed" else sha}):
-                    if mode == "success":
+                    if mode in {"success", "manual_success"}:
                         self.assertFalse(finalize_draft(11, meta, expected)["draft"])
                     else:
                         with self.assertRaises(ValueError):
                             finalize_draft(11, meta, expected)
-                self.assertEqual(len(writes), 1 if mode == "success" else 0)
+                self.assertEqual(len(writes), 1 if mode in {"success", "manual_success"} else 0)
 
 
 def main():

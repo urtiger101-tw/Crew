@@ -1,0 +1,87 @@
+{
+  "task_id": "crew-v05-ssh-epoch-review",
+  "actor_instance": "/root/v05_presentation",
+  "receiver_instance": "/root",
+  "head_sha": "e82676349ed1a7153efed8c8489b7eeeff1d5a70",
+  "parent_sha": "52709b62711dca03d8131a829ffcf581fe4364e5",
+  "defect_predecessor_sha": "923033dfaa79df448b37050dc0bc72ed59b98675",
+  "tested_sha": "e82676349ed1a7153efed8c8489b7eeeff1d5a70",
+  "binary": "/workspace/scratch/21396cda8665/target-v05-remote-epoch/debug/crew",
+  "binary_sha256": "6fa48223bce24e0fe7bc5062d6a07b9161118a249a51517f9a89bd8fd7b8601d",
+  "result": "PASS",
+  "scope": "SSH epoch correction and native Linux regressions",
+  "findings": [],
+  "resolved_findings": [
+    {
+      "id": "SSH-P2-3",
+      "priority": "P2",
+      "status": "RESOLVED",
+      "mechanism": "one-lock federation snapshot plus same-lock expected-epoch attachment guard",
+      "verification": {
+        "name": "independent-cold-restart-pty",
+        "result": "PASS",
+        "exit_code": 0,
+        "platform": "linux",
+        "simulation": false,
+        "log": "/tmp/crew-ssh-review-e826763-epoch-native.log"
+      }
+    }
+  ],
+  "previous_findings": {
+    "SSH_P2_1": "RESOLVED; regression retained",
+    "SSH_P2_2": "RESOLVED; regression retained"
+  },
+  "fixture_correction": {
+    "sha": "52709b62711dca03d8131a829ffcf581fe4364e5",
+    "result": "PASS",
+    "scope": "same-daemon removed-ID test precondition"
+  },
+  "checks": [
+    {
+      "name": "independent-cold-restart-pty",
+      "result": "PASS",
+      "exit_code": 0,
+      "platform": "linux",
+      "simulation": false,
+      "log": "/tmp/crew-ssh-review-e826763-epoch-native.log"
+    },
+    {
+      "name": "real-openssh-pty-regression",
+      "result": "PASS",
+      "exit_code": 0,
+      "groups": 14,
+      "platform": "linux",
+      "simulation": false,
+      "log": "/tmp/crew-ssh-review-e826763-native-01.log"
+    },
+    {
+      "name": "old-new-epoch-compatibility",
+      "result": "PASS",
+      "exit_code": 0,
+      "groups": 4,
+      "platform": "linux",
+      "simulation": false,
+      "log": "/tmp/crew-ssh-review-e826763-compat.log"
+    },
+    {
+      "name": "native-windows-macos",
+      "result": "NOT_RUN",
+      "exit_code": null
+    },
+    {
+      "name": "full-integrated-root-runtime-gate",
+      "result": "NOT_RUN",
+      "exit_code": null
+    }
+  ],
+  "integration_source_check": {
+    "sha": "1ea47032b60098f3e43bd8736212484a81c7191e",
+    "result": "PASS",
+    "scope": "read-only conflict preservation: boxed metadata handler, atomic federation branch, detection and shared agent projection",
+    "runtime": "NOT_RUN by reviewer"
+  },
+  "external_side_effects": {
+    "performed": false
+  },
+  "next_owner": "/root"
+}

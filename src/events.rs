@@ -42,6 +42,10 @@ impl Default for Journal {
 }
 
 impl Journal {
+    pub(crate) fn epoch(&self) -> &str {
+        &self.epoch
+    }
+
     pub fn record(&mut self, kind: &str, pane: Option<usize>, data: Value) {
         self.cursor = self.cursor.saturating_add(1);
         if self.entries.len() == CAPACITY {

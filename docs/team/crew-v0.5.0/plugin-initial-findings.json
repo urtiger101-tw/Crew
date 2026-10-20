@@ -1,0 +1,53 @@
+{
+  "result": "FAIL",
+  "simulation": false,
+  "reviewer": "/root/v05_remote",
+  "base_sha": "e03ac1872cffca2c67daf91912636ba57a5e3e7a",
+  "head_sha": "f615aada7bca0ad1a32e853a6032fadb63ea0385",
+  "gate_head_sha": "3a00299c4f667cf5a755c5f2497c589a76ed621f",
+  "findings": [
+    {
+      "id": "PLUGIN-R1",
+      "priority": "P2",
+      "status": "OPEN",
+      "title": "Resolve relative executable paths against the approved plugin root before spawning",
+      "head_sha": "f615aada7bca0ad1a32e853a6032fadb63ea0385",
+      "locations": [
+        {
+          "path": "src/plugins/mod.rs",
+          "start": 339,
+          "end": 342
+        },
+        {
+          "path": "src/plugins/install.rs",
+          "start": 214,
+          "end": 217
+        }
+      ],
+      "trigger": "A build or action declares a relative program path such as ./bin/action.exe and Crew is invoked outside the plugin root.",
+      "impact": "Program resolution depends on OS-specific Command behavior rather than the approved plugin root. Windows can fail to find the intended program or resolve a same-named caller-directory file.",
+      "expected": "Resolve explicit relative program paths to an absolute path rooted at the plugin directory for both build and action commands; keep bare executable names using PATH.",
+      "evidence_kind": "static code plus official Rust Command::current_dir contract; Windows native reproduction NOT_RUN",
+      "source": "https://doc.rust-lang.org/std/process/struct.Command.html#method.current_dir"
+    },
+    {
+      "id": "PLUGIN-R2",
+      "priority": "P2",
+      "status": "OPEN",
+      "title": "A stale disabled development link must not hide healthy plugins from action discovery",
+      "head_sha": "f615aada7bca0ad1a32e853a6032fadb63ea0385",
+      "locations": [
+        {
+          "path": "src/plugins/mod.rs",
+          "start": 280,
+          "end": 297
+        }
+      ],
+      "trigger": "Install crew.workspaces, link a local plugin with --disabled, edit that linked manifest, then run plugin action list --json.",
+      "impact": "The global action list exits 1 with empty stdout because store::loaded(entry)? aborts the whole list. A qualified crew.workspaces listing still returns all three healthy actions.",
+      "expected": "Report unavailable/stale plugin diagnostics per entry while retaining healthy action records; keep invocation refusal for stale manifests.",
+      "evidence_kind": "actual immutable candidate binary and temporary local profiles, exit codes and output retained",
+      "evidence": "/tmp/crew-v05-plugin-review/disabled-link-isolation.json"
+    }
+  ]
+}

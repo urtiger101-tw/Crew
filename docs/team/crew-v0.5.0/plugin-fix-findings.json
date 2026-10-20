@@ -1,0 +1,29 @@
+{
+  "result": "PASS",
+  "simulation": false,
+  "reviewer": "/root/v05_remote",
+  "base_sha": "496c750ebf1a7551dde6a9db5737e8f61eae5133",
+  "head_sha": "14a4f64608134f56022ea6abbe10cb209b11e692",
+  "prior_findings": "/tmp/crew-v05-plugin-review/findings.json",
+  "findings": [
+    {
+      "id": "PLUGIN-R1",
+      "priority": "P2",
+      "status": "CLOSED",
+      "fixed_head_sha": "14a4f64608134f56022ea6abbe10cb209b11e692",
+      "evidence": "/tmp/crew-v05-plugin-review/recheck-14a4f64/independent_repro.json"
+    },
+    {
+      "id": "PLUGIN-R2",
+      "priority": "P2",
+      "status": "CLOSED",
+      "fixed_head_sha": "14a4f64608134f56022ea6abbe10cb209b11e692",
+      "evidence": "/tmp/crew-v05-plugin-review/recheck-14a4f64/independent_repro.json"
+    }
+  ],
+  "new_findings": [],
+  "limits": [
+    "Windows/macOS native NOT_RUN",
+    "No approval of reviewer-authored SSH code"
+  ]
+}

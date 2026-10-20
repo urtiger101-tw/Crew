@@ -4,7 +4,7 @@ use crate::render::{Filter, Frame, pack_chooser, unpack_chooser, visible_entries
 use crate::server::{Client, Prompt, Session, Window};
 use std::sync::{Arc, Mutex};
 
-fn fixture() -> Shared {
+pub(super) fn fixture() -> Shared {
     let mut st = crate::server::test_state();
     let now = Instant::now();
     st.sessions = (1..=3)
@@ -38,14 +38,14 @@ fn fixture() -> Shared {
     Arc::new(Mutex::new(st))
 }
 
-fn request(shared: &Shared, req: Request) -> Value {
+pub(super) fn request(shared: &Shared, req: Request) -> Value {
     let Reply::Json(value) = handle(shared, req).unwrap() else {
         panic!("expected JSON");
     };
     value
 }
 
-fn raw_request(shared: &Shared, value: Value) -> Result<Value, ApiError> {
+pub(super) fn raw_request(shared: &Shared, value: Value) -> Result<Value, ApiError> {
     let req = serde_json::from_value(value).unwrap();
     let Reply::Json(value) = handle(shared, req)? else {
         panic!("expected JSON");
@@ -53,7 +53,7 @@ fn raw_request(shared: &Shared, value: Value) -> Result<Value, ApiError> {
     Ok(value)
 }
 
-fn events(shared: &Shared) -> Value {
+pub(super) fn events(shared: &Shared) -> Value {
     let Reply::Json(value) = crate::events::handle(
         shared,
         crate::events::Request::Read {
@@ -272,7 +272,7 @@ fn move_names_keep_exact_matching_and_background_caller_scope() {
     assert_eq!(reply["tab_id"], "t21");
 }
 
-fn add_client(st: &mut State, id: usize, entry: crate::render::Entry, filter: Filter) {
+pub(super) fn add_client(st: &mut State, id: usize, entry: crate::render::Entry, filter: Filter) {
     let selection = visible_entries(st, filter)
         .iter()
         .position(|&e| e == entry)
