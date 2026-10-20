@@ -56,7 +56,7 @@ crew machine probe [ID|LABEL] [--timeout-ms N] [--json]
 crew machine reconnect ID|LABEL [--timeout-ms N]
 ```
 
-Add normally verifies both remote workspace and agent API responses before
+Add normally verifies a remote snapshot containing workspaces and agents before
 saving the profile. `--no-probe` explicitly saves a profile without connecting;
 use this for an offline machine. Labels default to the SSH destination and must
 be unique. Machine IDs such as `m1` are stable across renames and are never reused
@@ -150,13 +150,19 @@ requests. Offline, disabled and checking rows cannot be attached. If a selected
 workspace disappears, Enter reports that it is unavailable until you select
 another reachable workspace. It does not switch silently to Local.
 
-Enter temporarily leaves the selector and runs native
-`ssh -tt ... crew attach-workspace wN` for a remote workspace, or local
-`crew attach-workspace wN` for a local workspace. The daemon resolves that stable
-ID while registering the attached client, so a rename or reuse of the old name
-cannot redirect input. A removed ID fails; it never selects the newest workspace.
-This separate command and protocol message also fail with older Crew versions
-that do not support ID attachment. Direct `machine attach --workspace NAME`
+Enter temporarily leaves the selector and runs native `ssh -tt` for a remote
+workspace, or the local Crew client for a local workspace. It passes both the
+workspace ID and the daemon epoch from the displayed snapshot. The server checks
+that epoch, resolves the ID, and registers the client under one state lock, so a
+rename, name reuse, or daemon restart cannot redirect the cached selection.
+A removed ID fails. A changed epoch requires a refresh and a new selection,
+even when the restarted daemon reuses the same workspace ID and name.
+
+The guarded attachment uses a separate internal command and protocol tag;
+older clients and daemons reject it instead of ignoring the epoch. A summary
+from an older helper that has no daemon identity remains visible but cannot be
+selected for attachment. Use matching Crew versions on both ends. Direct
+`machine attach --workspace NAME`
 retains the explicit name-based behavior. The native
 SSH client can ask for authentication or host-key confirmation according to its
 configuration. Crew's normal detach key is **Ctrl+B, then d**; detach returns to
@@ -183,16 +189,19 @@ Machine commands and explicit federation list commands currently always emit
 JSON; `--json` makes script intent explicit. `federation watch` requires a TTY.
 
 The `result` object includes `machines`, `complete`, and the requested merged
-`workspaces` and/or `agents` arrays. Every merged resource has `machine_id` and
-`machine_label`. Treat **(machine_id, resource_id)** as its identity: `local/w1`
-and `m1/w1` are different workspaces.
+`workspaces` and/or `agents` arrays. Every merged resource has `machine_id`,
+`machine_label`, and `machine_epoch`. Treat **(machine_id, machine_epoch,
+resource_id)** as a cached resource's identity: `local/w1` and `m1/w1` belong to
+different machines, and a cold restart can reuse `w1` in a different epoch.
 
 Each machine has its own `reachable`, `unavailable`, or `disabled` state. A
 reachable entry includes its summary in `data`; an unavailable entry includes an
 error. Authentication errors, changed host keys, missing Crew binaries, protocol
 mismatches, stopped daemons and transport timeouts remain attached to that
-machine. Both workspace and agent reads must succeed for its summary to be
-reachable.
+machine. Workspace rows, agent rows, and `data.epoch` come from one daemon
+snapshot under one state lock. An older daemon that does not implement this
+snapshot is reported as unavailable; discovery does not fall back to separate
+reads that could combine different daemon lifetimes.
 
 `complete` is false when any enabled machine is unavailable. Disabled machines
 do not make an otherwise complete result incomplete. A federation list exits 0
@@ -211,7 +220,8 @@ python3 scripts/ssh_federation_smoke.py /absolute/path/to/crew --logs /tmp/crew-
 The smoke test requires Linux, Python 3, OpenSSH `ssh`/`sshd`/`ssh-keygen`, PTYs,
 the distribution's standard `/run/sshd` directory, and permission to listen on
 loopback. It creates temporary host and user keys, a pinned known-host entry,
-an isolated SSH config, two actual Crew daemons and an offline profile. It binds
+an isolated SSH config, two actual work servers, a separate daemon-restart
+fixture, and an offline profile. It binds
 only `127.0.0.1`, requires public-key authentication, retains strict host-key and
 SSH strict-mode checks, and never changes an existing account or SSH config.
 
@@ -221,9 +231,13 @@ start, cleanup after an OpenSSH ProxyCommand exits with an inherited pipe, and a
 actual terminal attach/input/detach/refresh cycle. It renames the selected remote
 workspace and reuses its old name before Enter, then verifies that input still
 reaches the original ID. A second selector checks that deleting an ID and reusing
-its name cannot redirect attachment. Terminal settings must be restored in both
-cases. `--logs` preserves results, binary hash, SSH/server logs, the ProxyCommand
-cleanup record and the terminal transcript. Linux prerequisites or failures
+its name cannot redirect attachment while a keeper workspace keeps the same
+daemon alive. A third selector closes its sole workspace, waits for the daemon
+to exit, creates a new daemon with the same ID and name, and requires the stale
+epoch selection to fail. The replacement must have no attached client. Terminal
+settings must be restored in all three cases. `--logs` preserves results, binary
+hash, SSH/server logs, the ProxyCommand cleanup record, `restart-guard.json`,
+and the terminal transcript. Linux prerequisites or failures
 return nonzero. Other platforms return `NOT_RUN` with a nonzero exit; they do not
 masquerade as a pass.
 
