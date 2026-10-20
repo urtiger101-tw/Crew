@@ -61,14 +61,32 @@ def main():
         def print_command(text):
             return "Write-Output '" + text + "'" if WIN else "printf '%s\\n' '" + text + "'"
 
+        counter = root / "startup's counter 中文.txt"
+        startup_values = ['workspace "quoted" 中文 $literal', 'tab "quoted" 中文 $literal']
+
+        def startup_command(text, index):
+            if not WIN:
+                return print_command(text)
+            quote = lambda value: "'" + str(value).replace("'", "''") + "'"
+            # A single native argv must preserve quotes, dollars, Unicode and newlines.
+            return ("$startupValue = " + quote(startup_values[index]) + "\n"
+                    "[IO.File]::AppendAllText(" + quote(counter) + ", $startupValue + [Environment]::NewLine)\n"
+                    + print_command(text))
+
+        def startup_once(count):
+            if WIN:
+                assert counter.read_text(encoding="utf-8").splitlines() == startup_values[:count]
+
         def env_command():
             return "Write-Output ('ENV=' + $env:WORKSPACE_MARKER)" if WIN else "printf 'ENV=%s\\n' \"$WORKSPACE_MARKER\""
 
         try:
-            first = api("workspace", "create", "project.alpha:api", "--cwd", str(cwd), "--env", "WORKSPACE_MARKER=from workspace", "--command", print_command("START_COMMAND_OK"))["workspace"]
+            first = api("workspace", "create", "project.alpha:api", "--cwd", str(cwd), "--env", "WORKSPACE_MARKER=from workspace", "--command", startup_command("START_COMMAND_OK", 0))["workspace"]
             wid = first["workspace_id"]
             initial = first["tabs"][0]
             output(initial["active_pane"], "^START_COMMAND_OK$")
+            startup_once(1)
+            wait_for_shell(initial["active_pane"])
             api("pane", "run", initial["active_pane"], env_command())
             output(initial["active_pane"], "^ENV=from workspace$")
             assert os.path.samefile(first["cwd"], cwd)
@@ -78,7 +96,9 @@ def main():
             assert api("workspace", "current")["workspace"]["workspace_id"] == wid
             api("tab", "create", "side-review", "--workspace", other["workspace_id"])
             assert api("workspace", "current")["workspace"]["workspace_id"] == wid
-            review = api("tab", "create", "review", "--workspace", wid, "--env", "WORKSPACE_MARKER=from tab")["tab"]
+            review = api("tab", "create", "review", "--workspace", wid, "--env", "WORKSPACE_MARKER=from tab", "--command", startup_command("TAB_COMMAND_OK", 1))["tab"]
+            output(review["active_pane"], "^TAB_COMMAND_OK$")
+            startup_once(2)
             assert not review["active"]
             assert api("workspace", "get", wid)["workspace"]["active_tab"] == initial["tab_id"]
             for pane_key in ("CREW_PANE_ID", "TMUXLIKE_PANE_ID"):
@@ -144,6 +164,8 @@ def main():
             wait_for_shell(restored_review["active_pane"])
             api("pane", "run", restored_review["active_pane"], env_command())
             output(restored_review["active_pane"], "^ENV=from tab$")
+            startup_once(2)
+            print("ok startup commands execute once; split and restore do not replay them", flush=True)
             print("ok restart preserves IDs, high-water marks, focus and env", flush=True)
 
             events = api("events", "list", "--limit", "512")["events"]
@@ -167,6 +189,17 @@ def main():
             assert len(tab_ids) == len(set(tab_ids))
             assert any(w["name"] == "renamed.project:中文" for w in migrated)
             print("ok legacy version 1 migration and lifecycle events", flush=True)
+            if WIN:
+                api("server", "stop")
+                wait_off()
+                invalid_config = root / "execution-mode.toml"
+                invalid_config.write_text('persist = false\nshell = "powershell -NoProfile -Command exit"\n', encoding="utf-8")
+                env.update(CREW_SOCKET="crew-startup-mode-" + uuid.uuid4().hex + ".sock",
+                           CREW_CONFIG=str(invalid_config), CREW_STATE=str(root / "execution-mode-state.json"))
+                error("invalid_argument", "workspace", "create", "must-not-exist", "--cwd", str(cwd), "--command", "Write-Output 'not run'")
+                assert api("workspace", "list")["workspaces"] == []
+                assert not any(e["kind"] == "pane.created" for e in api("events", "list")["events"])
+                print("ok conflicting PowerShell execution mode rejected before pane creation", flush=True)
             print("PASS workspace smoke", flush=True)
         except BaseException:
             if log.exists():

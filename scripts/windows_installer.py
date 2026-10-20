@@ -76,6 +76,7 @@ def compiler(logs):
     env["CREW_INNO_DOWNLOAD"] = str(source)
     execute(["powershell", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
              "$ErrorActionPreference='Stop'; "
+             "Import-Module (Join-Path $PSHOME 'Modules\\Microsoft.PowerShell.Security\\Microsoft.PowerShell.Security.psd1') -ErrorAction Stop; "
              "$s=Get-AuthenticodeSignature -LiteralPath $env:CREW_INNO_DOWNLOAD; "
              "if ($s.Status -ne 'Valid' -or $null -eq $s.SignerCertificate -or "
              "$s.SignerCertificate.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName,$false) -ne 'Pyrsys B.V.') "

@@ -9,7 +9,7 @@ mod tests;
 #[cfg(test)]
 mod transfer_tests;
 use crate::api::{ApiError, ApiResult, Reply, lock, pane_id_str, pane_json};
-use crate::server::{Shared, State};
+use crate::server::{Launch, Shared, State};
 pub use cli::parse;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -235,6 +235,103 @@ fn check_command(command: Option<&str>) -> Result<(), ApiError> {
     Ok(())
 }
 
+/// PowerShell must initialize before executing a startup command. Queued ConPTY
+/// text/Enter can otherwise be consumed during PSReadLine initialization.
+fn powershell_startup_shell(
+    shell: &str,
+    command: Option<&str>,
+) -> Result<Option<Vec<String>>, ApiError> {
+    let Some(command) = command else {
+        return Ok(None);
+    };
+    let mut words = crate::commands::tokenize(shell);
+    let executable = words
+        .first()
+        .map(|word| word.rsplit(['/', '\\']).next().unwrap_or(word));
+    if !executable.is_some_and(|word| {
+        ["powershell", "powershell.exe", "pwsh", "pwsh.exe"]
+            .iter()
+            .any(|name| word.eq_ignore_ascii_case(name))
+    }) {
+        return Ok(None);
+    }
+    let pwsh = executable.is_some_and(|word| {
+        word.eq_ignore_ascii_case("pwsh") || word.eq_ignore_ascii_case("pwsh.exe")
+    });
+    let mut value = false;
+    let mut no_exit = false;
+    for word in words.iter().skip(1) {
+        if value {
+            value = false;
+            continue;
+        }
+        let option = word.trim_start_matches(['-', '/']).to_ascii_lowercase();
+        let execution_mode = [
+            "command",
+            "commandwithargs",
+            "encodedcommand",
+            "encodedarguments",
+            "file",
+            "servermode",
+            "sshservermode",
+            "socketservermode",
+            "namedpipeservermode",
+            "v2socketservermode",
+        ]
+        .iter()
+        .any(|name| name.starts_with(&option));
+        let aborts_startup = ["help", "?"].iter().any(|name| name.starts_with(&option))
+            || (pwsh && "version".starts_with(&option));
+        if !word.starts_with(['-', '/'])
+            || option.is_empty()
+            || execution_mode
+            || aborts_startup
+            || ["ec", "ea", "cwa"].contains(&option.as_str())
+        {
+            return Err(ApiError::invalid(
+                "--command requires an interactive PowerShell configuration without an existing command, script or server execution mode",
+            ));
+        }
+        no_exit |= option.len() >= 3 && "noexit".starts_with(&option);
+        let interactive = pwsh && "interactive".starts_with(&option);
+        value = !interactive
+            && ([
+                "executionpolicy",
+                "inputformat",
+                "outputformat",
+                "windowstyle",
+                "workingdirectory",
+                "configurationname",
+                "configurationfile",
+                "settingsfile",
+                "custompipename",
+                "version",
+            ]
+            .iter()
+            .any(|name| name.starts_with(&option))
+                || ["ep", "if", "of", "in", "out", "wd"].contains(&option.as_str()));
+    }
+    if value {
+        return Err(ApiError::invalid(
+            "PowerShell launch option is missing its value",
+        ));
+    }
+    if !no_exit {
+        words.push("-NoExit".into());
+    }
+    words.push("-Command".into());
+    words.push(command.into());
+    Ok(Some(words))
+}
+
+fn startup_shell(st: &State, command: Option<&str>) -> Result<Option<Vec<String>>, ApiError> {
+    if cfg!(windows) {
+        powershell_startup_shell(&st.cfg.default_shell(), command)
+    } else {
+        Ok(None)
+    }
+}
+
 /// Exact names, or stable ids. name:NAME disambiguates legacy names such as w1.
 pub fn workspace_index(st: &State, target: &str) -> Result<usize, ApiError> {
     let found = if let Some(name) = target.strip_prefix("name:") {
@@ -384,7 +481,7 @@ pub fn handle(shared: &Shared, req: Request) -> ApiResult {
             validate_env(&env)?;
             check_command(command.as_deref())?;
             let cwd = checked_cwd(cwd)?;
-            let (reply, pid) = {
+            let (reply, pid, native_startup) = {
                 let mut st = lock(shared);
                 if name.as_ref().is_some_and(|name| st.sidx(name).is_some()) {
                     return Err(ApiError::new(
@@ -398,8 +495,10 @@ pub fn handle(shared: &Shared, req: Request) -> ApiResult {
                     .ok()
                     .map(|si| (st.sessions[si].cols, st.sessions[si].rows))
                     .unwrap_or((120, 30));
+                let shell = startup_shell(&st, command.as_deref())?;
+                let native_startup = shell.is_some();
                 let name = st
-                    .new_workspace(shared, name, size, cwd, env, focus)
+                    .new_workspace(shared, name, size, cwd, Launch { env, shell }, focus)
                     .map_err(|e| ApiError::new("spawn_failed", e.to_string()))?;
                 let si = st
                     .sidx(&name)
@@ -411,9 +510,10 @@ pub fn handle(shared: &Shared, req: Request) -> ApiResult {
                 (
                     json!({"workspace": workspace_json(&st, si)}),
                     st.active_pane(si),
+                    native_startup,
                 )
             };
-            if let Some(command) = command {
+            if !native_startup && let Some(command) = command {
                 crate::api::pane::submit(shared, pid, &command, 30)?;
             }
             Ok(Reply::Json(reply))
@@ -433,7 +533,7 @@ pub fn handle(shared: &Shared, req: Request) -> ApiResult {
             validate_env(&env)?;
             check_command(command.as_deref())?;
             let cwd = checked_cwd(cwd)?;
-            let (reply, pid) = {
+            let (reply, pid, native_startup) = {
                 let mut st = lock(shared);
                 let si = selected_workspace(&st, workspace.as_deref(), current)?;
                 if name
@@ -456,8 +556,10 @@ pub fn handle(shared: &Shared, req: Request) -> ApiResult {
                     ));
                 }
                 let previous = recent_name(&st);
+                let shell = startup_shell(&st, command.as_deref())?;
+                let native_startup = shell.is_some();
                 let tid = st
-                    .new_tab(shared, si, name, cwd, env, focus)
+                    .new_tab(shared, si, name, cwd, Launch { env, shell }, focus)
                     .map_err(|e| ApiError::new("spawn_failed", e.to_string()))?;
                 let wi = st.sessions[si]
                     .windows
@@ -471,9 +573,10 @@ pub fn handle(shared: &Shared, req: Request) -> ApiResult {
                 (
                     json!({"tab": tab_json(&st, si, wi)}),
                     st.sessions[si].windows[wi].active,
+                    native_startup,
                 )
             };
-            if let Some(command) = command {
+            if !native_startup && let Some(command) = command {
                 crate::api::pane::submit(shared, pid, &command, 30)?;
             }
             Ok(Reply::Json(reply))

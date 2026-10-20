@@ -16,6 +16,15 @@ Use the returned IDs instead of guessing numbers. `--command` intentionally exec
 the configured shell; ordinary arguments are never reparsed as a shell command.
 Workspace and tab names are exact; `name:NAME` disambiguates legacy ID-shaped names.
 
+On Windows, a configured `powershell(.exe)` or `pwsh(.exe)` executes a workspace/tab
+startup command through its native `-NoExit -Command` arguments, after shell
+initialization. Quotes, Unicode and multiline text remain one command argument.
+The shell stays available for subsequent input. Configurations already selecting
+a command, script or server execution mode are rejected before creating the pane
+when `--command` is supplied. Other shells retain their existing input submission.
+Startup commands are one-time launch options; splits and cold restore do not
+replay them. Wait for the application's actual readiness before sending more input.
+
 Close the associated workspace before removing its checkout. Remove refuses modified,
 untracked and ignored files and does not delete the branch. A failed terminal launch preserves
 the created worktree and reports its path. Check `git status` and preserve desired files before

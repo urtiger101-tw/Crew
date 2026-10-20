@@ -6,6 +6,110 @@ fn args(items: &[&str]) -> Vec<String> {
 }
 
 #[test]
+fn powershell_startup_preserves_argv_and_literal_command() {
+    let command = "$value = '引號 \" $literal';\nWrite-Output $value";
+    let shell = format!(
+        "{} -NoProfile -ExecutionPolicy RemoteSigned",
+        crate::commands::quote(r"C:\Program Files\PowerShell\7\PWSH.EXE")
+    );
+    let argv = powershell_startup_shell(&shell, Some(command))
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        &argv[..4],
+        &[
+            r"C:\Program Files\PowerShell\7\PWSH.EXE",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "RemoteSigned"
+        ]
+    );
+    assert_eq!(&argv[4..], &["-NoExit", "-Command", command]);
+    let argv = powershell_startup_shell("powershell.exe -NoExit -NoProfile", Some(command))
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        argv.iter().filter(|arg| arg.as_str() == "-NoExit").count(),
+        1
+    );
+}
+
+#[test]
+fn powershell_startup_rejects_existing_execution_modes_and_scripts() {
+    for mode in [
+        "-Command echo old",
+        "-c echo old",
+        "-EncodedCommand AAAA",
+        "-ec AAAA",
+        "-EncodedArguments AAAA",
+        "-File old.ps1",
+        "-f old.ps1",
+        "-CommandWithArgs echo old",
+        "-ServerMode",
+        "-SSHServerMode",
+        "-SocketServerMode",
+        "-so",
+        "-NamedPipeServerMode",
+        "-nam",
+        "-V2SocketServerMode",
+        "-v2so",
+        "-Version",
+        "-v",
+        "-Help",
+        "old.ps1",
+        "-WorkingDirectory",
+    ] {
+        assert!(
+            powershell_startup_shell(&format!("pwsh {mode}"), Some("echo new")).is_err(),
+            "{mode}"
+        );
+    }
+}
+
+#[test]
+fn powershell_startup_accepts_interactive_and_format_aliases() {
+    for options in [
+        "-i",
+        "-in",
+        "-if Text",
+        "-of Text",
+        "-i -if Text -of Text",
+        "-ConfigurationFile 'config with spaces.pssc'",
+    ] {
+        let shell = format!("pwsh -NoProfile {options}");
+        let original = crate::commands::tokenize(&shell);
+        let argv = powershell_startup_shell(&shell, Some("Write-Output 'once'"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(&argv[..original.len()], &original);
+        assert_eq!(
+            &argv[original.len()..],
+            &["-NoExit", "-Command", "Write-Output 'once'"]
+        );
+    }
+}
+
+#[test]
+fn ordinary_shell_launches_do_not_gain_startup_argv() {
+    for shell in [
+        "powershell",
+        "pwsh -NoProfile",
+        "cmd.exe",
+        "/bin/sh",
+        "fake-powershell.exe",
+    ] {
+        assert!(powershell_startup_shell(shell, None).unwrap().is_none());
+    }
+    for shell in ["cmd.exe", "/bin/sh", "fake-powershell.exe"] {
+        assert!(
+            powershell_startup_shell(shell, Some("echo new"))
+                .unwrap()
+                .is_none()
+        );
+    }
+}
+
+#[test]
 fn create_keeps_commands_environment_and_no_focus_default() {
     let r = parse(
         "workspace",

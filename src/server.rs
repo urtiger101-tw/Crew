@@ -16,6 +16,13 @@ use std::io::{Read, Write};
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
+/// One-shot process launch options; never persisted or inherited by split panes.
+#[derive(Default)]
+pub(crate) struct Launch {
+    pub env: BTreeMap<String, String>,
+    pub shell: Option<Vec<String>>,
+}
+
 pub struct Pane {
     pub parser: vt100::Parser,
     pub master: Box<dyn MasterPty + Send>,
@@ -474,6 +481,18 @@ impl State {
         cwd: Option<&str>,
         env: &BTreeMap<String, String>,
     ) -> Result<usize> {
+        self.spawn_pane_with_shell(shared, rows, cols, cwd, env, None)
+    }
+
+    fn spawn_pane_with_shell(
+        &mut self,
+        shared: &Shared,
+        rows: u16,
+        cols: u16,
+        cwd: Option<&str>,
+        env: &BTreeMap<String, String>,
+        startup_shell: Option<&[String]>,
+    ) -> Result<usize> {
         let id = self.id();
         let pty = native_pty_system();
         let size = PtySize {
@@ -485,6 +504,7 @@ impl State {
         let pair = pty.openpty(size).map_err(|e| anyhow!("{e}"))?;
         let shell = self.cfg.default_shell();
         let words = commands::tokenize(&shell);
+        let words = startup_shell.unwrap_or(&words);
         let mut cmd = CommandBuilder::new(words.first().map(|s| s.as_str()).unwrap_or("sh"));
         for a in words.iter().skip(1) {
             cmd.arg(a);
@@ -631,7 +651,7 @@ impl State {
         rows: u16,
         cwd: Option<String>,
     ) -> Result<String> {
-        self.new_workspace(shared, name, (cols, rows), cwd, BTreeMap::new(), true)
+        self.new_workspace(shared, name, (cols, rows), cwd, Launch::default(), true)
     }
 
     pub(crate) fn allocate_workspace_id(&mut self) -> Result<usize> {
@@ -656,9 +676,10 @@ impl State {
         name: Option<String>,
         size: (u16, u16),
         cwd: Option<String>,
-        env: BTreeMap<String, String>,
+        launch: Launch,
         focus: bool,
     ) -> Result<String> {
+        let Launch { env, shell } = launch;
         let name = match name {
             Some(n) => {
                 if self.sidx(&n).is_some() {
@@ -687,7 +708,17 @@ impl State {
             last_used: Instant::now(),
         });
         let si = self.sessions.len() - 1;
-        if let Err(e) = self.new_window(shared, si, None) {
+        if let Err(e) = self.new_tab(
+            shared,
+            si,
+            None,
+            None,
+            Launch {
+                shell,
+                ..Launch::default()
+            },
+            true,
+        ) {
             self.sessions.pop();
             return Err(e);
         }
@@ -710,7 +741,7 @@ impl State {
         si: usize,
         name: Option<String>,
     ) -> Result<()> {
-        self.new_tab(shared, si, name, None, BTreeMap::new(), true)
+        self.new_tab(shared, si, name, None, Launch::default(), true)
             .map(|_| ())
     }
 
@@ -721,17 +752,24 @@ impl State {
         si: usize,
         name: Option<String>,
         cwd: Option<String>,
-        overrides: BTreeMap<String, String>,
+        launch: Launch,
         focus: bool,
     ) -> Result<usize> {
         let area = self.pane_area(&self.sessions[si]);
         let cwd = cwd.or_else(|| self.sessions[si].cwd.clone());
-        let env = crate::workspace::merged_env(&self.sessions[si].env, overrides);
+        let env = crate::workspace::merged_env(&self.sessions[si].env, launch.env);
         let tid = self.allocate_tab_id()?;
-        let id = if env.is_empty() {
+        let id = if env.is_empty() && launch.shell.is_none() {
             self.spawn_pane(shared, area.h, area.w, cwd.as_deref())?
         } else {
-            self.spawn_pane_with_env(shared, area.h, area.w, cwd.as_deref(), &env)?
+            self.spawn_pane_with_shell(
+                shared,
+                area.h,
+                area.w,
+                cwd.as_deref(),
+                &env,
+                launch.shell.as_deref(),
+            )?
         };
         let manual = name.is_some();
         let name = name.unwrap_or_else(|| self.shell_name());

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — Windows native acceptance
+
+- Run PowerShell/pwsh workspace and tab startup commands through one-time native
+  shell arguments, avoiding the ConPTY initialization/input race. Keep the shell
+  interactive and preserve cwd/env; split and cold restore do not replay commands.
+- Load signature verification from Windows PowerShell's own security module so
+  an inherited PowerShell 7 module path cannot break pinned Inno preparation.
+
 ## 0.5.0 — Presentation, federation and local validation
 
 - Add source-scoped pane/workspace presentation, literal token templates, guards,
