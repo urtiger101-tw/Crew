@@ -73,6 +73,7 @@ struct PaneView {
     pid: usize,
     status: Status,
     name: String,
+    state_label: Option<String>,
     /// agent message, only for a blocked pane
     message: Option<String>,
     focused: bool,
@@ -100,15 +101,17 @@ pub fn sidebar_rows_lang(
     height: u16,
     lang: Lang,
 ) -> Vec<SidebarRow> {
-    let groups = group_views(st, s);
+    let groups = group_views(st, s, lang);
     layout_rows(&groups, any_agent(st), st.cfg.hints, width, height, lang)
 }
 
 fn any_agent(st: &State) -> bool {
-    st.panes.values().any(|p| p.agent.is_some())
+    st.panes
+        .values()
+        .any(|p| p.agent.is_some() || p.detected_agent.is_some())
 }
 
-fn group_views(st: &State, s: &Session) -> Vec<GroupView> {
+fn group_views(st: &State, s: &Session, lang: Lang) -> Vec<GroupView> {
     st.sessions
         .iter()
         .enumerate()
@@ -116,15 +119,15 @@ fn group_views(st: &State, s: &Session) -> Vec<GroupView> {
             let open = sess.name == s.name;
             GroupView {
                 si,
-                name: sess.name.clone(),
+                name: crate::metadata::display::workspace(st, si).sidebar,
                 open,
-                panes: pane_views(st, sess, open),
+                panes: pane_views(st, sess, open, lang),
             }
         })
         .collect()
 }
 
-fn pane_views(st: &State, sess: &Session, open: bool) -> Vec<PaneView> {
+fn pane_views(st: &State, sess: &Session, open: bool, lang: Lang) -> Vec<PaneView> {
     let mut v = vec![];
     for (wi, wnd) in sess.windows.iter().enumerate() {
         for pid in wnd.panes() {
@@ -133,6 +136,7 @@ fn pane_views(st: &State, sess: &Session, open: bool) -> Vec<PaneView> {
             };
             let agent = p.agent.as_ref();
             let status = agent_status(p, &st.cfg);
+            let display = crate::metadata::display::pane(st, pid, lang);
             let name = agent
                 .and_then(|a| non_empty(a.name.as_deref()).or(non_empty(Some(a.agent.as_str()))))
                 .or(non_empty(p.label.as_deref()))
@@ -146,7 +150,10 @@ fn pane_views(st: &State, sess: &Session, open: bool) -> Vec<PaneView> {
             v.push(PaneView {
                 pid,
                 status,
-                name: clean(name),
+                name: display
+                    .as_ref()
+                    .map_or_else(|| clean(name), |d| d.sidebar.clone()),
+                state_label: display.map(|d| d.state_label),
                 message,
                 focused: open && wi == sess.active && pid == wnd.active,
             });
@@ -569,7 +576,7 @@ pub(super) fn draw_sidebar(g: &mut Grid, cx: &Ctx) {
         );
     }
     let tw = sidebar_text_width(st, s);
-    let groups = group_views(st, s);
+    let groups = group_views(st, s, cx.lang);
     let lane = Lane {
         t,
         tx: sx + TEXT_INSET,
@@ -696,7 +703,10 @@ fn draw_closed(g: &mut Grid, l: &Lane, y: u16, gr: &GroupView) {
 fn draw_pane(g: &mut Grid, l: &Lane, y: u16, p: &PaneView) {
     let t = l.t;
     let (glyph, color, _) = t.status(p.status);
-    let word = status_word(l.lang, p.status);
+    let word = p
+        .state_label
+        .as_deref()
+        .unwrap_or_else(|| status_word(l.lang, p.status));
     let (ptr, ptr_attr) = if p.focused {
         (t.g.pointer, BOLD)
     } else {

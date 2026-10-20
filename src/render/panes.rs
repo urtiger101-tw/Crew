@@ -197,6 +197,9 @@ fn draw_titles(g: &mut Grid, cx: &Ctx, covered: &mut [bool]) {
         let (glyph, _, _) = theme.status(state);
         let word = status_word(cx.lang, state);
         let name = title_name(p.agent.as_ref(), p.label.as_deref(), cx.lang);
+        let display = crate::metadata::display::pane(cx.st, pid, cx.lang);
+        let word = display.as_ref().map_or(word, |d| d.state_label.as_str());
+        let name = display.as_ref().map_or(name, |d| d.title.as_str());
         let left = title_left(theme, glyph, name, word);
         let right = format!("{} ", pane_id_str(pid));
         let (left, right) = fit_title(&left, &right, r.w, theme.g.ellipsis);
