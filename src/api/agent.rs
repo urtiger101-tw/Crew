@@ -362,7 +362,7 @@ fn release_agent(
     Ok(json!({"released": true}))
 }
 
-fn agent_list(st: &State) -> Value {
+pub(super) fn agent_list(st: &State) -> Value {
     let mut agents = Vec::new();
     for pid in st
         .sessions

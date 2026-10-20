@@ -103,6 +103,8 @@ pub enum Request {
     Events(crate::events::Request),
     Metadata(Box<crate::metadata::Request>),
     ApiSnapshot,
+    /// Internal federation view: resource IDs and daemon identity share one lock.
+    FederationSnapshot,
     SessionList,
     ServerStop,
     PaneList {
@@ -360,6 +362,17 @@ pub fn handle(shared: &Shared, req: Request) -> ApiResult {
         Request::Worktree(req) => crate::worktree::handle(shared, req),
         Request::Events(req) => crate::events::handle(shared, req),
         Request::Metadata(req) => crate::metadata::handle(shared, *req),
+        Request::FederationSnapshot => {
+            let st = lock(shared);
+            let workspaces: Vec<_> = (0..st.sessions.len())
+                .map(|si| crate::workspace::workspace_json(&st, si))
+                .collect();
+            let agents = agent::agent_list(&st);
+            Ok(Reply::Json(json!({
+                "epoch": st.events.epoch(), "workspaces": workspaces,
+                "agents": agents["agents"], "version": env!("CARGO_PKG_VERSION"),
+            })))
+        }
         Request::ServerStop => {
             // keep persisted state so the next server start restores the layout;
             // the connection handler exits the process after sending this reply
@@ -386,6 +399,46 @@ pub fn handle(shared: &Shared, req: Request) -> ApiResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn federation_snapshot_carries_daemon_epoch_with_its_workspace_rows() {
+        let mut state = crate::server::test_state();
+        state.sessions.push(crate::server::Session {
+            id: 1,
+            name: "first".into(),
+            windows: vec![],
+            active: 0,
+            cols: 80,
+            rows: 24,
+            sidebar: false,
+            cwd: None,
+            env: Default::default(),
+            last_used: std::time::Instant::now(),
+        });
+        let epoch = state.events.epoch().to_owned();
+        let shared = std::sync::Arc::new(std::sync::Mutex::new(state));
+        let Reply::Json(first) = handle(&shared, Request::FederationSnapshot).unwrap() else {
+            panic!("expected a JSON snapshot");
+        };
+        assert_eq!(first["epoch"], epoch);
+        assert_eq!(first["workspaces"][0]["workspace_id"], "w1");
+        assert_eq!(first["workspaces"][0]["name"], "first");
+        assert_eq!(first["agents"], json!([]));
+        {
+            let mut st = lock(&shared);
+            st.events = crate::events::Journal::default();
+            st.sessions[0].name = "replacement".into();
+        }
+        let Reply::Json(second) = handle(&shared, Request::FederationSnapshot).unwrap() else {
+            panic!("expected a JSON snapshot");
+        };
+        assert_ne!(second["epoch"], first["epoch"]);
+        assert_eq!(second["epoch"], lock(&shared).events.epoch());
+        assert_eq!(second["workspaces"][0]["workspace_id"], "w1");
+        assert_eq!(second["workspaces"][0]["name"], "replacement");
+        assert_eq!(first["workspaces"][0]["name"], "first");
+    }
+
     #[test]
     fn pane_ids() {
         assert_eq!(parse_pane_id("p42"), Some(42));
