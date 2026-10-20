@@ -55,7 +55,7 @@ Source: "{#PayloadDir}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\manifest.json"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\Crew"; Filename: "{app}\crew.exe"; WorkingDir: "{userprofile}"
+Name: "{group}\Crew"; Filename: "{app}\crew.exe"; WorkingDir: "{%USERPROFILE}"
 
 [Code]
 const
