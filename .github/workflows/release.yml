@@ -1,33 +1,176 @@
 name: Release
 on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag matching Cargo.toml (run from main after CI succeeds)'
+        required: true
+        default: v0.3.0
+        type: string
   push:
-    tags: ['v*']
+    tags: ['v[0-9]*']
+
 permissions:
-  contents: write
+  contents: read
+  actions: read
+
+concurrency:
+  group: crew-release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  PYTHONUTF8: '1'
+  RUST_BACKTRACE: '1'
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
+  verify:
+    name: Verify source and CI
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      sha: ${{ steps.verify.outputs.sha }}
+      tag: ${{ steps.verify.outputs.tag }}
+      ci_run_id: ${{ steps.verify.outputs.ci_run_id }}
+      ci_attempt: ${{ steps.verify.outputs.ci_attempt }}
+    steps:
+      - name: Repository guard
+        run: test "$GITHUB_REPOSITORY" = 'urtiger101-tw/Crew'
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Python
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: '3.12'
+      - name: Verify immutable source, version and required CI jobs
+        id: verify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: python scripts/package_release.py verify-source --tag "$RELEASE_TAG" --github-output "$GITHUB_OUTPUT"
+
   build:
+    name: Package ${{ matrix.target }}
+    needs: [verify]
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu, ext: '' }
-          - { os: windows-latest, target: x86_64-pc-windows-msvc, ext: '.exe' }
-          - { os: macos-latest, target: aarch64-apple-darwin, ext: '' }
-          - { os: macos-latest, target: x86_64-apple-darwin, ext: '' }
-    runs-on: ${{ matrix.os }}
+          - { runner: ubuntu-24.04, target: x86_64-unknown-linux-gnu, ext: '' }
+          - { runner: windows-2025, target: x86_64-pc-windows-msvc, ext: '.exe' }
+          - { runner: macos-15, target: aarch64-apple-darwin, ext: '' }
+          - { runner: macos-15-intel, target: x86_64-apple-darwin, ext: '' }
+    runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Checkout verified source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          targets: ${{ matrix.target }}
-      - run: cargo build --release --target ${{ matrix.target }}
+          ref: ${{ needs.verify.outputs.sha }}
+          persist-credentials: false
+      - name: Python
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: '3.12'
+      - name: Rust toolchain
+        run: rustup toolchain install 1.96.1 --profile minimal --target ${{ matrix.target }}
+      - name: Build both executables
+        run: cargo build --locked --release --bins --target ${{ matrix.target }}
+      - name: Native PTY smoke
+        timeout-minutes: 5
+        run: python scripts/smoke.py target/${{ matrix.target }}/release/crew${{ matrix.ext }}
+      - name: Native automation API smoke
+        timeout-minutes: 8
+        run: python scripts/api_smoke.py target/${{ matrix.target }}/release/crew${{ matrix.ext }}
+      - name: Native workspace smoke
+        timeout-minutes: 5
+        run: python scripts/workspace_smoke.py target/${{ matrix.target }}/release/crew${{ matrix.ext }}
+      - name: Native worktree smoke
+        timeout-minutes: 5
+        run: python scripts/worktree_smoke.py target/${{ matrix.target }}/release/crew${{ matrix.ext }}
+      - name: Native agent smoke
+        timeout-minutes: 5
+        run: python scripts/agent_identity_smoke.py target/${{ matrix.target }}/release/crew${{ matrix.ext }}
+      - name: Native bridge and events smoke
+        timeout-minutes: 5
+        run: python scripts/bridge_events_smoke.py target/${{ matrix.target }}/release/crew${{ matrix.ext }}
       - name: Package
-        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.verify.outputs.tag }}
+          SOURCE_SHA: ${{ needs.verify.outputs.sha }}
+          CI_RUN_ID: ${{ needs.verify.outputs.ci_run_id }}
+          CI_ATTEMPT: ${{ needs.verify.outputs.ci_attempt }}
         run: |
-          name=tmuxlike-${GITHUB_REF_NAME}-${{ matrix.target }}
-          mkdir $name
-          cp target/${{ matrix.target }}/release/tmuxlike${{ matrix.ext }} README.md LICENSE $name/
-          if [ "${{ runner.os }}" = "Windows" ]; then 7z a $name.zip $name; else tar czf $name.tar.gz $name; fi
-      - uses: softprops/action-gh-release@v2
+          python scripts/package_release.py package --target '${{ matrix.target }}' \
+            --tag "$RELEASE_TAG" --sha "$SOURCE_SHA" \
+            --ci-run-id "$CI_RUN_ID" --ci-attempt "$CI_ATTEMPT"
+      - name: Upload completed package
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          files: tmuxlike-*.*
+          name: release-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish complete release
+    needs: [verify, build]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Require source verification and every package
+        env:
+          VERIFY_RESULT: ${{ needs.verify.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+        run: |
+          test "$GITHUB_REPOSITORY" = 'urtiger101-tw/Crew'
+          test "$VERIFY_RESULT" = success
+          test "$BUILD_RESULT" = success
+      - name: Checkout verified source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.verify.outputs.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Python
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: '3.12'
+      - name: Download every package
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: release-*
+          path: artifacts
+          merge-multiple: true
+      - name: Validate all packages and write release manifest
+        env:
+          RELEASE_TAG: ${{ needs.verify.outputs.tag }}
+          SOURCE_SHA: ${{ needs.verify.outputs.sha }}
+          CI_RUN_ID: ${{ needs.verify.outputs.ci_run_id }}
+          CI_ATTEMPT: ${{ needs.verify.outputs.ci_attempt }}
+        run: |
+          python scripts/package_release.py aggregate --input artifacts --output release \
+            --tag "$RELEASE_TAG" --sha "$SOURCE_SHA" \
+            --ci-run-id "$CI_RUN_ID" --ci-attempt "$CI_ATTEMPT"
+      - name: Recheck source and publish one complete release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.verify.outputs.tag }}
+          SOURCE_SHA: ${{ needs.verify.outputs.sha }}
+          CI_RUN_ID: ${{ needs.verify.outputs.ci_run_id }}
+          CI_ATTEMPT: ${{ needs.verify.outputs.ci_attempt }}
+        run: |
+          python scripts/package_release.py publish --input release \
+            --tag "$RELEASE_TAG" --sha "$SOURCE_SHA" \
+            --ci-run-id "$CI_RUN_ID" --ci-attempt "$CI_ATTEMPT"
