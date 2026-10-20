@@ -124,6 +124,9 @@ pub fn parse(
             "--no-focus",
         ]);
     }
+    if sub == "move" {
+        allowed.push("--index");
+    }
     let mut a = scan(args, &allowed)?;
     let scope = a.values.remove("--workspace");
     let req = match sub {
@@ -211,6 +214,31 @@ pub fn parse(
                 }
             }
         }
+        "move" => {
+            count(&a, 1, 1, &format!("{group} move ID|NAME --index N"))?;
+            let raw = a
+                .values
+                .remove("--index")
+                .ok_or("move requires --index N")?;
+            if raw.is_empty() || !raw.bytes().all(|b| b.is_ascii_digit()) {
+                return Err("--index must be a nonnegative integer".into());
+            }
+            let insert_index = raw.parse::<usize>().map_err(|_| "--index is too large")?;
+            let target = a.positional.remove(0);
+            if workspace {
+                Request::WorkspaceMove {
+                    workspace: target,
+                    insert_index,
+                }
+            } else {
+                Request::TabMove {
+                    tab: target,
+                    workspace: scope,
+                    insert_index,
+                    current,
+                }
+            }
+        }
         "focus" | "close" => {
             count(&a, 1, 1, &format!("{group} {sub} ID|NAME"))?;
             let target = a.positional.remove(0);
@@ -231,7 +259,7 @@ pub fn parse(
         }
         _ => {
             return Err(format!(
-                "unknown {group} subcommand: {sub}; expected list|get|current|create|rename|focus|close"
+                "unknown {group} subcommand: {sub}; expected list|get|current|create|rename|move|focus|close"
             ));
         }
     };

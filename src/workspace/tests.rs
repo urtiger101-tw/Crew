@@ -150,3 +150,69 @@ fn windows_env_override_replaces_inherited_key_regardless_of_case() {
     assert_eq!(windows["PATH"], "new");
     assert_eq!(merge_env_for(&base, overrides, false).len(), 2);
 }
+
+#[test]
+fn move_parser_uses_insertion_slots_and_keeps_caller_scope() {
+    let workspace = parse(
+        "workspace",
+        "move",
+        &args(&["project.中文:api", "--index=3"]),
+        Some(12),
+    )
+    .unwrap();
+    assert_eq!(
+        serde_json::to_value(workspace).unwrap(),
+        json!({"Workspace": {"WorkspaceMove": {
+            "workspace": "project.中文:api", "insert_index": 3,
+        }}})
+    );
+    let tab = parse(
+        "tab",
+        "move",
+        &args(&["t7", "--index", "0", "--workspace", "w2"]),
+        Some(12),
+    )
+    .unwrap();
+    assert_eq!(
+        serde_json::to_value(tab).unwrap(),
+        json!({"Workspace": {"TabMove": {
+            "tab": "t7", "insert_index": 0, "workspace": "w2", "current": 12,
+        }}})
+    );
+}
+
+#[test]
+fn move_parser_rejects_missing_negative_overflow_and_extra_arguments() {
+    for group in ["workspace", "tab"] {
+        for bad in [
+            vec![],
+            vec!["target"],
+            vec!["target", "--index"],
+            vec!["--index", "0"],
+            vec!["target", "extra", "--index", "0"],
+            vec!["target", "--index", "-1"],
+            vec!["target", "--index", "+1"],
+            vec!["target", "--index", "1.0"],
+            vec!["target", "--index", "１"],
+            vec!["target", "--index", "184467440737095516160"],
+            vec!["target", "--index=0", "--index=1"],
+            vec!["target", "--index=0", "--focus"],
+            vec!["target", "--index=0", "--cwd", "."],
+        ] {
+            assert!(
+                parse(group, "move", &args(&bad), None).is_err(),
+                "{group} {bad:?}"
+            );
+        }
+    }
+    assert!(
+        parse(
+            "workspace",
+            "move",
+            &args(&["w1", "--index=0", "--workspace=w2"]),
+            None
+        )
+        .is_err()
+    );
+    assert!(parse("workspace", "list", &args(&["--index=0"]), None).is_err());
+}
