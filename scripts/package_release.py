@@ -552,6 +552,38 @@ class ReleaseChecks(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     validate_ci_jobs(changed)
 
+    def test_compiler_version_uses_engine_and_rejects_invalid_results(self):
+        import windows_installer as installer
+        # Mock subprocess results only: no PowerShell/compiler is run on Linux.
+        # The exact upstream launcher's resource is 0.0.0.0; its engine is 7.1.0.
+        metadata = "ISCC launcher FileVersion=0.0.0.0; ProductVersion=0.0.0.0\n"
+        cases = [("7.1.0\r\n", 0, True), ("0.0.0.0", 0, False), ("7.0.0", 0, False),
+                 ("7.1.1", 0, False), ("7.1.0-beta", 0, False), ("", 0, False),
+                 ("banner\n7.1.0", 0, False), ("7.1.0", 1, False)]
+        for observed, exit_code, success in cases:
+            with self.subTest(observed=observed, exit_code=exit_code), tempfile.TemporaryDirectory(prefix="crew-inno-version-") as temporary:
+                logs = Path(temporary)
+                binary = logs / "compiler space" / "ISCC.exe"
+                results = [subprocess.CompletedProcess([], 0, metadata, ""),
+                           subprocess.CompletedProcess([], exit_code, observed, "engine load failed" if exit_code else "")]
+                stdout = io.StringIO()
+                with mock.patch.object(installer.subprocess, "run", side_effect=results) as run_mock, mock.patch("sys.stdout", stdout):
+                    if success:
+                        installer.verify_compiler_version(binary, logs)
+                    else:
+                        with self.assertRaises(ValueError) as failure:
+                            installer.verify_compiler_version(binary, logs)
+                        if exit_code == 0:
+                            self.assertIn("observed " + repr(observed), str(failure.exception))
+                            self.assertIn("expected '7.1.0'", str(failure.exception))
+                self.assertEqual(run_mock.call_count, 2)
+                self.assertEqual(run_mock.call_args_list[1].args[0], [str(binary), "--version"])
+                self.assertEqual((logs / "inno-version.log").read_text(), metadata)
+                self.assertIn(observed.replace("\r\n", "\n"), (logs / "inno-engine-version.log").read_text())
+                self.assertIn("FileVersion=0.0.0.0", stdout.getvalue())
+                if exit_code == 0:
+                    self.assertIn("expected '7.1.0'", stdout.getvalue())
+
     def test_pe_imports_reject_dynamic_crt_and_delay_imports(self):
         import struct
         self.assertEqual(require_static_crt(self.fixture_pe()), ["kernel32.dll"])

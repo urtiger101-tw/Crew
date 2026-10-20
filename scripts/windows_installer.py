@@ -50,6 +50,23 @@ def download(record, destination):
     return destination
 
 
+def verify_compiler_version(iscc, logs):
+    # ISCC's PE resource describes the launcher, not the compiler engine.
+    # Official is-7_1_0 Projects/ISCC.dpr implements --version by loading
+    # ISCmplr.dll and printing ISDllGetVersion().Version (Shared.Struct.SetupVersion).
+    env = dict(os.environ, CREW_ISCC=str(iscc))
+    metadata = execute(["powershell", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
+                        "$ErrorActionPreference='Stop'; $v=(Get-Item -LiteralPath $env:CREW_ISCC).VersionInfo; "
+                        "Write-Output ('ISCC launcher FileVersion={0}; ProductVersion={1}' -f $v.FileVersion,$v.ProductVersion)"],
+                       env=env, log=logs / "inno-version.log")
+    print(metadata, flush=True)
+    observed = execute([iscc, "--version"], log=logs / "inno-engine-version.log")
+    expected = INNO["version"]
+    diagnostic = f"Inno Setup compiler engine version: observed {observed!r}; expected {expected!r}"
+    print(diagnostic, flush=True)
+    require(observed == expected, diagnostic)
+
+
 def compiler(logs):
     require(sys.platform == "win32", "Inno Setup compilation requires native Windows")
     home = Path(os.environ.get("RUNNER_TEMP", tempfile.gettempdir())) / "crew-inno-7.1.0"
@@ -72,12 +89,7 @@ def compiler(logs):
                  "/CURRENTUSER", "/PORTABLE=1", "/NOICONS", "/TASKS=",
                  "/DIR=" + str(directory), "/LOG=" + str(logs / "inno-extract.log")])
     require(iscc.is_file() and not iscc.is_symlink(), "pinned Inno Setup compiler was not extracted")
-    env["CREW_ISCC"] = str(iscc)
-    execute(["powershell", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
-             "$ErrorActionPreference='Stop'; $v=(Get-Item -LiteralPath $env:CREW_ISCC).VersionInfo; "
-             "if ($v.FileMajorPart -ne 7 -or $v.FileMinorPart -ne 1 -or $v.FileBuildPart -ne 0) "
-             "{ throw 'Unexpected Inno Setup compiler version' }; Write-Output $v.FileVersion"],
-            env=env, log=logs / "inno-version.log")
+    verify_compiler_version(iscc, logs)
     return iscc
 
 
