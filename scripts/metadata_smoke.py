@@ -9,9 +9,10 @@ import os
 from pathlib import Path
 import subprocess
 import sys
-import tempfile
 import time
 import uuid
+
+from smoke_temp import SmokeDirectory
 
 WIN = os.name == "nt"
 EXE = str(Path(sys.argv[1] if len(sys.argv) > 1 else
@@ -19,7 +20,7 @@ EXE = str(Path(sys.argv[1] if len(sys.argv) > 1 else
 
 
 def main():
-    with tempfile.TemporaryDirectory(prefix="crew-metadata-") as tmp:
+    with SmokeDirectory(prefix="crew-metadata-") as tmp:
         root = Path(tmp)
         config = root / "config.toml"
         config.write_text('persist = true\nautomatic_rename = false\nshell = ' +
@@ -170,7 +171,6 @@ def main():
             assert all(p["tokens"] == {} for t in restored["tabs"] for p in t["panes"])
             assert report("workspace", wid, "--token", "fresh=ok", "--seq", "0")["accepted"]
             print("ok cold restart preserves workspace layout and clears tokens/sequence state", flush=True)
-            print("PASS metadata smoke", flush=True)
         except BaseException:
             if log.exists():
                 print(log.read_text(encoding="utf-8", errors="replace")[-5000:], file=sys.stderr)
@@ -182,6 +182,8 @@ def main():
                     process.wait(timeout=5)
             subprocess.run([EXE, "kill-server"], env=env, capture_output=True, timeout=15)
             wait_off()
+
+    print("PASS metadata smoke", flush=True)
 
 
 if __name__ == "__main__":

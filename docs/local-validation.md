@@ -78,6 +78,11 @@ Zero-exit smoke output that explicitly starts a line with a skip marker is also
 rejected. A failed build prevents smoke tests from accidentally using stale
 binaries; their entries remain `NOT_RUN`.
 
+The metadata and live-tab-transfer smokes wait up to five seconds when Windows
+still holds their own temporary directory after IPC shutdown (`WinError 32`).
+Other cleanup errors and handles that outlive the deadline remain failures. Their
+final PASS is printed only after cleanup completes; functional tests are not replayed.
+
 | Native target | Additional required check | Explicitly unexecuted coverage |
 | --- | --- | --- |
 | Linux x86_64 GNU | Real loopback SSH federation smoke | Windows Inno build and all 14 installer lifecycle checks; Windows and macOS execution |

@@ -411,5 +411,76 @@ class LocalChecks(unittest.TestCase):
             download.assert_not_called()
 
 
+if os.name == "nt":
+    class WindowsTempCleanupTests(unittest.TestCase):
+        def test_native_current_directory_lock_is_released_before_cleanup_passes(self):
+            from smoke_temp import SmokeDirectory
+            process = None
+            try:
+                with SmokeDirectory(prefix="crew-cleanup-native-") as directory:
+                    env = dict(os.environ, CREW_TEST_CWD=directory)
+                    process = subprocess.Popen([
+                        "powershell", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
+                        "[Environment]::CurrentDirectory=$env:CREW_TEST_CWD; "
+                        "[Console]::WriteLine('ready'); [Threading.Thread]::Sleep(500)"],
+                        cwd=directory, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                        text=True, encoding="utf-8")
+                    self.assertEqual(process.stdout.readline().strip(), "ready")
+                    self.assertIsNone(process.poll())
+                self.assertFalse(Path(directory).exists())
+                self.assertEqual(process.wait(timeout=5), 0)
+            finally:
+                if process is not None:
+                    if process.poll() is None:
+                        process.kill()
+                    process.communicate(timeout=5)
+
+        def test_other_permission_errors_are_not_retried(self):
+            from smoke_temp import SmokeDirectory
+            temporary = SmokeDirectory(prefix="crew-cleanup-error-")
+            error = PermissionError("fixture access denied")
+            error.winerror = 5
+            try:
+                with mock.patch.object(tempfile.TemporaryDirectory, "cleanup", side_effect=error) as cleanup, \
+                     mock.patch("smoke_temp.time.sleep") as sleep:
+                    with self.assertRaises(PermissionError) as caught:
+                        temporary.cleanup()
+                    self.assertIs(caught.exception, error)
+                    cleanup.assert_called_once()
+                    sleep.assert_not_called()
+            finally:
+                temporary.cleanup()
+
+        def test_sharing_violation_still_fails_at_deadline(self):
+            from smoke_temp import SmokeDirectory
+            temporary = SmokeDirectory(prefix="crew-cleanup-timeout-")
+            error = PermissionError("fixture sharing violation")
+            error.winerror = 32
+            try:
+                with mock.patch.object(tempfile.TemporaryDirectory, "cleanup", side_effect=error), \
+                     mock.patch("smoke_temp.time.monotonic", side_effect=[0, 6]), \
+                     mock.patch("smoke_temp.time.sleep") as sleep:
+                    with self.assertRaises(PermissionError) as caught:
+                        temporary.cleanup()
+                    self.assertIs(caught.exception, error)
+                    sleep.assert_not_called()
+            finally:
+                temporary.cleanup()
+
+        def test_cleanup_refuses_a_replaced_parent_target(self):
+            from smoke_temp import SmokeDirectory
+            temporary = SmokeDirectory(prefix="crew-cleanup-target-")
+            original = temporary.name
+            try:
+                temporary.name = str(Path(original).parent)
+                with mock.patch.object(tempfile.TemporaryDirectory, "cleanup") as cleanup:
+                    with self.assertRaisesRegex(ValueError, "escaped"):
+                        temporary.cleanup()
+                    cleanup.assert_not_called()
+            finally:
+                temporary.name = original
+                temporary.cleanup()
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

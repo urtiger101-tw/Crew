@@ -37,3 +37,12 @@ Independent review identified interactive/format aliases and additional server
 modes. Regression cases first failed on the initial candidate, then guided the
 correction. PowerShell host behavior was checked against the local executable
 and the matching [PowerShell 7.6.5 parameter parser](https://github.com/PowerShell/PowerShell/blob/v7.6.5/src/Microsoft.PowerShell.ConsoleHost/host/msh/CommandLineParameterParser.cs).
+
+The next native run exposed transient Windows directory locks at metadata and
+tab-transfer fixture teardown. Shared cleanup is bounded to five seconds, retries
+only WinError 32 on the exact test-owned directory, and still fails on timeout or
+other errors. The product daemon shutdown behavior is unchanged. Inno compilation
+and initial install checks ran successfully; the legacy compatibility executable
+was denied by Windows App Control. That operation must not be retried without a
+new approved execution environment or a relevant policy decision. The full gate
+and Herdr feature implementation remain blocked until that prerequisite is met.

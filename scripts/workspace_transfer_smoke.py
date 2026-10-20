@@ -9,9 +9,10 @@ import os
 from pathlib import Path
 import subprocess
 import sys
-import tempfile
 import time
 import uuid
+
+from smoke_temp import SmokeDirectory
 
 WIN = os.name == "nt"
 EXE = str(Path(sys.argv[1] if len(sys.argv) > 1 else
@@ -19,7 +20,7 @@ EXE = str(Path(sys.argv[1] if len(sys.argv) > 1 else
 
 
 def main():
-    with tempfile.TemporaryDirectory(prefix="crew-transfer-") as temporary:
+    with SmokeDirectory(prefix="crew-transfer-") as temporary:
         root = Path(temporary)
         source_cwd, destination_cwd = root / "source 中文", root / "destination space"
         source_cwd.mkdir()
@@ -239,7 +240,6 @@ def main():
             assert all(os.path.samefile(p["cwd"], source_cwd) for p in restored_tab["panes"])
             assert int(anchor["workspace_id"][1:]) > max(int(w[1:]) for w in saved_ids + [a])
             print("ok cold restart preserves membership, order, stable IDs, selection, zoom and cwd without resurrecting source", flush=True)
-            print("PASS workspace transfer smoke", flush=True)
         except BaseException:
             if pane:
                 try:
@@ -256,6 +256,8 @@ def main():
                 waiter.communicate(timeout=5)
             run("kill-server")
             wait_off()
+
+    print("PASS workspace transfer smoke", flush=True)
 
 
 if __name__ == "__main__":
