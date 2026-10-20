@@ -53,6 +53,11 @@ def main():
         def output(pid, pattern):
             return api("pane", "wait-output", pid, "--regex", pattern, "--timeout", "15000")
 
+        def wait_for_shell(pid):
+            if WIN:
+                ready = output(pid, r"PS [^\r\n]*>")
+                assert ready.get("matched") is True, f"PowerShell prompt not ready: {ready}"
+
         def print_command(text):
             return "Write-Output '" + text + "'" if WIN else "printf '%s\\n' '" + text + "'"
 
@@ -108,12 +113,15 @@ def main():
             error("tab_not_found", "tab", "get", review["tab_id"], "--workspace", other["workspace_id"])
             print("ok exact names, stable IDs, invalid cwd and scope checks", flush=True)
 
+            wait_for_shell(review["active_pane"])
             api("pane", "run", review["active_pane"], env_command())
             output(review["active_pane"], "^ENV=from tab$")
             split = api("pane", "split", review["active_pane"], "--direction", "right")["pane"]
+            wait_for_shell(split["pane_id"])
             api("pane", "run", split["pane_id"], env_command())
             output(split["pane_id"], "^ENV=from tab$")
             inherited = api("tab", "create", "inherited", "--workspace", wid)["tab"]
+            wait_for_shell(inherited["active_pane"])
             api("pane", "run", inherited["active_pane"], env_command())
             output(inherited["active_pane"], "^ENV=from workspace$")
             print("ok tab overrides, tab inheritance and split inheritance", flush=True)
@@ -133,6 +141,7 @@ def main():
             assert api("workspace", "current")["workspace"]["workspace_id"] == wid
             assert api("workspace", "get", wid)["workspace"]["active_tab"] == active["tab_id"]
             restored_review = api("tab", "get", review["tab_id"])["tab"]
+            wait_for_shell(restored_review["active_pane"])
             api("pane", "run", restored_review["active_pane"], env_command())
             output(restored_review["active_pane"], "^ENV=from tab$")
             print("ok restart preserves IDs, high-water marks, focus and env", flush=True)

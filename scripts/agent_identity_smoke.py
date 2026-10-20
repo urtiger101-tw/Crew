@@ -159,6 +159,11 @@ with open(path, "ab", buffering=0) as output:
 ''', encoding="utf-8")
             argv = [sys.executable, "-u", str(helper), str(received)]
             command = "& " + " ".join("'" + arg.replace("'", "''") + "'" for arg in argv) if WIN else shlex.join(argv)
+            if WIN:
+                # Reporting APIs do not establish that the shell can accept its first command.
+                ready = api("pane", "wait-output", pane, "--regex", r"PS [^\r\n]*>",
+                            "--timeout", "7000")
+                assert ready.get("matched") is True, f"PowerShell prompt not ready: {ready}"
             api("pane", "run", pane, command)
             api("pane", "wait-output", pane, "--match", "CREW_RECEIVER_READY", "--timeout", "7000")
             report(pane, "prompt-old", state="idle")
