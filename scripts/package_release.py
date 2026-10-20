@@ -1,0 +1,574 @@
+#!/usr/bin/env python3
+"""Build and verify Crew release archives; publish only with GitHub's job token.
+
+The source must belong to main and have a successful CI run for that exact SHA.
+Required platform jobs AND their test steps are checked; skipped checks do not pass.
+Only the publish subcommand writes to GitHub, exclusively urtiger101-tw/Crew.
+"""
+import argparse
+import hashlib
+import io
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import sys
+import tarfile
+import tempfile
+import tomllib
+import unittest
+from unittest import mock
+import urllib.error
+import urllib.parse
+import urllib.request
+import zipfile
+
+REPOSITORY = "urtiger101-tw/Crew"
+TARGETS = (
+    "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc",
+    "aarch64-apple-darwin", "x86_64-apple-darwin",
+)
+CI_PLATFORMS = {"Linux x86_64", "Windows x86_64", "macOS arm64"}
+CI_STEPS = {
+    "Repository guard", "Checkout", "Python", "Rust toolchain", "Format", "Clippy",
+    "Unit tests", "Release tooling tests", "Build both executables", "Legacy PTY smoke",
+    "Automation API smoke", "Workspace smoke", "Worktree smoke", "Agent identity smoke",
+    "Bridge and events smoke",
+}
+
+
+def require(condition, message):
+    if not condition:
+        raise ValueError(message)
+
+
+def digest(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def json_bytes(value):
+    return (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8")
+
+
+def revision(value):
+    require(re.fullmatch(r"[0-9a-f]{40}", value or ""), "source SHA must be 40 lowercase hexadecimal characters")
+    return value
+
+
+def version_for(tag):
+    require(re.fullmatch(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", tag or ""),
+            "tag must be a stable SemVer tag, for example v0.3.0")
+    return tag[1:]
+
+
+def run(*args):
+    return subprocess.run(args, check=True, capture_output=True, text=True,
+                          encoding="utf-8", timeout=30).stdout.strip()
+
+
+def checked_source(tag, sha):
+    version = version_for(tag)
+    revision(sha)
+    require(run("git", "rev-parse", "HEAD") == sha, "checkout HEAD does not match the verified source SHA")
+    with Path("Cargo.toml").open("rb") as stream:
+        package = tomllib.load(stream)["package"]
+    require(package["name"] == "crew" and package["version"] == version,
+            "release tag, Crew package name and Cargo.toml version must agree")
+    with Path("rust-toolchain.toml").open("rb") as stream:
+        require(tomllib.load(stream)["toolchain"]["channel"] == "1.96.1", "unexpected Rust toolchain")
+    return version
+
+
+def api(path, *, method="GET", value=None, raw=None, missing_ok=False, upload=False):
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    require(token, "GitHub job token is missing")
+    require(path.startswith(f"/repos/{REPOSITORY}/"), "GitHub request is outside the Crew repository")
+    origin = "https://uploads.github.com" if upload else "https://api.github.com"
+    headers = {
+        "Authorization": "Bearer " + token,
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "Crew-release-workflow",
+    }
+    if raw is not None:
+        payload = raw
+        headers["Content-Type"] = "application/octet-stream"
+    elif value is not None:
+        payload = json_bytes(value)
+        headers["Content-Type"] = "application/json"
+    else:
+        payload = None
+    request = urllib.request.Request(origin + path, data=payload, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(request, timeout=120 if upload else 30) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as error:
+        if missing_ok and error.code == 404:
+            return None
+        raise ValueError(f"GitHub {method} {path} returned HTTP {error.code}") from error
+
+
+def tag_commit(tag):
+    value = api(f"/repos/{REPOSITORY}/git/ref/tags/{urllib.parse.quote(tag, safe='')}", missing_ok=True)
+    if value is None:
+        return None
+    obj = value["object"]
+    for _ in range(8):
+        if obj["type"] == "commit":
+            return revision(obj["sha"])
+        require(obj["type"] == "tag", "release tag must resolve to a commit")
+        obj = api(f"/repos/{REPOSITORY}/git/tags/{revision(obj['sha'])}")["object"]
+    raise ValueError("release tag contains too many nested annotated tags")
+
+
+def no_existing_release(tag):
+    # Listing also detects unfinished drafts, which must be reviewed instead of overwritten.
+    for page in range(1, 101):
+        releases = api(f"/repos/{REPOSITORY}/releases?per_page=100&page={page}")
+        require(not any(item["tag_name"] == tag for item in releases),
+                "a release or draft already exists for this tag; inspect it before retrying")
+        if len(releases) < 100:
+            return
+    raise ValueError("release listing exceeded the verification limit")
+
+
+def validate_ci_jobs(jobs):
+    expected = CI_PLATFORMS | {"Crew CI Gate"}
+    require(len(jobs) == len(expected) and {job["name"] for job in jobs} == expected,
+            "CI is missing an expected platform/gate, or has an unexpected job set")
+    for job in jobs:
+        require(job["status"] == "completed" and job["conclusion"] == "success",
+                f"required CI job did not succeed: {job['name']}")
+        steps = job.get("steps", [])
+        required = CI_STEPS if job["name"] in CI_PLATFORMS else {"Require every platform"}
+        for name in required:
+            matches = [step for step in steps if step["name"] == name]
+            require(len(matches) == 1 and matches[0]["status"] == "completed"
+                    and matches[0]["conclusion"] == "success",
+                    f"required CI step is missing, skipped or unsuccessful: {job['name']} / {name}")
+
+
+def verify_ci(sha, ci_run_id=None, ci_attempt=None):
+    """Read the latest run and its actual jobs, including immediately before publication."""
+    revision(sha)
+    query = urllib.parse.urlencode({"head_sha": sha, "branch": "main", "event": "push", "per_page": 100})
+    runs = api(f"/repos/{REPOSITORY}/actions/workflows/ci.yml/runs?{query}")["workflow_runs"]
+    runs = [item for item in runs if item["head_sha"] == sha and item["head_branch"] == "main"
+            and item["event"] == "push" and item["head_repository"]["full_name"] == REPOSITORY]
+    require(runs, "no CI push run exists for this main SHA; run CI before releasing")
+    latest = max(runs, key=lambda item: item["id"])
+    require(latest["status"] == "completed" and latest["conclusion"] == "success",
+            "latest CI run for the source SHA is not successful; wait for or fix CI")
+    run_id, attempt = int(latest["id"]), int(latest["run_attempt"])
+    require(ci_run_id is None or (int(ci_run_id), int(ci_attempt)) == (run_id, attempt),
+            "CI run/attempt changed while packages were being built; reverify the candidate")
+    jobs = api(f"/repos/{REPOSITORY}/actions/runs/{run_id}/attempts/{attempt}/jobs?per_page=100")
+    require(jobs["total_count"] == len(jobs["jobs"]), "CI job listing is incomplete")
+    validate_ci_jobs(jobs["jobs"])
+    return {"ci_run_id": run_id, "ci_attempt": attempt,
+            "ci_url": f"https://github.com/{REPOSITORY}/actions/runs/{run_id}/attempts/{attempt}"}
+
+
+def verify_source(tag, sha=None, ci_run_id=None, ci_attempt=None):
+    require(os.environ.get("GITHUB_REPOSITORY") == REPOSITORY, "release is restricted to " + REPOSITORY)
+    event, ref = os.environ.get("GITHUB_EVENT_NAME"), os.environ.get("GITHUB_REF")
+    require((event == "workflow_dispatch" and ref == "refs/heads/main")
+            or (event == "push" and ref == "refs/tags/" + tag),
+            "dispatch releases from main, or push the matching version tag")
+    sha = sha or run("git", "rev-parse", "HEAD")
+    version = checked_source(tag, sha)
+    trigger_sha = revision(os.environ.get("GITHUB_SHA", ""))
+    require(run("git", "rev-parse", trigger_sha + "^{commit}") == sha,
+            "workflow trigger and checked-out release source differ")
+    main = api(f"/repos/{REPOSITORY}/git/ref/heads/main")["object"]
+    require(main["type"] == "commit", "main does not identify a commit")
+    main_sha = revision(main["sha"])
+    comparison = api(f"/repos/{REPOSITORY}/compare/{sha}...{main_sha}")
+    require(comparison["status"] in {"ahead", "identical"}, "release source is not in main history")
+    tagged = tag_commit(tag)
+    require(tagged in {None, sha}, "existing tag points at another commit")
+    require(event != "push" or tagged == sha, "tag push must resolve to the release source")
+    no_existing_release(tag)
+    return {"repository": REPOSITORY, "tag": tag, "version": version, "sha": sha,
+            **verify_ci(sha, ci_run_id, ci_attempt)}
+
+
+def identity(args):
+    require(args.ci_run_id > 0 and args.ci_attempt > 0, "CI run and attempt must be positive integers")
+    return {"repository": REPOSITORY, "tag": args.tag, "version": version_for(args.tag),
+            "sha": revision(args.sha), "ci_run_id": args.ci_run_id, "ci_attempt": args.ci_attempt}
+
+
+def archive_name(tag, target):
+    return f"Crew-{tag}-{target}" + (".zip" if target.endswith("windows-msvc") else ".tar.gz")
+
+
+def write_archive(destination, top, payloads):
+    if destination.suffix == ".zip":
+        with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for name, content in payloads.items():
+                info = zipfile.ZipInfo(top + "/" + name)
+                info.external_attr = ((0o100755 if name.startswith(("crew", "tmuxlike")) else 0o100644) << 16)
+                info.compress_type = zipfile.ZIP_DEFLATED
+                archive.writestr(info, content)
+    else:
+        with tarfile.open(destination, "w:gz") as archive:
+            for name, content in payloads.items():
+                info = tarfile.TarInfo(top + "/" + name)
+                info.size = len(content)
+                info.mode = 0o755 if name in {"crew", "tmuxlike"} else 0o644
+                archive.addfile(info, io.BytesIO(content))
+
+
+def validate_archive(path, package):
+    top = f"Crew-{package['tag']}-{package['target']}/"
+    expected = {top + name for name in package["files"]} | {top + "manifest.json"}
+    if path.suffix == ".zip":
+        with zipfile.ZipFile(path) as archive:
+            require(len(archive.namelist()) == len(expected) and set(archive.namelist()) == expected,
+                    "archive has unexpected or missing members")
+            contents = {name[len(top):]: archive.read(name) for name in expected}
+    else:
+        with tarfile.open(path, "r:gz") as archive:
+            members = archive.getmembers()
+            require(len(members) == len(expected) and {item.name for item in members} == expected
+                    and all(item.isfile() for item in members), "archive has unexpected, unsafe or missing members")
+            contents = {item.name[len(top):]: archive.extractfile(item).read() for item in members}
+    require(json.loads(contents.pop("manifest.json")) == package, "embedded package manifest differs")
+    for name, content in contents.items():
+        require(package["files"][name] == {"sha256": digest(content), "bytes": len(content)},
+                "archive member digest differs: " + name)
+
+
+def package(args):
+    meta = identity(args)
+    checked_source(args.tag, args.sha)
+    target = args.target
+    ext = ".exe" if target.endswith("windows-msvc") else ""
+    binaries = Path("target") / target / "release"
+    payloads = {}
+    for name in ["crew", "tmuxlike"]:
+        path = binaries / (name + ext)
+        require(path.is_file() and not path.is_symlink(), "release binary is missing: " + str(path))
+        version = run(str(path.resolve()), "--version")
+        require(version in {f"crew {meta['version']}", f"tmuxlike {meta['version']}"},
+                "binary version does not match the tag: " + version)
+        payloads[name + ext] = path.read_bytes()
+    for name in ["README.md", "LICENSE"]:
+        payloads[name] = Path(name).read_bytes()
+    package_meta = {**meta, "target": target, "rust": "1.96.1", "signed": False,
+                    "files": {name: {"sha256": digest(data), "bytes": len(data)} for name, data in payloads.items()}}
+    payloads["manifest.json"] = json_bytes(package_meta)
+    output = Path(args.output)
+    output.mkdir(parents=True, exist_ok=True)
+    archive = output / archive_name(args.tag, target)
+    sidecar = output / f"Crew-{args.tag}-{target}.json"
+    require(not archive.exists() and not sidecar.exists(), "package output already exists")
+    write_archive(archive, f"Crew-{args.tag}-{target}", payloads)
+    validate_archive(archive, package_meta)
+    content = archive.read_bytes()
+    sidecar.write_bytes(json_bytes({"package": package_meta, "archive": {
+        "name": archive.name, "sha256": digest(content), "bytes": len(content)}}))
+    print(f"Packaged and verified {archive}")
+
+
+def collect_packages(folder, meta):
+    expected = {archive_name(meta["tag"], target) for target in TARGETS}
+    expected |= {f"Crew-{meta['tag']}-{target}.json" for target in TARGETS}
+    require({path.name for path in folder.iterdir()} == expected, "expected exactly four archives and four manifests")
+    records = []
+    for target in TARGETS:
+        sidecar = json.loads((folder / f"Crew-{meta['tag']}-{target}.json").read_bytes())
+        package_meta, record = sidecar["package"], sidecar["archive"]
+        require(all(package_meta.get(key) == value for key, value in meta.items())
+                and package_meta["target"] == target and package_meta["rust"] == "1.96.1"
+                and package_meta["signed"] is False, "package source/version/CI/target provenance differs")
+        ext = ".exe" if target.endswith("windows-msvc") else ""
+        require(set(package_meta["files"]) == {"crew" + ext, "tmuxlike" + ext, "README.md", "LICENSE"},
+                "package does not contain both executables and license/readme")
+        require(record["name"] == archive_name(meta["tag"], target), "unexpected archive name")
+        archive = folder / record["name"]
+        content = archive.read_bytes()
+        require(record == {"name": archive.name, "sha256": digest(content), "bytes": len(content)},
+                "package archive digest differs")
+        validate_archive(archive, package_meta)
+        records.append({**record, "target": target, "files": package_meta["files"]})
+    return records
+
+
+def aggregate(args):
+    meta = identity(args)
+    records = collect_packages(Path(args.input), meta)
+    output = Path(args.output)
+    output.mkdir(parents=True, exist_ok=True)
+    require(not list(output.iterdir()), "release output must be empty")
+    for record in records:
+        shutil.copyfile(Path(args.input) / record["name"], output / record["name"])
+    manifest = {**meta, "rust": "1.96.1", "signed": False, "packages": records}
+    (output / "release-manifest.json").write_bytes(json_bytes(manifest))
+    checksums = "".join(f"{digest(path.read_bytes())}  {path.name}\n" for path in sorted(output.iterdir()))
+    (output / "SHA256SUMS").write_text(checksums, encoding="utf-8")
+    print("Verified all four platform archives and wrote release-manifest.json and SHA256SUMS")
+
+
+def finalize_draft(release_id, meta, expected_assets):
+    """No publication if uploads or CI changed while the draft was being prepared."""
+    assets = api(f"/repos/{REPOSITORY}/releases/{release_id}/assets?per_page=100")
+    require(len(assets) == len(expected_assets) and {asset["name"] for asset in assets} == set(expected_assets),
+            "draft release is missing assets")
+    for asset in assets:
+        expected = expected_assets[asset["name"]]
+        require(asset.get("state") == "uploaded" and asset.get("size") == expected["size"]
+                and asset.get("digest") == expected["digest"],
+                "draft asset state, size or digest changed: " + asset["name"])
+    require(tag_commit(meta["tag"]) == meta["sha"], "release tag changed during uploads; draft was preserved")
+    # This read-only check deliberately excludes no_existing_release: our own draft exists.
+    verify_ci(meta["sha"], meta["ci_run_id"], meta["ci_attempt"])
+    published = api(f"/repos/{REPOSITORY}/releases/{release_id}", method="PATCH", value={"draft": False})
+    require(published["draft"] is False, "GitHub did not publish the completed draft")
+    return published
+
+
+def publish(args):
+    meta = identity(args)
+    evidence = verify_source(args.tag, args.sha, args.ci_run_id, args.ci_attempt)
+    folder = Path(args.input)
+    manifest = json.loads((folder / "release-manifest.json").read_bytes())
+    require(all(manifest.get(key) == value for key, value in meta.items()), "release manifest provenance differs")
+    require({item["target"] for item in manifest["packages"]} == set(TARGETS)
+            and len(manifest["packages"]) == len(TARGETS), "release manifest must contain every target exactly once")
+    expected = {archive_name(args.tag, target) for target in TARGETS} | {"release-manifest.json", "SHA256SUMS"}
+    require({path.name for path in folder.iterdir()} == expected, "release asset set is incomplete or has unexpected files")
+    lines = (folder / "SHA256SUMS").read_text(encoding="utf-8").splitlines()
+    sums = {}
+    for line in lines:
+        value, name = line.split("  ", 1)
+        require(name not in sums and re.fullmatch(r"[0-9a-f]{64}", value), "invalid or duplicate checksum record")
+        sums[name] = value
+    require(set(sums) == expected - {"SHA256SUMS"}, "checksums do not cover all release assets")
+    for name, value in sums.items():
+        require(digest((folder / name).read_bytes()) == value, "release checksum differs: " + name)
+    for record in manifest["packages"]:
+        require(record["name"] == archive_name(args.tag, record["target"])
+                and record["sha256"] == sums[record["name"]], "release manifest archive digest differs")
+    expected_assets = {name: {"size": (folder / name).stat().st_size,
+                              "digest": "sha256:" + digest((folder / name).read_bytes())}
+                       for name in expected}
+    # Only after source, CI and all six assets pass do we create a tag/draft.
+    if tag_commit(args.tag) is None:
+        api(f"/repos/{REPOSITORY}/git/refs", method="POST", value={"ref": "refs/tags/" + args.tag, "sha": args.sha})
+    require(tag_commit(args.tag) == args.sha, "release tag changed before publication")
+    notes = (f"Crew {args.tag}\n\nSource: https://github.com/{REPOSITORY}/commit/{args.sha}\n"
+             f"Verified CI: {evidence['ci_url']}\n\n"
+             "Four native packages include the crew command, the tmuxlike compatibility command, "
+             "README.md, LICENSE and a package manifest. Checksums and source/CI provenance are "
+             "in SHA256SUMS and release-manifest.json.\n\n"
+             "Targets: Linux x86_64, Windows x86_64, macOS arm64 and macOS x86_64. "
+             "The binaries are unsigned.\n")
+    release = api(f"/repos/{REPOSITORY}/releases", method="POST", value={
+        "tag_name": args.tag, "target_commitish": args.sha, "name": "Crew " + args.tag,
+        "body": notes, "draft": True, "prerelease": False,
+    })
+    release_id = int(release["id"])
+    print(f"Created draft {release['html_url']}; it remains a draft if an upload fails", flush=True)
+    for name in sorted(expected):
+        content = (folder / name).read_bytes()
+        require(expected_assets[name] == {"size": len(content), "digest": "sha256:" + digest(content)},
+                "local release asset changed before upload: " + name)
+        path = f"/repos/{REPOSITORY}/releases/{release_id}/assets?name={urllib.parse.quote(name, safe='')}"
+        asset = api(path, method="POST", raw=content, upload=True)
+        require(asset["name"] == name and asset["size"] == len(content) and asset["state"] == "uploaded",
+                "release asset upload did not complete: " + name)
+        require(asset.get("digest") in {None, "sha256:" + digest(content)}, "GitHub asset digest differs: " + name)
+    published = finalize_draft(release_id, meta, expected_assets)
+    print("Published " + published["html_url"])
+
+
+class ReleaseChecks(unittest.TestCase):
+    def test_tags_and_revisions_are_literal(self):
+        self.assertEqual(version_for("v0.3.0"), "0.3.0")
+        for tag in ["v01.3.0", "v0.3", "v0.3.0;echo", "--help", "v0.3.0\n"]:
+            with self.assertRaises(ValueError):
+                version_for(tag)
+        with self.assertRaises(ValueError):
+            revision("main")
+
+    def test_gate_requires_every_job_and_test_step(self):
+        jobs = [{"name": name, "status": "completed", "conclusion": "success", "steps": [
+            {"name": step, "status": "completed", "conclusion": "success"}
+            for step in (CI_STEPS if name in CI_PLATFORMS else {"Require every platform"})
+        ]} for name in sorted(CI_PLATFORMS | {"Crew CI Gate"})]
+        validate_ci_jobs(jobs)
+        with self.assertRaises(ValueError):
+            validate_ci_jobs(jobs[:-1])
+        for state in ["skipped", "cancelled", "failure", "neutral"]:
+            changed = json.loads(json.dumps(jobs))
+            changed[1]["conclusion"] = state
+            with self.assertRaises(ValueError):
+                validate_ci_jobs(changed)
+            changed = json.loads(json.dumps(jobs))
+            changed[1]["steps"][0]["conclusion"] = state
+            with self.assertRaises(ValueError):
+                validate_ci_jobs(changed)
+
+    def test_archives_preserve_members_and_reject_changed_payloads(self):
+        # Offline fixtures test archive validation, never claim a real platform build.
+        for suffix in [".tar.gz", ".zip"]:
+            with self.subTest(suffix=suffix), tempfile.TemporaryDirectory(prefix="crew-package-test-") as temporary:
+                target = TARGETS[1] if suffix == ".zip" else TARGETS[0]
+                ext = ".exe" if suffix == ".zip" else ""
+                payloads = {"crew" + ext: b"test executable", "tmuxlike" + ext: b"test alias",
+                            "README.md": b"readme", "LICENSE": b"license"}
+                package_meta = {"tag": "v0.3.0", "target": target, "files": {
+                    name: {"sha256": digest(data), "bytes": len(data)} for name, data in payloads.items()}}
+                payloads["manifest.json"] = json_bytes(package_meta)
+                archive = Path(temporary) / ("fixture" + suffix)
+                top = "Crew-v0.3.0-" + target
+                write_archive(archive, top, payloads)
+                validate_archive(archive, package_meta)
+                payloads["README.md"] = b"tampered"
+                write_archive(archive, top, payloads)
+                with self.assertRaises(ValueError):
+                    validate_archive(archive, package_meta)
+                payloads["README.md"] = b"readme"
+                payloads["../extra"] = b"unsafe member"
+                write_archive(archive, top, payloads)
+                with self.assertRaises(ValueError):
+                    validate_archive(archive, package_meta)
+
+    def test_collection_requires_all_targets_and_matching_provenance(self):
+        meta = {"repository": REPOSITORY, "tag": "v0.3.0", "version": "0.3.0", "sha": "a" * 40,
+                "ci_run_id": 1, "ci_attempt": 1}
+        with tempfile.TemporaryDirectory(prefix="crew-collection-test-") as temporary:
+            folder = Path(temporary)
+            with self.assertRaises(ValueError):
+                collect_packages(folder, meta)
+            for target in TARGETS:
+                ext = ".exe" if target.endswith("windows-msvc") else ""
+                payloads = {"crew" + ext: b"fixture", "tmuxlike" + ext: b"fixture",
+                            "README.md": b"readme", "LICENSE": b"license"}
+                package_meta = {**meta, "target": target, "rust": "1.96.1", "signed": False,
+                                "files": {name: {"sha256": digest(data), "bytes": len(data)}
+                                          for name, data in payloads.items()}}
+                payloads["manifest.json"] = json_bytes(package_meta)
+                archive = folder / archive_name(meta["tag"], target)
+                write_archive(archive, f"Crew-{meta['tag']}-{target}", payloads)
+                content = archive.read_bytes()
+                sidecar = folder / f"Crew-{meta['tag']}-{target}.json"
+                sidecar.write_bytes(json_bytes({"package": package_meta, "archive": {
+                    "name": archive.name, "sha256": digest(content), "bytes": len(content)}}))
+            self.assertEqual(len(collect_packages(folder, meta)), 4)
+            with self.assertRaises(ValueError):
+                collect_packages(folder, {**meta, "sha": "b" * 40})
+            with self.assertRaises(ValueError):
+                collect_packages(folder, {**meta, "ci_attempt": 2})
+            archive.write_bytes(content + b"tampered")
+            with self.assertRaises(ValueError):
+                collect_packages(folder, meta)
+            archive.unlink()
+            with self.assertRaises(ValueError):
+                collect_packages(folder, meta)
+
+    def test_final_publication_rechecks_ci_and_remote_assets(self):
+        # The entire GitHub boundary is mocked. No fixture can make a remote request.
+        sha = "a" * 40
+        meta = {"tag": "v0.3.0", "sha": sha, "ci_run_id": 7, "ci_attempt": 1}
+        names = {archive_name(meta["tag"], target) for target in TARGETS} | {"release-manifest.json", "SHA256SUMS"}
+        expected = {name: {"size": len(name), "digest": "sha256:" + digest(name.encode())} for name in names}
+        modes = ["success", "ci_failed", "ci_running", "ci_new_attempt", "ci_new_run",
+                 "ci_job_skipped", "ci_step_skipped", "asset_missing", "asset_state",
+                 "asset_size", "asset_digest", "asset_digest_missing", "tag_changed"]
+        for mode in modes:
+            with self.subTest(mode=mode):
+                assets = [{"name": name, "state": "uploaded", **record} for name, record in expected.items()]
+                jobs = [{"name": name, "status": "completed", "conclusion": "success", "steps": [
+                    {"name": step, "status": "completed", "conclusion": "success"}
+                    for step in (CI_STEPS if name in CI_PLATFORMS else {"Require every platform"})
+                ]} for name in sorted(CI_PLATFORMS | {"Crew CI Gate"})]
+                if mode == "asset_missing":
+                    assets.pop()
+                elif mode == "asset_state":
+                    assets[0]["state"] = "starter"
+                elif mode == "asset_size":
+                    assets[0]["size"] += 1
+                elif mode == "asset_digest":
+                    assets[0]["digest"] = "sha256:" + "b" * 64
+                elif mode == "asset_digest_missing":
+                    assets[0].pop("digest")
+                elif mode == "ci_job_skipped":
+                    jobs[1]["conclusion"] = "skipped"
+                elif mode == "ci_step_skipped":
+                    jobs[1]["steps"][0]["conclusion"] = "skipped"
+                writes = []
+
+                def fake_api(path, *, method="GET", value=None, **unused):
+                    if method == "PATCH":
+                        writes.append((path, value))
+                        return {"draft": False, "html_url": "https://example.invalid/fixture"}
+                    if "/assets?" in path:
+                        return assets
+                    if "/actions/workflows/ci.yml/runs?" in path:
+                        return {"workflow_runs": [{
+                            "id": 8 if mode == "ci_new_run" else 7, "head_sha": sha,
+                            "head_branch": "main", "event": "push", "head_repository": {"full_name": REPOSITORY},
+                            "status": "in_progress" if mode == "ci_running" else "completed",
+                            "conclusion": "failure" if mode == "ci_failed" else "success",
+                            "run_attempt": 2 if mode in {"ci_failed", "ci_new_attempt"} else 1,
+                        }]}
+                    if "/actions/runs/7/attempts/1/jobs?" in path:
+                        return {"total_count": len(jobs), "jobs": jobs}
+                    raise AssertionError("unexpected mocked GitHub request: " + path)
+
+                with mock.patch.dict(globals(), {"api": fake_api,
+                                                "tag_commit": lambda tag: "b" * 40 if mode == "tag_changed" else sha}):
+                    if mode == "success":
+                        self.assertFalse(finalize_draft(11, meta, expected)["draft"])
+                    else:
+                        with self.assertRaises(ValueError):
+                            finalize_draft(11, meta, expected)
+                self.assertEqual(len(writes), 1 if mode == "success" else 0)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("self-test", help="run offline release validation regression tests")
+    verify = commands.add_parser("verify-source", help="read-only GitHub source and CI verification")
+    verify.add_argument("--tag", required=True)
+    verify.add_argument("--github-output", type=Path)
+    for name in ["package", "aggregate", "publish"]:
+        sub = commands.add_parser(name)
+        sub.add_argument("--tag", required=True)
+        sub.add_argument("--sha", required=True)
+        sub.add_argument("--ci-run-id", required=True, type=int)
+        sub.add_argument("--ci-attempt", required=True, type=int)
+        if name == "package":
+            sub.add_argument("--target", choices=TARGETS, required=True)
+            sub.add_argument("--output", default="dist")
+        else:
+            sub.add_argument("--input", required=True)
+        if name == "aggregate":
+            sub.add_argument("--output", required=True)
+    args = parser.parse_args()
+    if args.command == "self-test":
+        result = unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromTestCase(ReleaseChecks))
+        require(result.wasSuccessful(), "release tooling regression test failed")
+    elif args.command == "verify-source":
+        evidence = verify_source(args.tag)
+        if args.github_output:
+            with args.github_output.open("a", encoding="utf-8") as stream:
+                for key in ["sha", "tag", "ci_run_id", "ci_attempt"]:
+                    stream.write(f"{key}={evidence[key]}\n")
+        print(json.dumps(evidence, indent=2))
+    else:
+        {"package": package, "aggregate": aggregate, "publish": publish}[args.command](args)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (ValueError, KeyError, OSError, subprocess.SubprocessError) as error:
+        print("Release error: " + str(error), file=sys.stderr)
+        sys.exit(1)

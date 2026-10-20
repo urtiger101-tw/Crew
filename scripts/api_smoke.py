@@ -38,9 +38,13 @@ WORK = tempfile.mkdtemp(prefix="tmuxlike-api-")
 LOG = os.path.join(WORK, "server.log")
 STATE = os.path.join(WORK, "state.json")
 CWD_DIR = os.path.join(WORK, "cwd-test")
-ENV = dict(os.environ, TMUXLIKE_SOCKET="tmuxlike-api-%d.sock" % os.getpid(), TMUXLIKE_LOG=LOG, TMUXLIKE_STATE=STATE)
-ENV.pop("TMUXLIKE", None)
-ENV.pop("TMUXLIKE_PANE_ID", None)
+CONFIG = os.path.join(WORK, "config.toml")
+with open(CONFIG, "w", encoding="utf-8") as config:
+    config.write('lang = "en"\n')
+ENV = {k: v for k, v in os.environ.items() if not k.upper().startswith(("CREW", "TMUXLIKE"))}
+ENV.update(CREW_SOCKET="crew-api-%d.sock" % os.getpid(), CREW_LOG=LOG,
+           CREW_STATE=STATE, CREW_CONFIG=CONFIG)
+
 
 
 class Fail(Exception):
