@@ -117,6 +117,14 @@ def main():
             pid = panes[0]["pane_id"]
             # A command executed by the real PTY verifies its cwd independently of JSON.
             cwd_probe = "(Get-Location).Path | Set-Content -Encoding utf8 cwd-probe.txt" if WIN else "pwd > cwd-probe.txt"
+            completion_prefix, completion_token = "CREW_CWD_DONE_", uuid.uuid4().hex
+            completion = completion_prefix + completion_token
+            # Emit only after the write succeeds and returns. Split literals keep the
+            # complete marker out of the echoed command, including wrapped PTY rows.
+            if WIN:
+                cwd_probe += f"; if ($?) {{ Write-Output ('{completion_prefix}' + '{completion_token}') }}"
+            else:
+                cwd_probe += f" && printf '%s%s\\n' '{completion_prefix}' '{completion_token}'"
             try:
                 if WIN:
                     # A spawned PowerShell process can still be initializing its input reader.
@@ -125,9 +133,8 @@ def main():
                                  "--timeout", "15000")
                     check(ready.get("matched") is True, f"PowerShell prompt not ready: {ready}")
                 data("pane", "run", pid, cwd_probe)
-                end = time.monotonic() + 15
-                while time.monotonic() < end and not (checkout / "cwd-probe.txt").exists():
-                    time.sleep(0.05)
+                completed = data("pane", "wait-output", pid, "--match", completion, "--timeout", "15000")
+                check(completed.get("matched") is True, f"terminal cwd write did not complete: {completed}")
                 check((checkout / "cwd-probe.txt").exists(), "terminal did not run at the worktree cwd")
                 actual = (checkout / "cwd-probe.txt").read_text(encoding="utf-8-sig").strip()
                 check(Path(actual).samefile(checkout), actual)
