@@ -362,6 +362,7 @@ fn merge_views(views: Vec<Value>, sub: &str) -> Value {
                     let mut item = item.clone();
                     item["machine_id"] = view["machine_id"].clone();
                     item["machine_label"] = view["label"].clone();
+                    item["machine_epoch"] = view["data"]["epoch"].clone();
                     output.push(item);
                 }
             }
@@ -382,7 +383,7 @@ fn merge_views(views: Vec<Value>, sub: &str) -> Value {
 
 pub(super) enum AttachTarget<'a> {
     Name(Option<&'a str>),
-    Id(&'a str),
+    Snapshot { workspace: &'a str, epoch: &'a str },
 }
 
 pub(super) fn attach(machine: Option<&Machine>, target: AttachTarget<'_>) -> Result<i32> {
@@ -392,7 +393,9 @@ pub(super) fn attach(machine: Option<&Machine>, target: AttachTarget<'_>) -> Res
     let args = match target {
         AttachTarget::Name(Some(name)) => vec!["attach", "-t", name],
         AttachTarget::Name(None) => vec!["attach"],
-        AttachTarget::Id(id) => vec!["attach-workspace", id],
+        AttachTarget::Snapshot { workspace, epoch } => {
+            vec!["__attach-workspace-epoch", workspace, epoch]
+        }
     };
     let mut command = if let Some(machine) = machine {
         machine.validate()?;
@@ -432,19 +435,26 @@ mod tests {
                 "local",
                 "Local",
                 true,
-                Ok(json!({"workspaces":[{"workspace_id":"w1"}],"agents":[{"pane_id":"p1"}]})),
+                Ok(
+                    json!({"epoch":"local-epoch","workspaces":[{"workspace_id":"w1"}],"agents":[{"pane_id":"p1"}]}),
+                ),
             ),
             view(
                 "m1",
                 "Build",
                 false,
-                Ok(json!({"workspaces":[{"workspace_id":"w1"}],"agents":[{"pane_id":"p1"}]})),
+                Ok(
+                    json!({"epoch":"remote-epoch","workspaces":[{"workspace_id":"w1"}],"agents":[{"pane_id":"p1"}]}),
+                ),
             ),
             view("m2", "Offline", false, Err(anyhow::anyhow!("offline"))),
         ];
         let merged = merge_views(views, "list");
         assert_eq!(merged["workspaces"][0]["machine_id"], "local");
         assert_eq!(merged["workspaces"][1]["machine_id"], "m1");
+        assert_eq!(merged["workspaces"][0]["machine_epoch"], "local-epoch");
+        assert_eq!(merged["workspaces"][1]["machine_epoch"], "remote-epoch");
+        assert_eq!(merged["agents"][1]["machine_epoch"], "remote-epoch");
         assert_eq!(merged["agents"].as_array().unwrap().len(), 2);
         assert_eq!(merged["machines"][2]["state"], "unavailable");
         assert_eq!(merged["complete"], false);

@@ -156,20 +156,35 @@ pub fn new_detached(session: Option<String>) -> Result<()> {
 }
 
 pub fn attach(session: Option<String>, create: bool) -> Result<()> {
-    attach_target(session, None, create)
+    attach_target(session, None, None, create)
 }
 
-/// The selector must carry a stable ID all the way to the daemon's attach lock.
-pub fn attach_workspace(workspace: &str) -> Result<()> {
-    let id = workspace
+fn workspace_id(workspace: &str) -> Result<usize> {
+    workspace
         .strip_prefix('w')
         .and_then(|digits| digits.parse::<usize>().ok())
         .filter(|id| *id > 0 && format!("w{id}") == workspace)
-        .ok_or_else(|| anyhow!("workspace ID must be w followed by a positive integer"))?;
-    attach_target(None, Some(id), false)
+        .ok_or_else(|| anyhow!("workspace ID must be w followed by a positive integer"))
 }
 
-fn attach_target(session: Option<String>, workspace_id: Option<usize>, create: bool) -> Result<()> {
+pub fn attach_workspace(workspace: &str) -> Result<()> {
+    attach_target(None, Some(workspace_id(workspace)?), None, false)
+}
+
+/// Carry both the stable ID and observed daemon lifetime into the attach lock.
+pub fn attach_workspace_epoch(workspace: &str, epoch: &str) -> Result<()> {
+    if epoch.is_empty() || epoch.len() > 128 || epoch.chars().any(char::is_control) {
+        return Err(anyhow!("invalid expected server epoch"));
+    }
+    attach_target(None, Some(workspace_id(workspace)?), Some(epoch), false)
+}
+
+fn attach_target(
+    session: Option<String>,
+    workspace_id: Option<usize>,
+    expected_epoch: Option<&str>,
+    create: bool,
+) -> Result<()> {
     let lang = lang();
     if crate::brand::env_os("").is_some() {
         return Err(anyhow!(tr(lang, "cli.err.nested")));
@@ -180,14 +195,21 @@ fn attach_target(session: Option<String>, workspace_id: Option<usize>, create: b
     let cwd = std::env::current_dir()
         .ok()
         .map(|p| p.to_string_lossy().into_owned());
-    let command = match workspace_id {
-        Some(workspace_id) => Command::AttachWorkspace {
+    let command = match (workspace_id, expected_epoch) {
+        (Some(workspace_id), Some(epoch)) => Command::AttachWorkspaceEpoch {
+            workspace_id,
+            epoch: epoch.to_owned(),
+            cols,
+            rows,
+            env: crate::theme::ClientEnv::detect(),
+        },
+        (Some(workspace_id), None) => Command::AttachWorkspace {
             workspace_id,
             cols,
             rows,
             env: crate::theme::ClientEnv::detect(),
         },
-        None => Command::Attach {
+        (None, None) => Command::Attach {
             session,
             create,
             cols,
@@ -196,11 +218,20 @@ fn attach_target(session: Option<String>, workspace_id: Option<usize>, create: b
             detached: false,
             env: crate::theme::ClientEnv::detect(),
         },
+        (None, Some(_)) => return Err(anyhow!("epoch attachment requires a workspace ID")),
     };
     write_msg(&mut w, &ClientMsg::Hello(command))?;
 
     // Wait for the first message so errors print on a normal terminal.
-    let first: ServerMsg = read_msg(&mut r)?;
+    let first: ServerMsg = read_msg(&mut r).map_err(|error| {
+        if expected_epoch.is_some() {
+            anyhow!(
+                "epoch attachment was not accepted; use matching Crew versions and refresh federation: {error}"
+            )
+        } else {
+            anyhow!(error)
+        }
+    })?;
     if let ServerMsg::Error(e) = first {
         return Err(anyhow!(e));
     }

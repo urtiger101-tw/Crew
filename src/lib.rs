@@ -116,6 +116,12 @@ pub fn run() {
         "attach" | "a" | "attach-session" => client::attach(flag(&args, "-t"), false),
         "attach-workspace" if args.len() == 2 => client::attach_workspace(&args[1]),
         "attach-workspace" => Err(anyhow::anyhow!("usage: crew attach-workspace wN")),
+        "__attach-workspace-epoch" if args.len() == 3 => {
+            client::attach_workspace_epoch(&args[1], &args[2])
+        }
+        "__attach-workspace-epoch" => Err(anyhow::anyhow!(
+            "usage: crew __attach-workspace-epoch wN EXPECTED_EPOCH"
+        )),
         "ls" | "list-sessions" => client::simple(Command::List),
         "kill-session" => match flag(&args, "-t") {
             Some(s) => client::simple(Command::Kill { session: s }),

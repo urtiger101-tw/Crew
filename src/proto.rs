@@ -27,6 +27,16 @@ pub enum Command {
         #[serde(default)]
         env: crate::theme::ClientEnv,
     },
+    /// A cached federation target is valid only in its observed daemon lifetime.
+    /// Keep a distinct tag: old AttachWorkspace readers ignore unknown fields.
+    AttachWorkspaceEpoch {
+        workspace_id: usize,
+        epoch: String,
+        cols: u16,
+        rows: u16,
+        #[serde(default)]
+        env: crate::theme::ClientEnv,
+    },
     List,
     Kill {
         session: String,

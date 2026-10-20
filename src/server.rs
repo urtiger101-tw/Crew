@@ -1460,15 +1460,48 @@ impl State {
     }
 }
 
+// The caller must keep this State lock through client registration. A daemon
+// restart may reuse an ID even when the replacement also has the old name.
+fn workspace_attach_name(st: &State, id: usize, epoch: Option<&str>) -> Result<String> {
+    if epoch.is_some_and(|expected| expected != st.events.epoch()) {
+        return Err(anyhow!(
+            "server changed since selection; refresh federation and select again"
+        ));
+    }
+    st.sessions
+        .iter()
+        .find(|session| session.id == id)
+        .map(|s| s.name.clone())
+        .ok_or_else(|| anyhow!("can't find workspace: w{id}"))
+}
+
 fn handle_conn(shared: Shared, cid: usize, stream: interprocess::local_socket::Stream) {
     let (mut r, mut w) = stream.split();
     let Ok(ClientMsg::Hello(cmd)) = read_msg::<ClientMsg>(&mut r) else {
         return;
     };
-    // Normalize only the transport fields; preserve the stable-ID selector until
-    // the same lock that registers the client. Never resolve the ID to a name
-    // in a separate API request where rename/deletion could race attachment.
-    let (cmd, workspace_id) = match cmd {
+    // Keep both the stable ID and the observed daemon epoch until the same lock
+    // that registers the client. Separate preflight reads could race a restart.
+    let (cmd, workspace_id, expected_epoch) = match cmd {
+        Command::AttachWorkspaceEpoch {
+            workspace_id,
+            epoch,
+            cols,
+            rows,
+            env,
+        } => (
+            Command::Attach {
+                session: None,
+                create: false,
+                cols,
+                rows,
+                cwd: None,
+                detached: false,
+                env,
+            },
+            Some(workspace_id),
+            Some(epoch),
+        ),
         Command::AttachWorkspace {
             workspace_id,
             cols,
@@ -1485,8 +1518,9 @@ fn handle_conn(shared: Shared, cid: usize, stream: interprocess::local_socket::S
                 env,
             },
             Some(workspace_id),
+            None,
         ),
-        other => (other, None),
+        other => (other, None, None),
     };
     match cmd {
         Command::List => {
@@ -1577,12 +1611,7 @@ fn handle_conn(shared: Shared, cid: usize, stream: interprocess::local_socket::S
         } => {
             let mut st = crate::api::lock(&shared);
             let name = match workspace_id {
-                Some(id) => st
-                    .sessions
-                    .iter()
-                    .find(|session| session.id == id)
-                    .map(|s| s.name.clone())
-                    .ok_or_else(|| anyhow!("can't find workspace: w{id}")),
+                Some(id) => workspace_attach_name(&st, id, expected_epoch.as_deref()),
                 None => match session {
                     Some(n) if st.sidx(&n).is_some() && !create => Ok(n),
                     Some(n) if !create => Err(anyhow!("can't find session: {n}")),
@@ -1646,7 +1675,9 @@ fn handle_conn(shared: Shared, cid: usize, stream: interprocess::local_socket::S
             }
             crate::api::lock(&shared).clients.remove(&cid);
         }
-        Command::AttachWorkspace { .. } => unreachable!("stable-ID attach was normalized above"),
+        Command::AttachWorkspace { .. } | Command::AttachWorkspaceEpoch { .. } => {
+            unreachable!("workspace attachment was normalized above")
+        }
     }
 }
 
@@ -1805,6 +1836,52 @@ pub fn run() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{TitleMode, contain_vt, wants_title};
+
+    #[test]
+    fn epoch_attachment_rejects_reused_ids_and_preserves_same_daemon_ids() {
+        let mut st = super::test_state();
+        let epoch = st.events.epoch().to_owned();
+        st.sessions.push(super::Session {
+            id: 1,
+            name: "original".into(),
+            windows: vec![],
+            active: 0,
+            cols: 80,
+            rows: 24,
+            sidebar: false,
+            cwd: None,
+            env: Default::default(),
+            last_used: std::time::Instant::now(),
+        });
+        assert_eq!(
+            super::workspace_attach_name(&st, 1, Some(&epoch)).unwrap(),
+            "original"
+        );
+        st.sessions[0].name = "renamed".into();
+        assert_eq!(
+            super::workspace_attach_name(&st, 1, Some(&epoch)).unwrap(),
+            "renamed"
+        );
+        assert!(super::workspace_attach_name(&st, 2, Some(&epoch)).is_err());
+
+        // A new daemon can have the same ID and name; neither makes an old
+        // cached selection valid in the new lifetime.
+        st.events = crate::events::Journal::default();
+        st.sessions[0].name = "original".into();
+        assert_ne!(st.events.epoch(), epoch);
+        let error = super::workspace_attach_name(&st, 1, Some(&epoch)).unwrap_err();
+        assert!(error.to_string().contains("server changed since selection"));
+        assert!(st.clients.is_empty());
+        assert_eq!(
+            super::workspace_attach_name(&st, 1, Some(st.events.epoch())).unwrap(),
+            "original"
+        );
+        // Explicit legacy ID attachment retains its existing contract.
+        assert_eq!(
+            super::workspace_attach_name(&st, 1, None).unwrap(),
+            "original"
+        );
+    }
 
     #[test]
     fn title_policy_auto_needs_split_height_and_info() {
