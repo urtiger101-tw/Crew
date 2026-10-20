@@ -16,6 +16,7 @@ fn lookup(id: usize) -> LeafSnap {
     if id == 2 {
         LeafSnap {
             cwd: Some("/work/api".into()),
+            env: Default::default(),
             label: Some("api".into()),
             agent: Some("claude".into()),
             agent_name: Some("reviewer".into()),
@@ -39,8 +40,11 @@ fn three_pane_session() -> Session {
         }),
     };
     Session {
+        id: 1,
+        env: Default::default(),
         name: "main".into(),
         windows: vec![Window {
+            id: 1,
             name: "sh".into(),
             manual_name: false,
             layout,
@@ -79,7 +83,7 @@ fn chain(splits: usize) -> LayoutSnap {
 
 /// Fresh directory for one test, so parallel tests never share files.
 fn scratch_dir(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("tmuxlike-persist-{tag}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("crew-persist-{tag}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     dir
@@ -222,10 +226,7 @@ fn rebuild_clamps_finite_ratios() {
 
 #[test]
 fn sanitize_keeps_only_safe_chars() {
-    assert_eq!(
-        sanitize_file_part("tmuxlike-user.sock"),
-        "tmuxlike-user.sock"
-    );
+    assert_eq!(sanitize_file_part("crew-user.sock"), "crew-user.sock");
     assert_eq!(sanitize_file_part("a b/c\\d:e"), "a_b_c_d_e");
     assert_eq!(sanitize_file_part("..\\x"), ".._x");
     assert_eq!(sanitize_file_part("ü"), "_");
@@ -342,4 +343,130 @@ fn keep_agent_name_drops_duplicates() {
     assert!(keep_agent_name(Some("reviewer"), &mut taken).is_some());
     assert_eq!(keep_agent_name(Some("reviewer"), &mut taken), None);
     assert_eq!(taken.len(), 1);
+}
+
+#[test]
+fn legacy_state_without_ids_migrates_without_colliding_with_saved_ids() {
+    let mut snap = sample();
+    let mut legacy = serde_json::to_value(&snap).unwrap();
+    legacy.as_object_mut().unwrap().remove("next_workspace_id");
+    legacy.as_object_mut().unwrap().remove("next_tab_id");
+    legacy
+        .as_object_mut()
+        .unwrap()
+        .remove("focused_workspace_id");
+    legacy["sessions"][0].as_object_mut().unwrap().remove("id");
+    legacy["sessions"][0].as_object_mut().unwrap().remove("env");
+    legacy["sessions"][0]["windows"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("id");
+    let mut decoded = parse_snapshot(&legacy.to_string()).unwrap();
+    assert_eq!(decoded.sessions[0].id, 0);
+    let mut second = snap.sessions.remove(0);
+    second.id = 10;
+    second.name = "saved".into();
+    second.windows[0].id = 20;
+    decoded.sessions.push(second);
+    assign_legacy_ids(&mut decoded).unwrap();
+    assert_eq!(decoded.sessions[0].id, 11);
+    assert_eq!(decoded.sessions[0].windows[0].id, 21);
+    assert_eq!(decoded.sessions[1].id, 10);
+    assert_eq!(decoded.sessions[1].windows[0].id, 20);
+}
+
+#[test]
+fn duplicate_saved_ids_are_rejected_before_spawning() {
+    let mut snap = sample();
+    let mut duplicate = snap.sessions[0].clone();
+    duplicate.name = "other".into();
+    snap.sessions.push(duplicate);
+    assert!(
+        validate(&snap)
+            .unwrap_err()
+            .contains("duplicate workspace id")
+    );
+    snap.sessions[1].id = 2;
+    assert!(validate(&snap).unwrap_err().contains("duplicate tab id"));
+    snap.sessions[1].windows[0].id = 2;
+    assert!(validate(&snap).is_ok());
+}
+
+#[test]
+fn saved_high_water_marks_prevent_id_reuse_after_deletion() {
+    let mut snap = sample();
+    snap.next_workspace_id = 100;
+    snap.next_tab_id = 200;
+    snap.sessions[0].id = 0;
+    snap.sessions[0].windows[0].id = 0;
+    assign_legacy_ids(&mut snap).unwrap();
+    assert_eq!(snap.sessions[0].id, 101);
+    assert_eq!(snap.sessions[0].windows[0].id, 201);
+    assert_eq!(snap.next_workspace_id, 101);
+    assert_eq!(snap.next_tab_id, 201);
+    let original = snap.clone();
+    assign_legacy_ids(&mut snap).unwrap();
+    assert_eq!(snap, original);
+}
+
+#[test]
+fn clear_of_new_state_never_resurrects_unselected_legacy_state() {
+    let base = scratch_dir("new-state-selection");
+    let file = "state-socket.json";
+    let new = base.join("crew").join(file);
+    let old = base.join("tmuxlike").join(file);
+    fs::create_dir_all(new.parent().unwrap()).unwrap();
+    fs::create_dir_all(old.parent().unwrap()).unwrap();
+    fs::write(&new, "new state").unwrap();
+    fs::write(&old, "legacy must stay untouched").unwrap();
+    assert_eq!(default_state_path(&base, file).unwrap(), new);
+    remove_state_file(&new);
+    assert!(!new.exists());
+    assert_eq!(default_state_path(&base, file).unwrap(), new);
+    assert_eq!(
+        fs::read_to_string(&old).unwrap(),
+        "legacy must stay untouched"
+    );
+    fs::remove_dir_all(base).unwrap();
+}
+
+#[test]
+fn quarantined_new_state_never_falls_back_to_legacy_even_without_marker() {
+    let base = scratch_dir("bad-state-selection");
+    let file = "state-socket.json";
+    let new = base.join("crew").join(file);
+    let old = base.join("tmuxlike").join(file);
+    fs::create_dir_all(new.parent().unwrap()).unwrap();
+    fs::create_dir_all(old.parent().unwrap()).unwrap();
+    fs::write(&new, "invalid new state").unwrap();
+    fs::write(&old, "old sessions").unwrap();
+    assert_eq!(default_state_path(&base, file).unwrap(), new);
+    quarantine(&new, "invalid JSON");
+    assert_eq!(default_state_path(&base, file).unwrap(), new);
+    fs::remove_file(with_suffix(&new, ".crew-selected")).unwrap();
+    assert_eq!(default_state_path(&base, file).unwrap(), new);
+    assert_eq!(fs::read_to_string(&old).unwrap(), "old sessions");
+    assert_eq!(
+        fs::read_to_string(with_suffix(&new, ".bad")).unwrap(),
+        "invalid new state"
+    );
+    fs::remove_dir_all(base).unwrap();
+}
+
+#[test]
+fn existing_legacy_state_is_used_until_a_new_state_is_selected() {
+    let base = scratch_dir("legacy-state-selection");
+    let file = "state-socket.json";
+    let old = base.join("tmuxlike").join(file);
+    let new = base.join("crew").join(file);
+    fs::create_dir_all(old.parent().unwrap()).unwrap();
+    fs::write(&old, "old sessions").unwrap();
+    assert_eq!(default_state_path(&base, file).unwrap(), old);
+    assert!(!with_suffix(&new, ".crew-selected").exists());
+    remove_state_file(&old);
+    assert_eq!(default_state_path(&base, file).unwrap(), new);
+    // A later stale legacy file cannot override the recorded empty new location.
+    fs::write(&old, "stale sessions").unwrap();
+    assert_eq!(default_state_path(&base, file).unwrap(), new);
+    fs::remove_dir_all(base).unwrap();
 }

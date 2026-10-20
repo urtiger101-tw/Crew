@@ -4,7 +4,7 @@ use crate::api;
 use crate::layout::{Dir, Node};
 use crate::server::{Pane, Session, State, Window};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 pub(super) const VERSION: u32 = 1;
 /// Maximum tree depth (root leaf = 1). Deeper snapshots are rejected.
@@ -16,13 +16,24 @@ const RATIO_MAX: f32 = 0.95;
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Snapshot {
     pub version: u32,
+    #[serde(default)]
+    pub next_workspace_id: usize,
+    #[serde(default)]
+    pub next_tab_id: usize,
+    #[serde(default)]
+    pub focused_workspace_id: Option<usize>,
     pub sessions: Vec<SessionSnap>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct SessionSnap {
+    /// Zero denotes a legacy snapshot without stable identifiers.
+    #[serde(default)]
+    pub id: usize,
     pub name: String,
     pub cwd: Option<String>,
+    #[serde(default)]
+    pub env: BTreeMap<String, String>,
     pub cols: u16,
     pub rows: u16,
     pub sidebar: bool,
@@ -32,6 +43,8 @@ pub struct SessionSnap {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct WindowSnap {
+    #[serde(default)]
+    pub id: usize,
     pub name: String,
     pub manual_name: bool,
     pub zoomed: bool,
@@ -44,6 +57,8 @@ pub struct WindowSnap {
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
 pub struct LeafSnap {
     pub cwd: Option<String>,
+    #[serde(default)]
+    pub env: BTreeMap<String, String>,
     pub label: Option<String>,
     /// agent kind label (`AgentInfo::agent`)
     pub agent: Option<String>,
@@ -90,7 +105,13 @@ pub(super) fn validate(snap: &Snapshot) -> Result<(), String> {
         return Err(format!("unsupported version {}", snap.version));
     }
     let mut names: Vec<&str> = Vec::with_capacity(snap.sessions.len());
+    let mut workspace_ids = HashSet::new();
+    let mut tab_ids = HashSet::new();
     for s in &snap.sessions {
+        if s.id != 0 && !workspace_ids.insert(s.id) {
+            return Err(format!("duplicate workspace id {}", s.id));
+        }
+        crate::workspace::validate_env(&s.env).map_err(|e| e.message)?;
         if s.name.is_empty() {
             return Err("empty session name".into());
         }
@@ -105,6 +126,9 @@ pub(super) fn validate(snap: &Snapshot) -> Result<(), String> {
             return Err(format!("session {:?}: active_window out of range", s.name));
         }
         for w in &s.windows {
+            if w.id != 0 && !tab_ids.insert(w.id) {
+                return Err(format!("duplicate tab id {}", w.id));
+            }
             let mut leaves = 0;
             check_layout(&w.layout, 1, &mut leaves)?;
             if w.active >= leaves {
@@ -112,6 +136,46 @@ pub(super) fn validate(snap: &Snapshot) -> Result<(), String> {
             }
         }
     }
+    if snap
+        .focused_workspace_id
+        .is_some_and(|id| id != 0 && !workspace_ids.contains(&id))
+    {
+        return Err("focused workspace id does not exist".into());
+    }
+    Ok(())
+}
+
+/// Allocate only missing legacy ids, after reserving every explicitly saved id. This also
+/// retains high-water marks so removing the highest id cannot cause reuse after restart.
+pub(super) fn assign_legacy_ids(snap: &mut Snapshot) -> Result<(), String> {
+    validate(snap)?;
+    let mut workspace = snap
+        .next_workspace_id
+        .max(snap.sessions.iter().map(|s| s.id).max().unwrap_or(0));
+    let mut tab = snap.next_tab_id.max(
+        snap.sessions
+            .iter()
+            .flat_map(|s| &s.windows)
+            .map(|w| w.id)
+            .max()
+            .unwrap_or(0),
+    );
+    for s in &mut snap.sessions {
+        if s.id == 0 {
+            workspace = workspace
+                .checked_add(1)
+                .ok_or("workspace identifiers exhausted")?;
+            s.id = workspace;
+        }
+        for w in &mut s.windows {
+            if w.id == 0 {
+                tab = tab.checked_add(1).ok_or("tab identifiers exhausted")?;
+                w.id = tab;
+            }
+        }
+    }
+    snap.next_workspace_id = workspace;
+    snap.next_tab_id = tab;
     Ok(())
 }
 
@@ -128,7 +192,8 @@ fn check_layout(layout: &LayoutSnap, depth: usize, leaves: &mut usize) -> Result
         return Err(format!("layout deeper than {MAX_DEPTH}"));
     }
     match layout {
-        LayoutSnap::Leaf(_) => {
+        LayoutSnap::Leaf(leaf) => {
+            crate::workspace::validate_env(&leaf.env).map_err(|e| e.message)?;
             *leaves += 1;
             Ok(())
         }
@@ -191,12 +256,14 @@ pub(super) fn keep_agent_name(raw: Option<&str>, taken: &mut HashSet<String>) ->
 /// Snapshot of the given sessions. `leaf` supplies the per-pane data for each pane id.
 /// Sessions without windows are skipped.
 pub(super) fn snapshot_of(sessions: &[Session], leaf: &impl Fn(usize) -> LeafSnap) -> Snapshot {
-    let sessions = sessions
+    let sessions: Vec<SessionSnap> = sessions
         .iter()
         .filter(|s| !s.windows.is_empty())
         .map(|s| SessionSnap {
+            id: s.id,
             name: s.name.clone(),
             cwd: s.cwd.clone(),
+            env: s.env.clone(),
             cols: s.cols,
             rows: s.rows,
             sidebar: s.sidebar,
@@ -206,6 +273,18 @@ pub(super) fn snapshot_of(sessions: &[Session], leaf: &impl Fn(usize) -> LeafSna
         .collect();
     Snapshot {
         version: VERSION,
+        next_workspace_id: sessions
+            .iter()
+            .map(|s: &SessionSnap| s.id)
+            .max()
+            .unwrap_or(0),
+        next_tab_id: sessions
+            .iter()
+            .flat_map(|s| &s.windows)
+            .map(|w| w.id)
+            .max()
+            .unwrap_or(0),
+        focused_workspace_id: None,
         sessions,
     }
 }
@@ -214,6 +293,7 @@ fn window_snap(w: &Window, leaf: &impl Fn(usize) -> LeafSnap) -> WindowSnap {
     let mut ids = vec![];
     w.layout.leaves(&mut ids);
     WindowSnap {
+        id: w.id,
         name: w.name.clone(),
         manual_name: w.manual_name,
         zoomed: w.zoomed,
@@ -236,7 +316,11 @@ fn layout_snap(node: &Node, leaf: &impl Fn(usize) -> LeafSnap) -> LayoutSnap {
 }
 
 pub(super) fn current_snapshot(st: &State) -> Snapshot {
-    snapshot_of(&st.sessions, &|id| leaf_of(st.panes.get(&id)))
+    let mut snapshot = snapshot_of(&st.sessions, &|id| leaf_of(st.panes.get(&id)));
+    snapshot.next_workspace_id = st.next_workspace_id;
+    snapshot.next_tab_id = st.next_tab_id;
+    snapshot.focused_workspace_id = st.target_session(None).ok().map(|si| st.sessions[si].id);
+    snapshot
 }
 
 fn leaf_of(pane: Option<&Pane>) -> LeafSnap {
@@ -246,6 +330,7 @@ fn leaf_of(pane: Option<&Pane>) -> LeafSnap {
     let agent = p.agent.as_ref();
     LeafSnap {
         cwd: live_cwd(p),
+        env: p.env.clone(),
         label: p.label.clone(),
         agent: agent.map(|a| a.agent.clone()),
         agent_name: agent.and_then(|a| a.name.clone()),

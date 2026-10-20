@@ -22,11 +22,53 @@ const MIN_ROWS: u16 = 3;
 
 /// Path of the state file: `$TMUXLIKE_STATE`, else a per-socket file in the local data dir.
 fn state_path() -> Option<PathBuf> {
-    if let Some(p) = std::env::var_os("TMUXLIKE_STATE").filter(|p| !p.is_empty()) {
+    if let Some(p) = crate::brand::env_os("STATE").filter(|p| !p.is_empty()) {
         return Some(PathBuf::from(p));
     }
     let file = format!("state-{}.json", sanitize_file_part(&ipc::base_name()));
-    Some(dirs::data_local_dir()?.join("tmuxlike").join(file))
+    match default_state_path(&dirs::data_local_dir()?, &file) {
+        Ok(path) => Some(path),
+        Err(e) => {
+            // Do not clear/quarantine a selected file if its selection cannot be recorded.
+            crate::log!("state path selection failed; state files left unchanged: {e}");
+            None
+        }
+    }
+}
+
+/// Config can fall back whenever a file is absent, but state must remember a migration:
+/// deleting or quarantining the new state is not permission to resurrect an old session.
+fn default_state_path(base: &Path, file: &str) -> io::Result<PathBuf> {
+    let new = base.join("crew").join(file);
+    let old = base.join("tmuxlike").join(file);
+    let selected = with_suffix(&new, ".crew-selected");
+    let new_was_used = new.exists()
+        || selected.exists()
+        || with_suffix(&new, ".bad").exists()
+        || with_suffix(&new, ".partial.bad").exists();
+    if !new_was_used && old.exists() {
+        return Ok(old);
+    }
+    // Create before clear/quarantine can remove the chosen state. The empty marker holds
+    // no session data and deliberately remains after kill-server.
+    if !selected.exists() {
+        let remember = || -> io::Result<()> {
+            if let Some(parent) = selected.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            match fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&selected)
+            {
+                Ok(file) => file.sync_all(),
+                Err(e) if e.kind() == ErrorKind::AlreadyExists => Ok(()),
+                Err(e) => Err(e),
+            }
+        };
+        remember()?;
+    }
+    Ok(new)
 }
 
 /// Keep only `[A-Za-z0-9._-]`; every other char becomes `_`.
@@ -106,9 +148,12 @@ pub fn restore_on_start(shared: &Shared) -> Result<usize, String> {
         Err(e) if e.kind() == ErrorKind::NotFound => return Ok(0),
         Err(e) => return Err(quarantine(&path, &format!("read failed: {e}"))),
     };
-    let snap = snapshot::decode_snapshot(&bytes).map_err(|e| quarantine(&path, &e))?;
+    let mut snap = snapshot::decode_snapshot(&bytes).map_err(|e| quarantine(&path, &e))?;
+    snapshot::assign_legacy_ids(&mut snap).map_err(|e| quarantine(&path, &e))?;
     let mut guard = shared.lock().map_err(|e| format!("state lock: {e}"))?;
     let st: &mut State = &mut guard;
+    st.next_workspace_id = st.next_workspace_id.max(snap.next_workspace_id);
+    st.next_tab_id = st.next_tab_id.max(snap.next_tab_id);
     let mut names = live_agent_names(st);
     let mut attempted = 0;
     let mut restored = 0;
@@ -129,6 +174,11 @@ pub fn restore_on_start(shared: &Shared) -> Result<usize, String> {
     }
     if is_partial(attempted, restored) {
         keep_partial_copy(&path);
+    }
+    if let Some(id) = snap.focused_workspace_id
+        && let Some(s) = st.sessions.iter_mut().find(|s| s.id == id)
+    {
+        s.last_used = Instant::now();
     }
     st.mark_dirty();
     Ok(restored)
@@ -186,6 +236,7 @@ fn restore_session(
     };
     *names = session_names;
     st.sessions.push(Session {
+        id: s.id,
         name: s.name.clone(),
         windows,
         active: s.active_window,
@@ -193,10 +244,18 @@ fn restore_session(
         rows,
         sidebar: s.sidebar,
         cwd: s.cwd.clone(),
+        env: s.env.clone(),
         last_used: Instant::now(),
     });
     let si = st.sessions.len() - 1;
     st.relayout(si);
+    st.events.record(
+        "workspace.restored",
+        None,
+        serde_json::json!({
+            "workspace_id": crate::workspace::workspace_id_str(s.id), "name": s.name,
+        }),
+    );
     Ok(())
 }
 
@@ -212,8 +271,16 @@ fn build_windows(
     let mut out = Vec::with_capacity(s.windows.len());
     for w in &s.windows {
         let mut spawn_leaf = |leaf: &LeafSnap| -> Result<usize, String> {
+            if leaf
+                .cwd
+                .as_ref()
+                .is_some_and(|cwd| !Path::new(cwd).is_dir())
+            {
+                return Err(format!("saved pane cwd no longer exists: {:?}", leaf.cwd));
+            }
+            let env = crate::workspace::merged_env(&s.env, leaf.env.clone());
             let id = st
-                .spawn_pane(shared, rows, cols, leaf.cwd.as_deref())
+                .spawn_pane_with_env(shared, rows, cols, leaf.cwd.as_deref(), &env)
                 .map_err(|e| format!("spawn pane: {e}"))?;
             spawned.push(id);
             apply_leaf(st, id, leaf, names);
@@ -226,6 +293,7 @@ fn build_windows(
             .get(w.active)
             .ok_or_else(|| format!("window {:?}: active pane out of range", w.name))?;
         out.push(Window {
+            id: w.id,
             name: w.name.clone(),
             manual_name: w.manual_name,
             layout,
@@ -249,6 +317,7 @@ fn apply_leaf(st: &mut State, id: usize, leaf: &LeafSnap, names: &mut HashSet<St
         return;
     };
     p.agent = Some(AgentInfo {
+        instance: 0,
         source: crate::api::RESTORE_SOURCE.into(),
         agent: kind,
         state: Status::Unknown,
