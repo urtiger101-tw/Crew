@@ -1,13 +1,14 @@
 //! Mouse input: click to focus and select, drag to copy, wheel to scroll.
 //!
 //! Click targets match what is drawn: sidebar lines come from `sidebar_rows`, window labels
-//! from `status_hit_at`, and the session chip and counters from `status_regions` (same layout).
+//! from `status_hit_at`, the session chip and counters from `status_regions` (same layout), and
+//! toolbar buttons from `toolbar_hit_at`.
 //! Overlays (chooser, key popup) take the wheel; any click closes them, as before.
 use crate::copy::{self, CopyState};
 use crate::layout::Rect;
 use crate::render::{
     SidebarKind, pack_chooser, sidebar_rows_lang, sidebar_text_width, status_hit_at,
-    status_regions, unpack_chooser, visible_entries,
+    status_regions, toolbar_hit_at, unpack_chooser, visible_entries,
 };
 use crate::server::State;
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
@@ -17,8 +18,8 @@ const WHEEL_LINES: usize = 3;
 
 impl State {
     /// Handle one mouse event from client `cid` on session index `si`.
-    /// Returns a command line for the caller to run with `run_line` (session chip and
-    /// counters); every other click or wheel step is applied here.
+    /// Returns a command line for the caller to run with `run_line` (session chip, counters
+    /// and toolbar buttons); every other click or wheel step is applied here.
     pub(crate) fn handle_mouse(&mut self, cid: usize, si: usize, m: MouseEvent) -> Option<String> {
         if matches!(m.kind, MouseEventKind::Down(_)) {
             self.cancel_prefix(cid);
@@ -62,6 +63,10 @@ impl State {
         // The status row spans the sidebar columns too, so it is checked before the sidebar.
         if self.sessions[si].rows.checked_sub(1) == Some(m.row) {
             return self.click_status(cid, si, m.column);
+        }
+        // the toolbar spans only the pane columns, so a sidebar click on row 0 falls through
+        if let Some(line) = self.click_toolbar(cid, si, m.column, m.row) {
+            return Some(line);
         }
         if self.click_sidebar(cid, si, m.column, m.row) {
             return None;
@@ -144,6 +149,14 @@ impl State {
             self.relayout(si);
         }
         None
+    }
+
+    /// Toolbar row: the command line of the button under the pointer (kill commands come back
+    /// wrapped in `confirm-before`, so they ask like the key bindings do). Nothing while a prompt
+    /// is open, so a click cannot run a command under a half-typed rename or command line.
+    fn click_toolbar(&self, cid: usize, si: usize, col: u16, row: u16) -> Option<String> {
+        let c = self.clients.get(&cid).filter(|c| c.prompt.is_none())?;
+        toolbar_hit_at(self, c, &self.sessions[si], col, row)
     }
 
     /// Pane whose title row (reserved above its rect, see `visible_rects`) is at `row`.
@@ -327,6 +340,115 @@ mod tests {
     use super::*;
     use crate::api::Status;
     use crate::render::Filter;
+
+    use crossterm::event::KeyModifiers;
+
+    /// 120x30 session `t` with pane 7, client 1 attached, toolbar `on`.
+    fn toolbar_state(on: bool) -> State {
+        let mut st = crate::server::test_state();
+        st.cfg.toolbar = on;
+        st.sessions
+            .push(crate::server::test_session("t", 120, 30, 7));
+        st.clients.insert(1, crate::server::test_client("t"));
+        st
+    }
+
+    fn click(st: &mut State, column: u16, row: u16) -> Option<String> {
+        let m = MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column,
+            row,
+            modifiers: KeyModifiers::NONE,
+        };
+        st.handle_mouse(1, 0, m)
+    }
+
+    #[test]
+    fn toolbar_click_returns_the_button_command() {
+        let mut st = toolbar_state(true);
+        // 120 columns fit all twelve default buttons:
+        // F1 help [0,8) F2 new [9,16) ... F10 close [85,95) F11 sidebar [96,108) F12 [109,120)
+        assert_eq!(click(&mut st, 0, 0).as_deref(), Some("list-keys"));
+        assert_eq!(click(&mut st, 7, 0).as_deref(), Some("list-keys"));
+        assert_eq!(click(&mut st, 8, 0), None, "gap between buttons");
+        assert_eq!(click(&mut st, 9, 0).as_deref(), Some("new-window"));
+        assert_eq!(click(&mut st, 17, 0).as_deref(), Some("split-window -h"));
+        assert_eq!(click(&mut st, 39, 0).as_deref(), Some("resize-pane -Z"));
+        assert_eq!(click(&mut st, 100, 0).as_deref(), Some("toggle-sidebar"));
+        assert_eq!(click(&mut st, 119, 0).as_deref(), Some("detach-client"));
+        assert_eq!(
+            click(&mut st, 0, 1),
+            None,
+            "row 1 is the pane, not the toolbar"
+        );
+    }
+
+    #[test]
+    fn toolbar_close_asks_like_the_key_binding() {
+        let mut st = toolbar_state(true);
+        assert_eq!(
+            click(&mut st, 85, 0).as_deref(),
+            Some("confirm-before kill-pane")
+        );
+        assert_eq!(
+            st.bindings.get("x").map(String::as_str),
+            Some("confirm-before kill-pane"),
+            "same command line as prefix x"
+        );
+    }
+
+    #[test]
+    fn toolbar_spans_only_pane_columns_and_hides_when_off() {
+        let mut st = toolbar_state(true);
+        st.sessions[0].sidebar = true;
+        // pane area is 92 columns: F1..F9 fit, F10 onward are dropped
+        assert_eq!(click(&mut st, 76, 0).as_deref(), Some("choose-tree"));
+        assert_eq!(click(&mut st, 86, 0), None, "dropped button");
+        assert_eq!(click(&mut st, 100, 0), None, "sidebar column");
+        let mut off = toolbar_state(false);
+        assert_eq!(click(&mut off, 0, 0), None);
+        assert_eq!(click(&mut off, 119, 0), None);
+    }
+
+    #[test]
+    fn toolbar_click_closes_an_open_overlay_first() {
+        let mut st = toolbar_state(true);
+        if let Some(c) = st.clients.get_mut(&1) {
+            c.popup = Some((vec!["x".into()], 0));
+        }
+        assert_eq!(click(&mut st, 0, 0), None);
+        assert!(st.clients[&1].popup.is_none());
+        assert_eq!(click(&mut st, 0, 0).as_deref(), Some("list-keys"));
+    }
+
+    #[test]
+    fn toolbar_click_does_nothing_while_a_prompt_is_open() {
+        use crossterm::event::{KeyCode, KeyEvent};
+        let mut st = toolbar_state(true);
+        let shared = std::sync::Arc::new(std::sync::Mutex::new(crate::server::test_state()));
+        st.handle_key(
+            &shared,
+            1,
+            0,
+            KeyEvent::new(KeyCode::Char('b'), KeyModifiers::CONTROL),
+        );
+        st.handle_key(
+            &shared,
+            1,
+            0,
+            KeyEvent::new(KeyCode::Char(':'), KeyModifiers::NONE),
+        );
+        assert!(
+            st.clients[&1].prompt.is_some(),
+            "prefix : opens the command prompt"
+        );
+        assert_eq!(
+            click(&mut st, 9, 0),
+            None,
+            "F2 new is not run under the prompt"
+        );
+        assert!(st.clients[&1].prompt.is_some(), "the prompt stays open");
+    }
 
     #[test]
     fn wheel_step_moves_one_row_and_clamps_at_both_ends() {

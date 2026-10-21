@@ -262,7 +262,11 @@ pub type Shared = Arc<Mutex<State>>;
 /// In-memory state for handler tests; no listener, PTY or background thread is started.
 #[cfg(test)]
 pub(crate) fn test_state() -> State {
-    let cfg = Config::default();
+    // legacy geometry (panes from row 0); toolbar tests turn it on explicitly
+    let cfg = Config {
+        toolbar: false,
+        ..Config::default()
+    };
     let (bindings, _) = cfg.bindings();
     let (notify, _) = mpsc::channel();
     State {
@@ -281,6 +285,47 @@ pub(crate) fn test_state() -> State {
         next_tab_id: 0,
         dirty: false,
         notify,
+    }
+}
+
+/// Session `name` of `cols`x`rows` with one window holding pane id `pane` (no PTY behind it).
+#[cfg(test)]
+pub(crate) fn test_session(name: &str, cols: u16, rows: u16, pane: usize) -> Session {
+    Session {
+        id: 1,
+        name: name.into(),
+        windows: vec![Window {
+            id: 1,
+            name: "w".into(),
+            manual_name: true,
+            layout: Node::Leaf(pane),
+            active: pane,
+            zoomed: false,
+        }],
+        active: 0,
+        cols,
+        rows,
+        sidebar: false,
+        cwd: None,
+        env: BTreeMap::new(),
+        last_used: Instant::now(),
+    }
+}
+
+/// Client attached to `session` that writes nowhere.
+#[cfg(test)]
+pub(crate) fn test_client(session: &str) -> Client {
+    Client {
+        session: session.into(),
+        sender: Box::new(std::io::sink()),
+        prefix: false,
+        frame: Frame::default(),
+        prompt: None,
+        chooser: None,
+        popup: None,
+        message: None,
+        drag: None,
+        env: crate::theme::ClientEnv::default(),
     }
 }
 
@@ -328,12 +373,21 @@ impl State {
         }
     }
 
+    /// Whether the toolbar row is drawn for `s`: the option is on and the session has at least
+    /// 4 rows (toolbar, 2 pane rows, status bar).
+    pub fn toolbar_shown(&self, s: &Session) -> bool {
+        self.cfg.toolbar && s.rows >= 4
+    }
+
+    /// Columns and rows the panes share: below the toolbar (when shown), above the status
+    /// row, left of the sidebar.
     pub fn pane_area(&self, s: &Session) -> Rect {
+        let top = u16::from(self.toolbar_shown(s));
         Rect {
             x: 0,
-            y: 0,
+            y: top,
             w: s.cols - self.sidebar_width(s),
-            h: s.rows.saturating_sub(1).max(1),
+            h: s.rows.saturating_sub(1 + top).max(1),
         }
     }
 
@@ -1919,6 +1973,128 @@ mod tests {
             super::workspace_attach_name(&st, 1, None).unwrap(),
             "original"
         );
+    }
+
+    #[test]
+    fn pane_area_leaves_row_zero_to_the_toolbar() {
+        use crate::layout::Rect;
+        let mut st = super::test_state();
+        let s = super::test_session("t", 80, 24, 7);
+        // test_state keeps the legacy geometry
+        assert!(!st.toolbar_shown(&s));
+        assert_eq!(
+            st.pane_area(&s),
+            Rect {
+                x: 0,
+                y: 0,
+                w: 80,
+                h: 23
+            }
+        );
+        st.cfg.toolbar = true;
+        assert!(st.toolbar_shown(&s));
+        assert_eq!(
+            st.pane_area(&s),
+            Rect {
+                x: 0,
+                y: 1,
+                w: 80,
+                h: 22
+            }
+        );
+        let rects = st.visible_rects(&s, &s.windows[0]);
+        assert_eq!(
+            rects,
+            vec![(
+                7,
+                Rect {
+                    x: 0,
+                    y: 1,
+                    w: 80,
+                    h: 22
+                }
+            )]
+        );
+        // the sidebar keeps its columns; the pane area (and toolbar) narrows
+        let mut side = super::test_session("t", 80, 24, 7);
+        side.sidebar = true;
+        assert_eq!(
+            st.pane_area(&side),
+            Rect {
+                x: 0,
+                y: 1,
+                w: 52,
+                h: 22
+            }
+        );
+    }
+
+    #[test]
+    fn toolbar_needs_four_rows() {
+        use crate::layout::Rect;
+        let mut st = super::test_state();
+        st.cfg.toolbar = true;
+        let s = super::test_session("t", 40, 4, 1);
+        assert_eq!(
+            st.pane_area(&s),
+            Rect {
+                x: 0,
+                y: 1,
+                w: 40,
+                h: 2
+            }
+        );
+        let s = super::test_session("t", 40, 3, 1);
+        assert!(!st.toolbar_shown(&s));
+        assert_eq!(
+            st.pane_area(&s),
+            Rect {
+                x: 0,
+                y: 0,
+                w: 40,
+                h: 2
+            }
+        );
+    }
+
+    #[test]
+    fn split_layout_starts_below_the_toolbar() {
+        use crate::layout::{Dir, Node, Rect};
+        let mut st = super::test_state();
+        st.cfg.toolbar = true;
+        let mut s = super::test_session("t", 80, 24, 1);
+        s.windows[0].layout = Node::Split {
+            dir: Dir::V,
+            ratio: 0.5,
+            a: Box::new(Node::Leaf(1)),
+            b: Box::new(Node::Leaf(2)),
+        };
+        let rects = st.visible_rects(&s, &s.windows[0]);
+        assert_eq!(
+            rects[0],
+            (
+                1,
+                Rect {
+                    x: 0,
+                    y: 1,
+                    w: 80,
+                    h: 11
+                }
+            )
+        );
+        assert_eq!(
+            rects[1],
+            (
+                2,
+                Rect {
+                    x: 0,
+                    y: 13,
+                    w: 80,
+                    h: 10
+                }
+            )
+        );
+        assert_eq!(rects[1].1.y + rects[1].1.h, 23, "the status row stays free");
     }
 
     #[test]

@@ -1,12 +1,14 @@
 //! Compose a session's visible state into a cell grid and diff it into ANSI output.
 //!
 //! `render_client` computes the shared [`Ctx`] and the grid, then calls the section
-//! drawers in paint order: panes, borders, sidebar, status bar, overlays.
+//! drawers in paint order: panes, borders, toolbar, sidebar, status bar, overlays.
 mod overlay;
 mod panes;
 mod sidebar;
 pub use sidebar::{SidebarKind, sidebar_rows_lang, sidebar_text_width};
 mod status;
+mod toolbar;
+pub use toolbar::{toolbar_command, toolbar_hit_at};
 
 pub use overlay::{
     Entry, Filter, chooser_entries, kill_target_lang, pack_chooser, unpack_chooser, visible_entries,
@@ -192,6 +194,7 @@ pub fn render_client(st: &State, c: &mut Client) -> Option<String> {
     };
     let mut cursor_pos = panes::draw_panes(&mut g, &cx, &mut covered);
     panes::draw_borders(&mut g, &cx, &covered);
+    toolbar::draw_toolbar(&mut g, &cx);
     sidebar::draw_sidebar(&mut g, &cx);
     cursor_pos = status::draw_status(&mut g, &cx).or(cursor_pos);
     if overlay::draw_overlays(&mut g, &cx) {

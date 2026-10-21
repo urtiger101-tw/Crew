@@ -3,7 +3,7 @@ use crate::commands::{self, Cmd, key_name};
 use crate::i18n::{Lang, tr, trf};
 use crate::keys;
 use crate::render::{
-    Entry, Filter, kill_target_lang, pack_chooser, unpack_chooser, visible_entries,
+    Entry, Filter, kill_target_lang, pack_chooser, toolbar_command, unpack_chooser, visible_entries,
 };
 use crate::server::{Prompt, PromptKind, Shared, State};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -39,12 +39,19 @@ impl State {
                 let _ = self.exec(shared, cid, Cmd::SendPrefix);
                 return;
             }
-            self.prefix_key(shared, cid, &k);
+            self.prefix_key(shared, cid, si, &k);
             return;
         }
         if self.cfg.is_prefix(&k) {
             c.prefix = true;
             self.mark_dirty();
+            return;
+        }
+        // `toolbar_fkeys`: a plain F1..F12 runs its toolbar button instead of reaching the pane
+        if self.cfg.toolbar_fkeys
+            && let Some(line) = self.toolbar_fkey_line(si, &k)
+        {
+            self.run_line(shared, cid, &line);
             return;
         }
         let pid = self.active_pane(si);
@@ -60,13 +67,28 @@ impl State {
         self.write_pane(pid, &b);
     }
 
-    /// The key after the prefix: run its binding, or say it is unbound. Esc cancels silently.
-    fn prefix_key(&mut self, shared: &Shared, cid: usize, k: &KeyEvent) {
+    /// Command line of the toolbar button for a plain F1..F12 (kill commands wrapped in
+    /// `confirm-before`); `None` for any other key, a missing button, or no toolbar drawn on
+    /// session `si` (off, or too few rows).
+    fn toolbar_fkey_line(&self, si: usize, k: &KeyEvent) -> Option<String> {
+        if !self.sessions.get(si).is_some_and(|s| self.toolbar_shown(s)) {
+            return None;
+        }
+        toolbar_command(&self.cfg, fkey_number(k)?.checked_sub(1)?)
+    }
+
+    /// The key after the prefix: run its binding (an F-key without one runs its toolbar
+    /// button), or say it is unbound. Esc cancels silently.
+    fn prefix_key(&mut self, shared: &Shared, cid: usize, si: usize, k: &KeyEvent) {
         if k.code == KeyCode::Esc {
             return;
         }
         let name = key_name(k);
-        match name.as_ref().and_then(|n| self.bindings.get(n).cloned()) {
+        let line = name
+            .as_ref()
+            .and_then(|n| self.bindings.get(n).cloned())
+            .or_else(|| self.toolbar_fkey_line(si, k));
+        match line {
             Some(line) => self.run_line(shared, cid, &line),
             None => {
                 let prefix = self.cfg.prefix_name();
@@ -318,6 +340,14 @@ impl State {
 fn plain_key(k: &KeyEvent) -> bool {
     !k.modifiers
         .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+}
+
+/// Number of a function key pressed without modifiers (`F1` -> 1); `None` otherwise.
+fn fkey_number(k: &KeyEvent) -> Option<usize> {
+    match k.code {
+        KeyCode::F(n) if k.modifiers.is_empty() => Some(usize::from(n)),
+        _ => None,
+    }
 }
 
 /// Message for a key after the prefix that has no binding (UX-04).
@@ -629,6 +659,105 @@ mod tests {
         assert_eq!(scrolled(5, KeyCode::PageUp, 25), Some(0));
         assert_eq!(scrolled(0, KeyCode::Char('z'), 3), None);
         assert_eq!(scrolled(0, KeyCode::Esc, 3), None);
+    }
+
+    /// Session `t` with pane 7 and client 1; returns the state and a spare `Shared`.
+    fn fkey_state(toolbar: bool, fkeys: bool) -> (State, Shared) {
+        let mut st = crate::server::test_state();
+        st.cfg.toolbar = toolbar;
+        st.cfg.toolbar_fkeys = fkeys;
+        st.sessions
+            .push(crate::server::test_session("t", 120, 30, 7));
+        st.clients.insert(1, crate::server::test_client("t"));
+        let shared = std::sync::Arc::new(std::sync::Mutex::new(crate::server::test_state()));
+        (st, shared)
+    }
+
+    fn press(st: &mut State, shared: &Shared, k: KeyEvent) {
+        st.handle_key(shared, 1, 0, k);
+    }
+
+    #[test]
+    fn fkey_number_only_for_plain_function_keys() {
+        assert_eq!(fkey_number(&plain(KeyCode::F(1))), Some(1));
+        assert_eq!(fkey_number(&plain(KeyCode::F(12))), Some(12));
+        assert_eq!(fkey_number(&key(KeyCode::F(1), KeyModifiers::SHIFT)), None);
+        assert_eq!(fkey_number(&plain(KeyCode::Char('1'))), None);
+    }
+
+    #[test]
+    fn direct_fkeys_run_toolbar_buttons_when_enabled() {
+        let (mut st, shared) = fkey_state(true, true);
+        press(&mut st, &shared, plain(KeyCode::F(1)));
+        assert!(st.clients[&1].popup.is_some(), "F1 runs list-keys");
+        // F13 has no button and reaches the pane (there is none here): nothing happens
+        let (mut st, shared) = fkey_state(true, true);
+        press(&mut st, &shared, plain(KeyCode::F(13)));
+        assert!(st.clients[&1].popup.is_none() && st.clients[&1].message.is_none());
+    }
+
+    #[test]
+    fn direct_fkeys_pass_through_when_off() {
+        for (toolbar, fkeys) in [(true, false), (false, true)] {
+            let (mut st, shared) = fkey_state(toolbar, fkeys);
+            press(&mut st, &shared, plain(KeyCode::F(1)));
+            let c = &st.clients[&1];
+            assert!(c.popup.is_none(), "toolbar={toolbar} fkeys={fkeys}");
+        }
+    }
+
+    #[test]
+    fn prefix_then_fkey_runs_the_toolbar_button() {
+        let (mut st, shared) = fkey_state(true, false);
+        press(&mut st, &shared, ctrl('b'));
+        assert!(st.clients[&1].prefix);
+        press(&mut st, &shared, plain(KeyCode::F(1)));
+        assert!(st.clients[&1].popup.is_some());
+        // with the toolbar off the key is unbound, as before
+        let (mut st, shared) = fkey_state(false, false);
+        press(&mut st, &shared, ctrl('b'));
+        press(&mut st, &shared, plain(KeyCode::F(1)));
+        let c = &st.clients[&1];
+        assert!(c.popup.is_none());
+        assert!(c.message.as_ref().is_some_and(|m| m.error));
+    }
+
+    #[test]
+    fn fkey_close_asks_before_killing() {
+        let (mut st, shared) = fkey_state(true, true);
+        press(&mut st, &shared, plain(KeyCode::F(10)));
+        let p = st.clients[&1].prompt.as_ref().expect("confirm prompt");
+        assert_eq!(p.kind, PromptKind::Confirm);
+        assert_eq!(p.expect_pane, Some(7));
+        // `n` cancels: the pane is still the window's pane
+        press(&mut st, &shared, plain(KeyCode::Char('n')));
+        assert!(st.clients[&1].prompt.is_none());
+        assert_eq!(st.sessions[0].windows[0].panes(), vec![7]);
+    }
+
+    #[test]
+    fn user_binding_on_an_fkey_wins_over_the_toolbar() {
+        let (mut st, shared) = fkey_state(true, false);
+        st.bindings.insert("F1".into(), "display-message hi".into());
+        press(&mut st, &shared, ctrl('b'));
+        press(&mut st, &shared, plain(KeyCode::F(1)));
+        assert!(st.clients[&1].popup.is_none());
+    }
+
+    #[test]
+    fn fkeys_do_nothing_while_the_toolbar_is_hidden_for_lack_of_rows() {
+        let (mut st, shared) = fkey_state(true, true);
+        st.sessions[0].rows = 3;
+        press(&mut st, &shared, plain(KeyCode::F(1)));
+        assert!(st.clients[&1].popup.is_none(), "plain F1 reaches the pane");
+        press(&mut st, &shared, ctrl('b'));
+        press(&mut st, &shared, plain(KeyCode::F(1)));
+        let c = &st.clients[&1];
+        assert!(c.popup.is_none());
+        assert!(
+            c.message.as_ref().is_some_and(|m| m.error),
+            "prefix F1 is unbound"
+        );
     }
 
     #[test]

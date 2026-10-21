@@ -3,6 +3,21 @@ use crossterm::event::KeyEvent;
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use unicode_width::UnicodeWidthStr;
+
+/// Most toolbar buttons (one per function key, F1..F12).
+pub const TOOLBAR_MAX_BUTTONS: usize = 12;
+/// Widest toolbar label, in display columns.
+const TOOLBAR_LABEL_MAX: usize = 24;
+
+/// One `[[toolbar_buttons]]` entry: the label drawn after its F-key chip and the command line
+/// a click (or the F-key) runs.
+#[derive(Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ToolbarButton {
+    pub label: String,
+    pub command: String,
+}
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(default)]
@@ -48,6 +63,12 @@ pub struct Config {
     pub theme: crate::theme::ThemeCfg,
     /// UI language: auto (from each client's locale) | en | zh-TW
     pub lang: String,
+    /// Show the function-key toolbar on the top row (needs at least 4 rows)
+    pub toolbar: bool,
+    /// F1..F12 trigger toolbar buttons directly; when off only `prefix` then `F<n>` does
+    pub toolbar_fkeys: bool,
+    /// Custom toolbar buttons in F-key order (at most 12); empty = the default buttons
+    pub toolbar_buttons: Vec<ToolbarButton>,
 }
 
 impl Default for Config {
@@ -76,6 +97,9 @@ impl Default for Config {
             agent_detection: true,
             theme: crate::theme::ThemeCfg::default(),
             lang: "auto".into(),
+            toolbar: true,
+            toolbar_fkeys: false,
+            toolbar_buttons: Vec::new(),
         }
     }
 }
@@ -85,6 +109,51 @@ pub fn config_path() -> Option<PathBuf> {
         return Some(PathBuf::from(p));
     }
     dirs::config_dir().map(|d| crate::brand::compatible_file(&d, "config.toml"))
+}
+
+/// Control, bidi formatting, directional mark, line/paragraph separator, BOM and interlinear
+/// annotation characters; never allowed in a label.
+fn unsafe_label_char(c: char) -> bool {
+    c.is_control()
+        || matches!(
+            c,
+            '\u{200e}'
+                | '\u{200f}'
+                | '\u{061c}'
+                | '\u{2028}'
+                | '\u{2029}'
+                | '\u{202a}'..='\u{202e}'
+                | '\u{2066}'..='\u{2069}'
+                | '\u{feff}'
+                | '\u{fff9}'..='\u{fffb}'
+        )
+}
+
+/// Check `[[toolbar_buttons]]`: at most [`TOOLBAR_MAX_BUTTONS`], every command parses, every
+/// label is non-blank, at most `TOOLBAR_LABEL_MAX` columns and has no control or bidi
+/// characters.
+pub fn validate_toolbar(buttons: &[ToolbarButton]) -> Result<(), String> {
+    if buttons.len() > TOOLBAR_MAX_BUTTONS {
+        return Err(format!(
+            "toolbar_buttons: at most {TOOLBAR_MAX_BUTTONS} buttons (F1..F12), got {}",
+            buttons.len()
+        ));
+    }
+    for (i, b) in buttons.iter().enumerate() {
+        let n = i + 1;
+        let label = &b.label;
+        // width 0 catches labels made only of zero-width characters, which `trim` keeps
+        if label.trim().is_empty()
+            || label.chars().any(unsafe_label_char)
+            || !(1..=TOOLBAR_LABEL_MAX).contains(&label.width())
+        {
+            return Err(format!(
+                "toolbar_buttons F{n}: label must be 1-{TOOLBAR_LABEL_MAX} columns without control or bidi characters"
+            ));
+        }
+        parse(&b.command).map_err(|e| format!("toolbar_buttons F{n}: command: {e}"))?;
+    }
+    Ok(())
 }
 
 fn parse_bool(v: &str) -> Result<bool, String> {
@@ -117,6 +186,7 @@ impl Config {
             crate::metadata::display::validate_template(template)?;
         }
         crate::metadata::display::validate_segments(&config.sidebar_pane_segments)?;
+        validate_toolbar(&config.toolbar_buttons)?;
         Ok(config)
     }
 
@@ -202,6 +272,8 @@ impl Config {
                 },
             },
             "confirm-close" => self.confirm_close = parse_bool(val)?,
+            "toolbar" => self.toolbar = parse_bool(val)?,
+            "toolbar-fkeys" => self.toolbar_fkeys = parse_bool(val)?,
             "pane-titles" => match val {
                 "off" | "auto" | "always" => self.pane_titles = val.to_string(),
                 _ => return Err(format!("pane-titles: expected off|auto|always, got {val}")),
@@ -283,6 +355,90 @@ sidebar_pane_segments = ["$workspace", {template="$task", fg="#abc", bold=false,
                 "accepted invalid config {input}"
             );
         }
+    }
+
+    #[test]
+    fn toolbar_defaults_parse_and_set() {
+        let c = Config::default();
+        assert!(c.toolbar && !c.toolbar_fkeys && c.toolbar_buttons.is_empty());
+        let c = load_text(
+            "toolbar = false\ntoolbar_fkeys = true\n\
+             [[toolbar_buttons]]\nlabel = \"build\"\ncommand = \"display built\"\n\
+             [[toolbar_buttons]]\nlabel = \"關閉\"\ncommand = \"kill-pane\"\n",
+        )
+        .unwrap();
+        assert!(!c.toolbar && c.toolbar_fkeys);
+        assert_eq!(
+            c.toolbar_buttons,
+            vec![
+                ToolbarButton {
+                    label: "build".into(),
+                    command: "display built".into()
+                },
+                ToolbarButton {
+                    label: "關閉".into(),
+                    command: "kill-pane".into()
+                },
+            ]
+        );
+        let mut c = Config::default();
+        c.set("toolbar", "off").unwrap();
+        c.set("toolbar_fkeys", "on").unwrap();
+        assert!(!c.toolbar && c.toolbar_fkeys);
+        c.set("toolbar", "on").unwrap();
+        assert!(c.toolbar);
+        assert!(c.set("toolbar", "maybe").is_err());
+        assert!(c.set("toolbar-fkeys", "2").is_err());
+    }
+
+    #[test]
+    fn toolbar_buttons_are_validated_at_load() {
+        // TOML basic string with every non-ASCII or control char as a \uXXXX escape, so the
+        // invalid labels reach the validator instead of failing the TOML parse
+        let quote = |s: &str| {
+            let body: String = s
+                .chars()
+                .map(|c| match c {
+                    '"' | '\\' => format!("\\{c}"),
+                    ' '..='~' => c.to_string(),
+                    _ => format!("\\u{:04X}", c as u32),
+                })
+                .collect();
+            format!("\"{body}\"")
+        };
+        let button = |label: &str, command: &str| {
+            format!(
+                "[[toolbar_buttons]]\nlabel = {}\ncommand = {}\n",
+                quote(label),
+                quote(command)
+            )
+        };
+        assert!(
+            toml::from_str::<Config>(&button("a\u{1b}[31m", "new-window")).is_ok(),
+            "the escape helper produces valid TOML"
+        );
+        assert!(load_text(&button(&"x".repeat(24), "new-window")).is_ok());
+        assert!(load_text(&button("中文標籤", "split-window -h")).is_ok());
+        for bad in [
+            button("", "new-window"),
+            button("   ", "new-window"),
+            button(&"x".repeat(25), "new-window"),
+            button(&"中".repeat(13), "new-window"),
+            button("a\u{1b}[31m", "new-window"),
+            button("\u{202e}abc", "new-window"),
+            button("a\u{200f}", "new-window"),
+            button("\u{200b}", "new-window"),
+            button("a\u{2028}b", "new-window"),
+            button("\u{feff}ok", "new-window"),
+            button("ok", "no-such-command"),
+            button("ok", ""),
+            "[[toolbar_buttons]]\nlabel = \"ok\"\n".into(),
+            "[[toolbar_buttons]]\nlabel = \"ok\"\ncommand = \"new-window\"\nkey = \"F1\"\n".into(),
+            button("ok", "new-window").repeat(13),
+        ] {
+            assert!(load_text(&bad).is_err(), "accepted invalid toolbar {bad:?}");
+        }
+        assert!(load_text(&button("ok", "new-window").repeat(12)).is_ok());
     }
 
     #[test]
