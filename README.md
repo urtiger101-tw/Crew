@@ -139,6 +139,8 @@ snapshot；舊 epoch 會回 `server_restarted`。事件 `pane.output` 只提供�
   Next attention: `prefix Tab` / `prefix BTab` jump to the next / previous pane that needs you (blocked first, then done, across sessions); a background pane turning blocked shows a toast
 - 窗格標題列：分割視窗中，有 agent 回報或標籤的窗格顯示狀態與窗格 ID，例如 `▲ claude · blocked`（`pane-titles`）
   Pane title rows: in split windows, panes with an agent report or label show their state and pane ID, e.g. `▲ claude · blocked` (`pane-titles`)
+- 頂列功能鍵工具列：最上一列顯示 `F1`–`F12` 按鈕（標籤依語言切換），點擊或以 `prefix` + `F<n>` 執行；`toolbar` 可關閉，`[[toolbar_buttons]]` 可自訂
+  Function-key toolbar: a top row of `F1`–`F12` buttons (labels follow the language), run by clicking or with `prefix` + `F<n>`; `toolbar` turns it off and `[[toolbar_buttons]]` customizes it
 - 按鍵提示列（which-key）：按下前綴鍵後，狀態列列出常用按鍵，內容取自目前的按鍵設定
   Which-key bar: after the prefix, the status bar lists the common keys, taken from your current bindings
 - 確認提示：互動式 `x`、`&` 與選單中 session／視窗列的 `x` 會先以 y/n 確認（`confirm-close`）；指令列、CLI 與 API 仍立即執行
@@ -245,6 +247,9 @@ crew set mouse off          # 任何伺服器指令皆可從命令列執行 / ru
 
 按下前綴鍵後，狀態列改為「按鍵提示列」（which-key bar），列出常用按鍵與用途，內容取自目前的按鍵設定，改綁後會跟著變。沒有逾時：下一個按鍵、`Esc` 或點擊會結束它。未綁定的按鍵會顯示 `C-b X is not bound (C-b ? lists keys)`。`confirm-close` 開啟時，`x` 與 `&` 會詢問 `kill pane p2 (…)? (y/n)`，按 `y` 執行，其他鍵取消。
 After the prefix, the status bar becomes a which-key bar listing the common keys and their uses, taken from your current bindings, so rebinding is reflected. It does not time out: the next key, `Esc` or a click ends it. An unbound key shows `C-b X is not bound (C-b ? lists keys)`. With `confirm-close` on, `x` and `&` ask `kill pane p2 (…)? (y/n)`: `y` runs it, any other key cancels.
+
+工具列按鈕（頂列）：`prefix` 後按 `F1`–`F12` 執行第 n 個按鈕；若該鍵已有自訂綁定（`bind`），以綁定為準。`toolbar_fkeys = true` 時，不加前綴的 `F1`–`F12` 直接執行按鈕，不再送到窗格內的程式。點擊按鈕亦會執行（輸入列開啟時點擊無作用）。`F10`（關閉）與 `x` 相同：`confirm-close` 開啟時先以 y/n 詢問。
+Toolbar buttons: `prefix` then `F1`–`F12` runs button n; a custom binding (`bind`) on that key wins. With `toolbar_fkeys = true`, plain `F1`–`F12` run the buttons directly and no longer reach the program in the pane. Clicking a button runs it too (not while a prompt is open). F10 (close) works like `x`: with `confirm-close` on it asks y/n first.
 
 ### 複製模式 Copy mode
 
@@ -471,6 +476,8 @@ persist = true          # 保存並還原版面 / save and restore the layout ac
 hints = true            # 狀態列的 "? help"、側邊欄提示與首次連線提示（which-key 不受影響）/ status-bar help, sidebar hint and first-attach tip (not the which-key bar)
 confirm_close = true    # x 與 & 先以 y/n 確認 / ask y/n before x and &
 pane_titles = "auto"    # 窗格標題列：off | auto | always / pane title rows
+toolbar = true          # 頂列功能鍵工具列 / function-key toolbar on the top row
+toolbar_fkeys = false   # F1..F12 直接執行按鈕 / plain F1..F12 run the buttons
 
 unbind = ["x"]          # 移除預設按鍵；"all" 移除全部 / remove defaults ("all" = every default)
 commands = ["set busy-secs 2"]   # 載入後執行的指令 / commands run after loading
@@ -491,7 +498,7 @@ border_active = "#e5c07b"
 `[theme.colors]` 的值必須是字串，色碼要加引號（例如 `accent = "74"`）；其他設定依上例使用 TOML 數字、布林值、字串或陣列。設定檔無法解析時（例如 `accent = 74` 忘了引號），啟動時會印出 `config error` 並改用全部預設值；執行中的 `source-file` 則回報錯誤並保留原設定。
 Values under `[theme.colors]` must be strings, so quote color values (for example `accent = "74"`). Other settings use the TOML number, boolean, string or array types shown above. If the file cannot be parsed (for example `accent = 74` without quotes), startup prints `config error` and uses all defaults; a running `source-file` reports the error and keeps the current settings.
 
-`set` 可用選項 options: `prefix`, `shell`, `mouse`, `sidebar`, `sidebar-width`, `scrollback`/`history-limit`（僅影響新窗格 new panes only）, `busy-secs`, `automatic-rename`, `osc52`/`set-clipboard`, `persist`, `hints on|off`, `confirm-close on|off`, `pane-titles off|auto|always`, `theme terminal|dark|light|mono`, `ascii-glyphs auto|on|off`.
+`set` 可用選項 options: `prefix`, `shell`, `mouse`, `sidebar`, `sidebar-width`, `scrollback`/`history-limit`（僅影響新窗格 new panes only）, `busy-secs`, `automatic-rename`, `osc52`/`set-clipboard`, `persist`, `hints on|off`, `confirm-close on|off`, `toolbar on|off`, `toolbar-fkeys on|off`, `pane-titles off|auto|always`, `theme terminal|dark|light|mono`, `ascii-glyphs auto|on|off`.
 
 重新載入 Reload: `prefix r`、`:source-file [PATH]` 或 `crew source-file`。`.toml` 檔會整個取代設定；其他副檔名視為每行一條指令（類似 `.tmux.conf`）。
 A `.toml` file replaces the whole config; any other file is run line by line as commands (like `.tmux.conf`).
@@ -504,6 +511,54 @@ A `.toml` file replaces the whole config; any other file is run line by line as 
   Default `auto`: shown only in split windows that are not zoomed, for panes at least 6 rows tall that have an agent report or a label. `always` shows them in every unzoomed split pane at least 2 rows tall. `off` hides them.
 - 標題佔用窗格的第一列：有標題的窗格，PTY 少 1 列，`pane list` 的 `rows` 也少 1。標題格式為 `符號 名稱 · 狀態`，窗格 ID 在右側；焦點窗格反白。點擊標題會聚焦該窗格。
   A title takes the pane's first row, so a titled pane has 1 row less: its PTY is 1 row shorter and `pane list` reports `rows` 1 smaller. The title reads `glyph name · state`, with the pane ID on the right; the focused title is highlighted. Clicking a title focuses its pane.
+
+### 工具列 Toolbar
+
+- `toolbar`（預設 `true`）：在最上一列（第 0 列）顯示功能鍵按鈕，只覆蓋窗格欄位，不覆蓋側邊欄；顯示時窗格從第 1 列開始。
+  Default `true`: function-key buttons on row 0, over the pane columns only (not the sidebar); when shown, panes start at row 1.
+- `toolbar_fkeys`（預設 `false`）：`true` 時不加前綴的 `F1`–`F12` 直接執行按鈕，不再送到窗格內的程式；需同時開啟 `toolbar`。
+  Default `false`: with `true`, plain `F1`–`F12` run their buttons and no longer reach the program in the pane; `toolbar` must be on.
+
+未設定 `[[toolbar_buttons]]` 時的預設按鈕 Default buttons (when no `[[toolbar_buttons]]` is set)：
+
+| 按鍵 Key | 標籤 Label | 繁中標籤 zh-TW | 指令 Command |
+|---|---|---|---|
+| F1 | help | 說明 | `list-keys` |
+| F2 | new | 新視窗 | `new-window` |
+| F3 | split│ | 左右分割 | `split-window -h` |
+| F4 | split─ | 上下分割 | `split-window -v` |
+| F5 | zoom | 縮放 | `resize-pane -Z` |
+| F6 | next | 切換 | `next-pane` |
+| F7 | copy | 複製 | `copy-mode` |
+| F8 | paste | 貼上 | `paste-buffer` |
+| F9 | tree | 選單 | `choose-tree` |
+| F10 | close | 關閉 | `kill-pane`（經 `confirm-before`） |
+| F11 | sidebar | 側欄 | `toggle-sidebar` |
+| F12 | detach | 離開 | `detach-client` |
+
+```toml
+toolbar = true          # 頂列功能鍵工具列 / function-key toolbar on the top row
+toolbar_fkeys = false   # F1..F12 直接執行按鈕 / plain F1..F12 run the buttons
+
+[[toolbar_buttons]]     # 依序對應 F1、F2 … / in order: F1, F2 …
+label = "說明"
+command = "list-keys"
+
+[[toolbar_buttons]]
+label = "build"
+command = "split-window -v"
+```
+
+- 自訂：任一筆 `[[toolbar_buttons]]` 即整組取代預設按鈕。校驗（載入時）：最多 12 個（F1–F12）；`label` 不可空白，寬 1–24 欄（中文字計 2 欄），不可含控制字元、雙向文字控制字元或零寬／分行等不可見字元；`command` 必須能解析；`[[toolbar_buttons]]` 的未知欄位會被拒絕。校驗失敗與其他設定錯誤相同：印出錯誤並改用預設值。
+  Custom: any `[[toolbar_buttons]]` entry replaces the whole default set. Validation (at load): at most 12 buttons (F1–F12); `label` must be non-blank, 1–24 display columns (CJK counts 2), with no control, bidi-control or invisible separator characters; `command` must parse; unknown fields in a `[[toolbar_buttons]]` entry are rejected. A failure is handled like other config errors: it is reported and the defaults are used.
+- 排版：按鈕由左至右、間隔 1 欄排列；放不下的按鈕整顆省略（標籤不會被切斷），並在其後以 `…` 標示（ASCII 模式為 `~`）。
+  Layout: buttons run left to right with one column between them. A button that does not fit is dropped whole, never cut, and `…` (`~` in ASCII mode) marks the drop.
+- 高度：session 少於 4 列時隱藏工具列，窗格回到第 0 列；隱藏（或 `toolbar = false`）時 F 鍵照常送到窗格，`prefix` + `F<n>` 視為未綁定。
+  Height: with fewer than 4 rows the toolbar is hidden and panes start at row 0. While it is hidden (or `toolbar = false`), F-keys reach the pane as usual and `prefix` + `F<n>` is unbound.
+- ASCII：`CREW_ASCII=1` 或 `ascii_glyphs` 生效時，內建的分割標籤改為 `split|` 與 `split-`。
+  ASCII: when ASCII glyphs are in effect, the built-in split labels become `split|` and `split-`.
+- 關閉類指令：`kill-pane`、`kill-window`、`kill-session`、`kill-server` 會自動以 `confirm-before` 包裝（與 `x` 相同），自訂按鈕亦然。
+  Kill commands `kill-pane`, `kill-window`, `kill-session` and `kill-server` are wrapped in `confirm-before` automatically, as with `x`, including custom buttons.
 
 ### 主題 Theme
 

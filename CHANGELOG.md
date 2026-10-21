@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- Add a function-key toolbar on the top row over the pane columns: twelve localized
+  default buttons (help, new, split, zoom, next, copy, paste, tree, close, sidebar,
+  detach) that run on click or `prefix` then `F1`..`F12`; `toolbar_fkeys` lets plain
+  F-keys run them. Kill commands ask through `confirm-before`; clicks are ignored
+  while a prompt is open. `toolbar` (default on) and `toolbar-fkeys` can be set at
+  runtime; panes move down one row while the toolbar is shown (sessions of 4+ rows).
+- Allow up to 12 custom `[[toolbar_buttons]]` with validated labels (1-24 columns,
+  no control, bidi or invisible separator characters) and parsed commands.
+- Add `scripts/toolbar_smoke.py`, which drives the toolbar through a real attached
+  client (clicks, F-keys, y/n confirmation) and checks geometry and config errors.
+
 ## 0.5.1 — Windows preview (2026-10-21)
 
 - Run PowerShell/pwsh workspace and tab startup commands through one-time native
