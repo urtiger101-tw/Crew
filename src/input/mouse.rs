@@ -367,15 +367,15 @@ mod tests {
     fn toolbar_click_returns_the_button_command() {
         let mut st = toolbar_state(true);
         // 120 columns fit all twelve default buttons:
-        // F1 help [0,8) F2 new [9,16) ... F10 close [85,95) F11 sidebar [96,108) F12 [109,120)
+        // Buttons use a single gap; hit ranges include the key and label.
         assert_eq!(click(&mut st, 0, 0).as_deref(), Some("list-keys"));
-        assert_eq!(click(&mut st, 7, 0).as_deref(), Some("list-keys"));
-        assert_eq!(click(&mut st, 8, 0), None, "gap between buttons");
-        assert_eq!(click(&mut st, 9, 0).as_deref(), Some("new-window"));
-        assert_eq!(click(&mut st, 17, 0).as_deref(), Some("split-window -h"));
-        assert_eq!(click(&mut st, 39, 0).as_deref(), Some("resize-pane -Z"));
-        assert_eq!(click(&mut st, 100, 0).as_deref(), Some("toggle-sidebar"));
-        assert_eq!(click(&mut st, 119, 0).as_deref(), Some("detach-client"));
+        assert_eq!(click(&mut st, 6, 0).as_deref(), Some("list-keys"));
+        assert_eq!(click(&mut st, 7, 0), None, "gap between buttons");
+        assert_eq!(click(&mut st, 8, 0).as_deref(), Some("new-window"));
+        assert_eq!(click(&mut st, 15, 0).as_deref(), Some("split-window -h"));
+        assert_eq!(click(&mut st, 35, 0).as_deref(), Some("resize-pane -Z"));
+        assert_eq!(click(&mut st, 86, 0).as_deref(), Some("toggle-sidebar"));
+        assert_eq!(click(&mut st, 100, 0).as_deref(), Some("detach-client"));
         assert_eq!(
             click(&mut st, 0, 1),
             None,
@@ -387,7 +387,7 @@ mod tests {
     fn toolbar_close_asks_like_the_key_binding() {
         let mut st = toolbar_state(true);
         assert_eq!(
-            click(&mut st, 85, 0).as_deref(),
+            click(&mut st, 76, 0).as_deref(),
             Some("confirm-before kill-pane")
         );
         assert_eq!(
@@ -401,9 +401,13 @@ mod tests {
     fn toolbar_spans_only_pane_columns_and_hides_when_off() {
         let mut st = toolbar_state(true);
         st.sessions[0].sidebar = true;
-        // pane area is 92 columns: F1..F9 fit, F10 onward are dropped
-        assert_eq!(click(&mut st, 76, 0).as_deref(), Some("choose-tree"));
-        assert_eq!(click(&mut st, 86, 0), None, "dropped button");
+        // Pane area is 92 columns: F1..F10 fit, F11 onward are dropped.
+        assert_eq!(click(&mut st, 68, 0).as_deref(), Some("choose-tree"));
+        assert_eq!(
+            click(&mut st, 76, 0).as_deref(),
+            Some("confirm-before kill-pane")
+        );
+        assert_eq!(click(&mut st, 86, 0), None, "overflow marker");
         assert_eq!(click(&mut st, 100, 0), None, "sidebar column");
         let mut off = toolbar_state(false);
         assert_eq!(click(&mut off, 0, 0), None);

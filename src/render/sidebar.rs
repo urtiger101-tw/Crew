@@ -715,7 +715,7 @@ fn draw_pane(g: &mut Grid, l: &Lane, y: u16, p: &PaneView) {
         .as_deref()
         .unwrap_or_else(|| status_word(l.lang, p.status));
     let (ptr, ptr_attr) = if p.focused {
-        (t.g.pointer, BOLD)
+        (t.g.pointer, BOLD | super::INVERSE)
     } else {
         (" ", 0)
     };

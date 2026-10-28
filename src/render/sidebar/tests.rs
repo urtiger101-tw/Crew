@@ -60,7 +60,7 @@ fn styled_label_only_overrides_its_occurrence_and_preserves_focus_and_state() {
     let mut plain = blank(25, 1);
     draw_pane(&mut plain, &lane, 0, &plain_pane);
     assert_eq!(row_text(&styled, 0), row_text(&plain, 0));
-    assert_eq!(cell(&styled, 0, 0).attrs, BOLD);
+    assert_eq!(cell(&styled, 0, 0).attrs, BOLD | super::super::INVERSE);
     assert_eq!(cell(&styled, 4, 0).attrs, DIM);
     assert_eq!(
         cell(&styled, 4, 0).fg,
@@ -175,7 +175,7 @@ fn styled_foregrounds_respect_each_clients_no_color_even_with_explicit_presets()
             };
             assert_eq!(cell(&grid, 4, 0).fg, expected, "{preset} / {env:?}");
             assert_eq!(cell(&grid, 4, 0).attrs, DIM);
-            assert_eq!(cell(&grid, 0, 0).attrs, BOLD);
+            assert_eq!(cell(&grid, 0, 0).attrs, BOLD | super::super::INVERSE);
         }
     }
 }

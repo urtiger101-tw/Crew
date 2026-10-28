@@ -202,10 +202,10 @@ def run_smoke(binary):
                 client.start()
                 wait_for(lambda: "help" in client.since(0), "the attached client's first frame")
                 assert window_count() == 1
-                client.click(10, 0)  # F2 new spans columns 9..15 of row 0
+                client.click(10, 0)  # F2 new spans columns 8..13 of row 0
                 wait_for(lambda: window_count() == 2, "F2 new to create a window")
                 mark = client.mark()
-                client.click(88, 0)  # F10 close spans columns 85..94
+                client.click(78, 0)  # F10 close spans columns 76..84
                 wait_for(lambda: "(y/n)" in client.since(mark), "F10 close to ask y/n")
                 assert window_count() == 2, "close waits for the answer"
                 client.key({"Char": "y"})
@@ -230,7 +230,7 @@ def run_smoke(binary):
             # 6. Custom buttons via source-file; invalid configs are rejected and keep the old row.
             run("source-file", str(custom))
             custom_top = first_line(run("debug-frame", "-t", "toolbar", "--text"))
-            assert custom_top.rstrip() == "F1 build  F2 關閉", custom_top
+            assert custom_top.rstrip() == "F1 build F2 關閉", custom_top
             assert "F3" not in custom_top, custom_top
             print("ok custom [[toolbar_buttons]] (CJK label) shows exactly F1 build F2 關閉 with no F3",
                   flush=True)
@@ -239,7 +239,7 @@ def run_smoke(binary):
                 result = proc("source-file", str(bad))
                 assert result.returncode == 1 and expected in result.stderr, (bad, result.returncode, result.stderr)
                 kept = first_line(run("debug-frame", "-t", "toolbar", "--text")).rstrip()
-                assert kept == "F1 build  F2 關閉", kept
+                assert kept == "F1 build F2 關閉", kept
             print("ok invalid toolbar configs (13 buttons, bad command) exit 1 with a message and keep the previous row",
                   flush=True)
         except BaseException:

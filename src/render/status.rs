@@ -399,10 +399,18 @@ fn window_unit(inp: &StatusInput, i: usize, short: bool) -> Unit {
     } else {
         Tone::Bar
     };
-    let mut parts = vec![(format!("{i}:{name}{flags}"), tone)];
+    let label = if active {
+        format!(" {i}:{name}{flags}")
+    } else {
+        format!("{i}:{name}{flags}")
+    };
+    let mut parts = vec![(label, tone)];
     if let Some((glyph, st)) = win.glyph {
         let glyph_tone = if active { Tone::Chip } else { Tone::Status(st) };
         parts.push((glyph.to_string(), glyph_tone));
+    }
+    if active {
+        parts.push((" ".to_string(), Tone::Chip));
     }
     Unit {
         parts,

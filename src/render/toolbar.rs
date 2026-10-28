@@ -52,7 +52,7 @@ pub(crate) struct Item {
     pub command: String,
 }
 
-/// One placed button: item `index` spans columns `[x0, x1)` (chip and padded label).
+/// One placed button: item `index` spans columns `[x0, x1)` (chip and label).
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Btn {
     pub index: usize,
@@ -128,9 +128,9 @@ pub fn toolbar_command(cfg: &Config, index: usize) -> Option<String> {
     command_of(cfg, index).map(guarded)
 }
 
-/// Columns of one button: the key chip, then ` label `.
+/// Columns of one button: the key chip, then ` label`.
 fn button_width(it: &Item) -> u16 {
-    let w = it.key.width() + it.label.width() + 2;
+    let w = it.key.width() + it.label.width() + 1;
     u16::try_from(w).unwrap_or(u16::MAX)
 }
 
@@ -241,7 +241,7 @@ pub(super) fn draw_toolbar(g: &mut Grid, cx: &Ctx) {
         let it = &items[b.index];
         let x = x0 + b.x0;
         let used = g.text(x, 0, b.x1 - b.x0, &it.key, chip.0, chip.1, chip.2);
-        let label = format!(" {} ", it.label);
+        let label = format!(" {}", it.label);
         g.text(x + used, 0, b.x1 - b.x0 - used, &label, fg, bg, attrs);
     }
     if let Some(mx) = layout.more {
@@ -274,9 +274,9 @@ mod tests {
             item("F1", "help", "list-keys"),
             item("F2", "new", "new-window"),
         ];
-        // "F1 help " = 8 cols, gap, "F2 new " = 7 cols -> 16
-        let l = toolbar_layout(&items, 16, "…");
-        assert_eq!(spans(&l), vec![(0, 0, 8), (1, 9, 16)]);
+        // "F1 help" = 7 cols, gap, "F2 new" = 6 cols -> 14
+        let l = toolbar_layout(&items, 14, "…");
+        assert_eq!(spans(&l), vec![(0, 0, 7), (1, 8, 14)]);
         assert_eq!(l.more, None);
     }
 
@@ -287,18 +287,17 @@ mod tests {
             item("F2", "new", "new-window"),
             item("F3", "zoom", "resize-pane -Z"),
         ];
-        // 15 columns: F1 (0..8) fits, F2 (9..16) does not, ellipsis at 9
+        // F2 cannot fit at 13 columns; at 15 it leaves no room for the marker.
+        let l = toolbar_layout(&items, 13, "…");
+        assert_eq!(spans(&l), vec![(0, 0, 7)]);
+        assert_eq!(l.more, Some(8));
         let l = toolbar_layout(&items, 15, "…");
-        assert_eq!(spans(&l), vec![(0, 0, 8)]);
-        assert_eq!(l.more, Some(9));
-        // 17 columns: F2 would end at 16 but the ellipsis needs 2 more columns
-        let l = toolbar_layout(&items, 17, "…");
-        assert_eq!(spans(&l), vec![(0, 0, 8)]);
-        assert_eq!(l.more, Some(9));
-        // 18 columns: F2 and the ellipsis fit
-        let l = toolbar_layout(&items, 18, "…");
-        assert_eq!(spans(&l), vec![(0, 0, 8), (1, 9, 16)]);
-        assert_eq!(l.more, Some(17));
+        assert_eq!(spans(&l), vec![(0, 0, 7)]);
+        assert_eq!(l.more, Some(8));
+        // At 16 columns F2 and the marker both fit.
+        let l = toolbar_layout(&items, 16, "…");
+        assert_eq!(spans(&l), vec![(0, 0, 7), (1, 8, 14)]);
+        assert_eq!(l.more, Some(15));
     }
 
     #[test]
@@ -328,12 +327,12 @@ mod tests {
             item("F1", "說明", "list-keys"),
             item("F2", "新視窗", "new-window"),
         ];
-        // "F1 說明 " = 2 + 1 + 4 + 1 = 8; "F2 新視窗 " = 2 + 1 + 6 + 1 = 10
-        let l = toolbar_layout(&items, 19, "…");
-        assert_eq!(spans(&l), vec![(0, 0, 8), (1, 9, 19)]);
-        let l = toolbar_layout(&items, 18, "…");
-        assert_eq!(spans(&l), vec![(0, 0, 8)]);
-        assert_eq!(l.more, Some(9));
+        // CJK characters occupy two columns, with one gap between buttons.
+        let l = toolbar_layout(&items, 17, "…");
+        assert_eq!(spans(&l), vec![(0, 0, 7), (1, 8, 17)]);
+        let l = toolbar_layout(&items, 16, "…");
+        assert_eq!(spans(&l), vec![(0, 0, 7)]);
+        assert_eq!(l.more, Some(8));
     }
 
     #[test]
@@ -436,19 +435,18 @@ mod tests {
     fn drawer_paints_chips_labels_and_the_ellipsis() {
         let env = crate::theme::ClientEnv::default();
         let (text, attrs) = drawn_row(40, false, env);
-        assert_eq!(text, "F1 help  F2 new  F3 split│  F4 split─  …");
+        assert_eq!(text, "F1 help F2 new F3 split│ F4 split─ …    ");
         assert_eq!(
             &attrs[..3],
             &[BOLD, BOLD, 0],
             "chip is bold, label is plain"
         );
-        // F4 ends at column 38, then the one-column gap: the ellipsis is the last column
-        assert_eq!(attrs[39], DIM, "ellipsis is faint");
+        assert_eq!(attrs[35], DIM, "ellipsis is faint");
         // sidebar on: the toolbar stops before the sidebar columns
         let (text, _) = drawn_row(80, true, env);
         assert_eq!(
             text.trim_end(),
-            "F1 help  F2 new  F3 split│  F4 split─  F5 zoom  …"
+            "F1 help F2 new F3 split│ F4 split─ F5 zoom F6 next …"
         );
     }
 
@@ -460,7 +458,7 @@ mod tests {
             ..Default::default()
         };
         let (text, attrs) = drawn_row(40, false, env);
-        assert_eq!(text, "F1 help  F2 new  F3 split|  F4 split-  ~");
+        assert_eq!(text, "F1 help F2 new F3 split| F4 split- ~    ");
         assert!(text.is_ascii());
         assert_eq!(attrs[0], BOLD | INVERSE, "mono chip is inverse");
     }

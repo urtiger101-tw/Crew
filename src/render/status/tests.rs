@@ -67,8 +67,8 @@ fn cjk_session_name_uses_display_width() {
     let inp = input("測試", vec![win("cmd")], 0, key_bar("C-b"));
     let (text, hits) = row(&inp, 40);
     // chip " 測試 " is 6 columns, then a 2-column gap before the label
-    assert_eq!(hits, vec![(0, 8, 14)]);
-    assert!(text.starts_with(" 測試   0:cmd*"), "{text:?}");
+    assert_eq!(hits, vec![(0, 8, 16)]);
+    assert!(text.starts_with(" 測試    0:cmd*"), "{text:?}");
     assert!(text.ends_with("C-b ? help"), "{text:?}");
 }
 
@@ -146,7 +146,10 @@ fn hit_columns_are_exactly_the_drawn_labels() {
     for (idx, a, b) in &hits {
         let (a, b) = (*a as usize, *b as usize);
         let label: String = cells[a..b].iter().collect();
-        assert!(label.starts_with(&format!("{idx}:")), "{label:?}");
+        assert!(
+            label.trim_start().starts_with(&format!("{idx}:")),
+            "{label:?}"
+        );
         assert_eq!(hit_at(&hits, a as u16), Some(*idx));
         assert_eq!(hit_at(&hits, (b - 1) as u16), Some(*idx));
         assert_ne!(hit_at(&hits, b as u16), Some(*idx));
