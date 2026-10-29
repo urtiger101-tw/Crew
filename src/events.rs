@@ -134,6 +134,7 @@ pub fn parse(sub: &str, args: &[String]) -> Result<ApiRequest, String> {
             None => {
                 let v = args
                     .get(i)
+                    .filter(|v| !v.starts_with("--"))
                     .ok_or_else(|| format!("missing value for {key}"))?;
                 i += 1;
                 v
@@ -231,5 +232,19 @@ mod tests {
         ] {
             assert!(parse("wait", &args(bad)).is_err());
         }
+    }
+
+    #[test]
+    fn parser_rejects_an_option_used_as_a_missing_value() {
+        let args = |s: &str| s.split_whitespace().map(String::from).collect::<Vec<_>>();
+        assert_eq!(
+            parse("wait", &args("--epoch --timeout")).unwrap_err(),
+            "missing value for --epoch"
+        );
+        assert_eq!(
+            parse("wait", &args("--after --limit 5")).unwrap_err(),
+            "missing value for --after"
+        );
+        assert!(parse("wait", &args("--epoch=--example")).is_ok());
     }
 }
