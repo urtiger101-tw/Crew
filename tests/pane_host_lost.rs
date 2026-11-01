@@ -83,8 +83,7 @@ impl IsolatedServer {
             .env("CREW_SOCKET", &self.socket)
             .env("CREW_CONFIG", &self.config)
             .env("CREW_STATE", &self.state)
-            .env_remove("CREW_PANE_ID")
-            .env_remove("TMUXLIKE_PANE_ID");
+            .env_remove("CREW_PANE_ID");
         command
     }
 
@@ -328,6 +327,40 @@ fn live_host_is_not_reported_lost_when_helper_exits() {
             Instant::now() < deadline,
             "pane close did not stop the shell"
         );
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    server.ping = None;
+    server.shell = None;
+}
+
+#[test]
+#[ignore = "known boundary: host and shell die before the first survivor scan; see crl 29"]
+fn host_and_shell_exiting_together_do_not_orphan_running_child() {
+    let mut server = IsolatedServer::new();
+    let tree = start_test_pane(&mut server);
+    // Give a healthy pane time to observe its process tree before the simultaneous failure.
+    std::thread::sleep(Duration::from_millis(1200));
+    let status = Command::new("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-Command",
+            &format!("Stop-Process -Id {},{} -Force", tree.host, tree.shell),
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .unwrap();
+    assert!(status.success(), "could not terminate test host and shell");
+    std::thread::sleep(Duration::from_secs(2));
+    assert!(
+        processes().iter().any(|p| p.pid == tree.ping),
+        "surviving child was killed"
+    );
+    wait_for_host_lost(&server, tree.ping);
+    server.run(&["pane", "close", "p1"]);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while processes().iter().any(|p| p.pid == tree.ping) {
+        assert!(Instant::now() < deadline, "pane close did not stop ping");
         std::thread::sleep(Duration::from_millis(50));
     }
     server.ping = None;
