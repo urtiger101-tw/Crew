@@ -80,6 +80,9 @@ pub(super) fn draw_panes(g: &mut Grid, cx: &Ctx, covered: &mut [bool]) -> Option
                 );
             }
         }
+        if let Some(lost) = &p.host_lost {
+            draw_host_lost(g, cx, r, lost);
+        }
         if let Some(cs) = &p.copy {
             let label = copy_label(
                 cx.lang,
@@ -113,6 +116,52 @@ pub(super) fn draw_panes(g: &mut Grid, cx: &Ctx, covered: &mut [bool]) -> Option
     }
     draw_titles(g, cx, covered);
     cursor_pos
+}
+
+/// Banner lines for a host-lost pane: what happened, what still runs, how to close it.
+pub(crate) fn host_lost_lines(
+    lang: Lang,
+    survivors: &[(u32, String)],
+    close_key: &str,
+) -> [String; 3] {
+    let procs = survivors
+        .iter()
+        .map(|(pid, exe)| format!("{exe} ({pid})"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    [
+        tr(lang, "render.host_lost.title").to_string(),
+        trf(lang, "render.host_lost.running", &[("procs", &procs)]),
+        trf(lang, "render.host_lost.close", &[("key", &close_key)]),
+    ]
+}
+
+/// Paint the host-lost banner over the top rows of pane rect `r` (warn chip colors; INVERSE
+/// in mono). The pane's last screen stays visible below it.
+fn draw_host_lost(g: &mut Grid, cx: &Ctx, r: &Rect, lost: &crate::server::host::HostLost) {
+    let theme = &cx.theme;
+    let attrs = if theme.mono { INVERSE } else { BOLD };
+    let close_key = format!("{} x", cx.st.cfg.prefix_name());
+    let lines = host_lost_lines(cx.lang, &lost.survivors, &close_key);
+    for (i, line) in lines.iter().enumerate() {
+        let y = r.y + i as u16;
+        if y >= r.y + r.h || y >= cx.h {
+            break;
+        }
+        let fg = theme.c(theme.bar_bg);
+        let bg = theme.c(theme.warn);
+        let fill = " ".repeat(r.w as usize);
+        g.text(r.x, y, r.w, &fill, fg, bg, attrs);
+        g.text(
+            r.x,
+            y,
+            r.w,
+            &cut(&format!(" {line}"), r.w as usize, theme.g.ellipsis),
+            fg,
+            bg,
+            attrs,
+        );
+    }
 }
 
 /// Copy-mode label `[copy pos/max sel]` (`[複製 pos/max 選取]`): `pos` lines back in the
@@ -408,6 +457,21 @@ mod tests {
     use super::*;
     use crate::api::Status;
     use crate::theme::{ASCII, UNICODE};
+
+    #[test]
+    fn host_lost_banner_names_survivors_and_the_close_key() {
+        let survivors = [
+            (31472, "codex.exe".to_string()),
+            (900, "node.exe".to_string()),
+        ];
+        let zh = host_lost_lines(Lang::ZhTw, &survivors, "C-b x");
+        assert_eq!(zh[0], "! 窗格主機已中斷：畫面不再更新");
+        assert_eq!(zh[1], "仍在執行：codex.exe (31472), node.exe (900)");
+        assert_eq!(zh[2], "C-b x 關閉窗格並結束這些程式");
+        let en = host_lost_lines(Lang::En, &survivors[..1], "C-a x");
+        assert_eq!(en[1], "Still running: codex.exe (31472)");
+        assert!(en[2].starts_with("C-a x "));
+    }
 
     fn covered_by(rects: &[Rect]) -> impl Fn(i32, i32) -> bool + '_ {
         move |x, y| rects.iter().any(|r| in_rect(*r, x, y))

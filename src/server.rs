@@ -16,6 +16,7 @@ use std::io::Read;
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
+pub(crate) mod host;
 mod model;
 mod mru;
 pub use model::*;
@@ -45,6 +46,8 @@ pub struct State {
 
 /// Output within this time after spawn (shell banner, prompt) is not "unseen work".
 const ATTENTION_GRACE: Duration = Duration::from_secs(2);
+/// Wait after a pane's output EOF before deciding whether its console host was lost.
+const HOST_EXIT_GRACE: Duration = Duration::from_millis(300);
 
 pub type Shared = Arc<Mutex<State>>;
 
@@ -455,6 +458,7 @@ impl State {
             label: None,
             cwd: start_dir,
             env: env.clone(),
+            host_lost: None,
         };
         self.panes.insert(id, pane);
         self.events
@@ -511,8 +515,11 @@ impl State {
                     }
                 }
             }
+            // A normal exit can deliver EOF a moment before the shell is gone; let it finish
+            // (without holding the lock) so only a real host loss keeps the pane.
+            std::thread::sleep(HOST_EXIT_GRACE);
             let mut st = crate::api::lock(&shared);
-            st.pane_exited(id);
+            st.pane_host_ended(id);
         });
         Ok(id)
     }
@@ -878,6 +885,7 @@ impl State {
         if let Some(mut p) = self.panes.remove(&pid) {
             self.events
                 .record("pane.closed", Some(pid), serde_json::json!({}));
+            host::kill_tree(&p);
             let _ = p.child.kill();
         }
         let Some((si, wi)) = self.locate(pid) else {
@@ -1754,6 +1762,8 @@ pub fn run() -> Result<()> {
                 let dead: Vec<usize> = st
                     .panes
                     .iter_mut()
+                    // a host-lost pane closes when its whole tree is gone, not just the root
+                    .filter(|(_, p)| p.host_lost.is_none())
                     .filter_map(|(id, p)| match p.child.try_wait() {
                         Ok(Some(status)) => {
                             crate::log!("pane {id}: child exited {status:?}");
@@ -1765,6 +1775,7 @@ pub fn run() -> Result<()> {
                 for id in dead {
                     st.pane_exited(id);
                 }
+                st.reap_host_lost();
                 // automatic window names
                 if st.cfg.automatic_rename {
                     let st = &mut *st;

@@ -126,6 +126,21 @@ pub const ENTRIES: &[Entry] = &[
     // pane titles and copy mode
     ("render.pane.untitled", "pane", "窗格"),
     (
+        "render.host_lost.title",
+        "! Pane host ended: this screen no longer updates",
+        "! 窗格主機已中斷：畫面不再更新",
+    ),
+    (
+        "render.host_lost.running",
+        "Still running: {procs}",
+        "仍在執行：{procs}",
+    ),
+    (
+        "render.host_lost.close",
+        "{key} closes the pane and ends these programs",
+        "{key} 關閉窗格並結束這些程式",
+    ),
+    (
         "render.copy.label",
         "[copy {pos}/{max}{sel}]",
         "[複製 {pos}/{max}{sel}]",

@@ -644,6 +644,12 @@ Precedence: an explicit `dark`, `light` or `mono` wins over the environment; `NO
 
 ## 疑難排解 Troubleshooting
 
+窗格主機中斷：Windows 的每個窗格由各自的 `conhost.exe` 承載，它偶爾會當掉（例如調整視窗大小時）。此時若窗格裡仍有程式在執行，Crew 會保留窗格並在頂端顯示「窗格主機已中斷」橫幅，列出仍在執行的程式；按 `prefix x` 關閉窗格時會一併結束它們。`crew pane get` 的 `host_lost` 欄位回報同一資訊，事件為 `pane.host_lost`。
+Pane host lost: each Windows pane is served by its own `conhost.exe`, which can crash (for example during a resize). If programs under the pane are still running, Crew keeps the pane with a "pane host ended" banner listing them; closing it with `prefix x` ends them too. `crew pane get` reports the same in `host_lost`, and the event is `pane.host_lost`.
+
+Ctrl-C：Windows 窗格中的 `C-c` 會中斷原生程式（例如 `ping -t`）；舊版因伺服器的程序群組設定而無效。
+Ctrl-C: `C-c` in a Windows pane now interrupts native programs such as `ping -t`; older versions ignored it because of the server's process-group flag.
+
 設定 `CREW_LOG=路徑` 後啟動，伺服器會寫入除錯紀錄（窗格啟動、讀到的輸出等）。
 Set `CREW_LOG=/path/to/file` before starting to get a server debug log (pane spawns, pty output, etc).
 

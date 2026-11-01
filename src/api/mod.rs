@@ -351,6 +351,9 @@ pub fn pane_json(st: &State, pid: usize) -> Option<Value> {
         "status": agent::status(p, &st.cfg).as_str(),
         "agent": agent,
         "detected_agent": p.detected_agent,
+        "host_lost": p.host_lost.as_ref().map(|l| json!({
+            "processes": crate::server::host::processes_json(&l.survivors),
+        })),
         "process_detection": {"enabled": st.cfg.agent_detection, "backend": crate::agent_detection::backend(), "kind_only": true},
         "display": crate::metadata::display::pane(st, pid, crate::i18n::Lang::En),
         "tokens": st.metadata.values(crate::metadata::Key::Pane(pid), std::time::Instant::now()),

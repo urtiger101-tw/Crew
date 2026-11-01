@@ -36,6 +36,8 @@ pub struct Pane {
     pub cwd: Option<String>,
     /// Explicit environment overrides, inherited by splits and persisted with the pane.
     pub env: BTreeMap<String, String>,
+    /// Set when the pane's console host ended while processes under it still run.
+    pub host_lost: Option<crate::server::host::HostLost>,
 }
 
 impl Pane {

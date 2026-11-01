@@ -268,6 +268,47 @@ struct Process {
     executable: String,
 }
 
+/// `root` (if still running) and every running descendant of it, as (pid, executable),
+/// root first then by pid. A descendant whose parent already exited still counts: Windows
+/// keeps the parent id. Empty off Windows (a Unix PTY reaches EOF only when the session
+/// leader is gone) or when the process table cannot be read.
+pub(crate) fn live_tree(root: u32) -> Vec<(u32, String)> {
+    #[cfg(windows)]
+    {
+        windows_processes()
+            .map(|all| tree_of(root, &all))
+            .unwrap_or_default()
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = root;
+        Vec::new()
+    }
+}
+
+#[cfg(any(windows, test))]
+fn tree_of(root: u32, processes: &[Process]) -> Vec<(u32, String)> {
+    let mut members: Vec<u32> = vec![root];
+    // breadth-first over parent links; bounded by the table size, so a pid cycle cannot loop
+    let mut i = 0;
+    while i < members.len() && members.len() <= processes.len() {
+        let parent = members[i];
+        for p in processes {
+            if p.parent == parent && p.pid != parent && !members.contains(&p.pid) {
+                members.push(p.pid);
+            }
+        }
+        i += 1;
+    }
+    let mut out: Vec<(u32, String)> = processes
+        .iter()
+        .filter(|p| members.contains(&p.pid))
+        .map(|p| (p.pid, p.executable.clone()))
+        .collect();
+    out.sort_by_key(|(pid, _)| (*pid != root, *pid));
+    out
+}
+
 #[cfg(any(windows, test))]
 fn select_descendant(root: u32, processes: &[Process]) -> Option<Detection> {
     if processes.len() > 16_384 || !processes.iter().any(|p| p.pid == root) {
@@ -425,6 +466,44 @@ mod tests {
                 ]
             )
             .is_none()
+        );
+    }
+
+    fn proc(pid: u32, parent: u32, exe: &str) -> Process {
+        Process {
+            pid,
+            parent,
+            executable: exe.into(),
+        }
+    }
+
+    #[test]
+    fn live_tree_keeps_orphaned_descendants_and_skips_strangers() {
+        // 10 = shell (already exited, so absent); 20 = codex started by it; 30 = codex child;
+        // 40 = unrelated; 50 = a pid-reuse cycle that must not hang the walk
+        let table = vec![
+            proc(20, 10, "codex.exe"),
+            proc(30, 20, "node.exe"),
+            proc(40, 1, "explorer.exe"),
+            proc(50, 50, "self-parent.exe"),
+        ];
+        assert_eq!(
+            tree_of(10, &table),
+            vec![(20, "codex.exe".to_string()), (30, "node.exe".to_string())]
+        );
+        assert_eq!(tree_of(99, &table), vec![]);
+        assert_eq!(
+            tree_of(50, &table),
+            vec![(50, "self-parent.exe".to_string())]
+        );
+    }
+
+    #[test]
+    fn live_tree_lists_a_running_root_first() {
+        let table = vec![proc(7, 5, "child.exe"), proc(5, 1, "shell.exe")];
+        assert_eq!(
+            tree_of(5, &table),
+            vec![(5, "shell.exe".to_string()), (7, "child.exe".to_string())]
         );
     }
 }
