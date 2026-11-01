@@ -21,11 +21,11 @@ impl State {
         let Some(p) = self.panes.get(&id) else {
             return;
         };
-        // Both the reader's EOF and the root-exit check end up here; the first one decides.
         if p.host_lost.is_some() {
             return;
         }
-        let survivors = survivors(p);
+        // The root may have exited first; follow what was still running under it then.
+        let survivors = refreshed(p, p.root_exited.as_deref().unwrap_or_default());
         if survivors.is_empty() {
             self.pane_exited(id);
             return;
@@ -37,6 +37,7 @@ impl State {
             serde_json::json!({ "processes": processes_json(&survivors) }),
         );
         if let Some(p) = self.panes.get_mut(&id) {
+            p.root_exited = None;
             p.host_lost = Some(HostLost {
                 since: Instant::now(),
                 survivors,
@@ -45,23 +46,53 @@ impl State {
         self.mark_dirty();
     }
 
-    /// Housekeeping for host-lost panes: refresh the survivor list, and close a pane once
-    /// nothing under it runs any more.
+    /// The pane's root process exited, but its console host may still serve the programs
+    /// started under it (or may die a moment later). Close the pane as before when nothing
+    /// under it runs; otherwise keep it live and remember the tree, so a later host EOF or
+    /// the exit of an intermediate process cannot hide what is still running. Host loss
+    /// itself is only ever concluded from the reader's EOF.
+    pub(crate) fn pane_root_exited(&mut self, id: usize) {
+        let Some(p) = self.panes.get(&id) else {
+            return;
+        };
+        if p.host_lost.is_some() || p.root_exited.is_some() {
+            return;
+        }
+        let survivors = refreshed(p, &[]);
+        if survivors.is_empty() {
+            self.pane_exited(id);
+            return;
+        }
+        crate::log!("pane {id}: root process exited; still running {survivors:?}");
+        if let Some(p) = self.panes.get_mut(&id) {
+            p.root_exited = Some(survivors);
+        }
+    }
+
+    /// Housekeeping for panes whose host was lost or whose root exited: refresh what still
+    /// runs under them, and close a pane once nothing does any more.
     pub(crate) fn reap_host_lost(&mut self) {
         let mut gone = vec![];
         let mut changed = false;
         for (id, p) in self.panes.iter_mut() {
-            let Some(lost) = &p.host_lost else { continue };
-            let now = refreshed(p, &lost.survivors);
+            let known = match (&p.host_lost, &p.root_exited) {
+                (Some(lost), _) => lost.survivors.clone(),
+                (None, Some(known)) => known.clone(),
+                (None, None) => continue,
+            };
+            let now = refreshed(p, &known);
             if now.is_empty() {
                 // Nothing is left to end: forget the stale list so the close below cannot
                 // terminate a pid the system has since handed to an unrelated process.
                 p.host_lost = None;
+                p.root_exited = None;
                 gone.push(*id);
-            } else if now != lost.survivors {
-                changed = true;
+            } else if now != known {
                 if let Some(lost) = p.host_lost.as_mut() {
                     lost.survivors = now;
+                    changed = true;
+                } else {
+                    p.root_exited = Some(now);
                 }
             }
         }
@@ -76,10 +107,6 @@ impl State {
 
 fn root_pid(p: &Pane) -> Option<u32> {
     p.child.process_id()
-}
-
-fn survivors(p: &Pane) -> Vec<(u32, String)> {
-    refreshed(p, &[])
 }
 
 /// The pane's processes still running now: its tree from the root, plus everything under
@@ -99,13 +126,18 @@ pub(crate) fn processes_json(survivors: &[(u32, String)]) -> serde_json::Value {
         .collect()
 }
 
-/// Closing a host-lost pane: end every surviving process of its tree. Killing only the
-/// root (what a normal close does) would leave the descendants running without a console.
+/// Closing a host-lost pane, or one whose root already exited: end every surviving process
+/// of its tree. Killing only the root (what a normal close does) would leave the
+/// descendants running unseen.
 pub(crate) fn kill_tree(p: &Pane) {
-    let Some(lost) = &p.host_lost else { return };
+    let known = match (&p.host_lost, &p.root_exited) {
+        (Some(lost), _) => &lost.survivors,
+        (None, Some(known)) => known,
+        (None, None) => return,
+    };
     // Rescan right before ending anything: the last list may be up to one tick old.
-    for (pid, exe) in &refreshed(p, &lost.survivors) {
-        crate::log!("ending host-lost survivor {exe} ({pid})");
+    for (pid, exe) in &refreshed(p, known) {
+        crate::log!("ending surviving pane process {exe} ({pid})");
         terminate(*pid);
     }
 }

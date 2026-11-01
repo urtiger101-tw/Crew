@@ -476,6 +476,7 @@ impl State {
             cwd: start_dir,
             env: env.clone(),
             host_lost: None,
+            root_exited: None,
         };
         self.panes.insert(id, pane);
         self.events
@@ -1780,7 +1781,7 @@ pub fn run() -> Result<()> {
                     .panes
                     .iter_mut()
                     // a host-lost pane closes when its whole tree is gone, not just the root
-                    .filter(|(_, p)| p.host_lost.is_none())
+                    .filter(|(_, p)| p.host_lost.is_none() && p.root_exited.is_none())
                     .filter_map(|(id, p)| match p.child.try_wait() {
                         Ok(Some(status)) => {
                             crate::log!("pane {id}: child exited {status:?}");
@@ -1789,10 +1790,11 @@ pub fn run() -> Result<()> {
                         _ => None,
                     })
                     .collect();
-                // The root can die together with the console host, before the reader's EOF
-                // grace ends: still keep the pane while anything under it runs.
+                // The root can exit while programs under it still run, on a live console host
+                // or one that died with it: keep the pane while anything under it runs.
+                // Only the reader's EOF concludes that the host was lost.
                 for id in dead {
-                    st.pane_host_ended(id);
+                    st.pane_root_exited(id);
                 }
                 st.reap_host_lost();
                 // automatic window names

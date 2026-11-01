@@ -38,6 +38,9 @@ pub struct Pane {
     pub env: BTreeMap<String, String>,
     /// Set when the pane's console host ended while processes under it still run.
     pub host_lost: Option<crate::server::host::HostLost>,
+    /// Set when the pane's root process exited while its console host still serves processes
+    /// under it: their last seen (pid, executable). The pane stays live, without a banner.
+    pub root_exited: Option<Vec<(u32, String)>>,
 }
 
 impl Pane {

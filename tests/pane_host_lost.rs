@@ -53,6 +53,7 @@ struct IsolatedServer {
     config: PathBuf,
     state: PathBuf,
     ping: Option<(u32, u32)>,
+    shell: Option<(u32, u32)>,
 }
 
 impl IsolatedServer {
@@ -72,6 +73,7 @@ impl IsolatedServer {
             config,
             state: std::env::temp_dir().join(format!("crew-p5-{suffix}.json")),
             ping: None,
+            shell: None,
         }
     }
 
@@ -99,16 +101,18 @@ impl IsolatedServer {
 
 impl Drop for IsolatedServer {
     fn drop(&mut self) {
-        if let Some((pid, parent)) = self.ping
-            && processes().iter().any(|p| {
-                p.pid == pid && p.parent == parent && p.name.eq_ignore_ascii_case("ping.exe")
-            })
-        {
-            let _ = Command::new("taskkill")
-                .args(["/PID", &pid.to_string(), "/F"])
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .status();
+        for (item, name) in [(self.ping, "ping.exe"), (self.shell, "powershell.exe")] {
+            if let Some((pid, parent)) = item
+                && processes().iter().any(|p| {
+                    p.pid == pid && p.parent == parent && p.name.eq_ignore_ascii_case(name)
+                })
+            {
+                let _ = Command::new("taskkill")
+                    .args(["/PID", &pid.to_string(), "/F"])
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status();
+            }
         }
         let _ = self.command().arg("kill-server").output();
         let _ = std::fs::remove_file(&self.state);
@@ -116,9 +120,14 @@ impl Drop for IsolatedServer {
     }
 }
 
-#[test]
-fn host_lost_keeps_surviving_grandchild_after_intermediate_shell_exits() {
-    let mut server = IsolatedServer::new();
+struct TestTree {
+    host: u32,
+    helper: u32,
+    shell: u32,
+    ping: u32,
+}
+
+fn start_test_pane(server: &mut IsolatedServer) -> TestTree {
     server.run(&["workspace", "create", "p5-test"]);
     server.run(&[
         "pane",
@@ -179,8 +188,16 @@ fn host_lost_keeps_surviving_grandchild_after_intermediate_shell_exits() {
         .unwrap()
         .pid;
     server.ping = Some((ping, shell));
+    server.shell = Some((shell, helper.pid));
+    TestTree {
+        host: hosts[0].pid,
+        helper: helper.pid,
+        shell,
+        ping,
+    }
+}
 
-    terminate(hosts[0].pid);
+fn wait_for_host_lost(server: &IsolatedServer, ping: u32) {
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
         let pane = server.run(&["pane", "get", "p1"]);
@@ -196,28 +213,123 @@ fn host_lost_keeps_surviving_grandchild_after_intermediate_shell_exits() {
         );
         std::thread::sleep(Duration::from_millis(50));
     }
+}
 
-    terminate(shell);
+#[test]
+fn host_lost_keeps_surviving_grandchild_after_intermediate_shell_exits() {
+    let mut server = IsolatedServer::new();
+    let tree = start_test_pane(&mut server);
+    terminate(tree.host);
+    wait_for_host_lost(&server, tree.ping);
+
+    terminate(tree.shell);
     std::thread::sleep(Duration::from_secs(2));
     let table = processes();
-    assert!(!table.iter().any(|p| p.pid == shell || p.pid == helper.pid));
     assert!(
-        table.iter().any(|p| p.pid == ping),
+        !table
+            .iter()
+            .any(|p| p.pid == tree.shell || p.pid == tree.helper)
+    );
+    assert!(
+        table.iter().any(|p| p.pid == tree.ping),
         "surviving child was killed"
     );
     let pane = server.run(&["pane", "get", "p1"]);
     assert!(
         pane["result"]["pane"]["host_lost"]["processes"]
             .as_array()
-            .is_some_and(|ps| ps.iter().any(|p| p["pid"] == ping)),
+            .is_some_and(|ps| ps.iter().any(|p| p["pid"] == tree.ping)),
         "surviving child was not retained: {pane}"
     );
 
     server.run(&["pane", "close", "p1"]);
     let deadline = Instant::now() + Duration::from_secs(5);
-    while processes().iter().any(|p| p.pid == ping) {
+    while processes().iter().any(|p| p.pid == tree.ping) {
         assert!(Instant::now() < deadline, "pane close did not stop ping");
         std::thread::sleep(Duration::from_millis(50));
     }
     server.ping = None;
+}
+
+#[test]
+fn host_lost_keeps_descendants_when_helper_exits_before_detection() {
+    for _ in 0..3 {
+        let mut server = IsolatedServer::new();
+        let tree = start_test_pane(&mut server);
+        let status = Command::new("powershell.exe")
+            .args([
+                "-NoProfile",
+                "-Command",
+                &format!("Stop-Process -Id {},{} -Force", tree.host, tree.helper),
+            ])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .unwrap();
+        assert!(status.success(), "could not terminate test host and helper");
+        std::thread::sleep(Duration::from_secs(2));
+        let table = processes();
+        assert!(table.iter().any(|p| p.pid == tree.shell), "shell was lost");
+        assert!(table.iter().any(|p| p.pid == tree.ping), "ping was lost");
+        wait_for_host_lost(&server, tree.ping);
+
+        server.run(&["pane", "close", "p1"]);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while processes()
+            .iter()
+            .any(|p| p.pid == tree.ping || p.pid == tree.shell)
+        {
+            assert!(
+                Instant::now() < deadline,
+                "pane close did not stop the surviving shell and ping"
+            );
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        server.ping = None;
+        server.shell = None;
+    }
+}
+
+#[test]
+fn live_host_is_not_reported_lost_when_helper_exits() {
+    let mut server = IsolatedServer::new();
+    let tree = start_test_pane(&mut server);
+    terminate(tree.helper);
+    std::thread::sleep(Duration::from_secs(2));
+    let table = processes();
+    assert!(table.iter().any(|p| p.pid == tree.host), "host exited");
+    assert!(table.iter().any(|p| p.pid == tree.shell), "shell exited");
+    let pane = server.run(&["pane", "get", "p1"]);
+    assert!(
+        pane["result"]["pane"]["host_lost"].is_null(),
+        "live host was incorrectly reported lost: {pane}"
+    );
+
+    server.run(&["pane", "send-keys", "p1", "C-c"]);
+    server.run(&[
+        "pane",
+        "run",
+        "p1",
+        "Write-Output ('P5_TEST_' + 'STILL_ALIVE')",
+    ]);
+    server.run(&[
+        "pane",
+        "wait-output",
+        "p1",
+        "--match",
+        "P5_TEST_STILL_ALIVE",
+        "--timeout",
+        "10000",
+    ]);
+    server.run(&["pane", "close", "p1"]);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while processes().iter().any(|p| p.pid == tree.shell) {
+        assert!(
+            Instant::now() < deadline,
+            "pane close did not stop the shell"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    server.ping = None;
+    server.shell = None;
 }
