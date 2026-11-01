@@ -1789,8 +1789,10 @@ pub fn run() -> Result<()> {
                         _ => None,
                     })
                     .collect();
+                // The root can die together with the console host, before the reader's EOF
+                // grace ends: still keep the pane while anything under it runs.
                 for id in dead {
-                    st.pane_exited(id);
+                    st.pane_host_ended(id);
                 }
                 st.reap_host_lost();
                 // automatic window names

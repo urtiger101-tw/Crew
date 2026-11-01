@@ -21,6 +21,10 @@ impl State {
         let Some(p) = self.panes.get(&id) else {
             return;
         };
+        // Both the reader's EOF and the root-exit check end up here; the first one decides.
+        if p.host_lost.is_some() {
+            return;
+        }
         let survivors = survivors(p);
         if survivors.is_empty() {
             self.pane_exited(id);
