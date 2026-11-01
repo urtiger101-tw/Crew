@@ -128,19 +128,22 @@ fn pane_current(rest: &[String], current: Option<usize>) -> Result<Request, Stri
 }
 
 fn pane_split(rest: &[String], current: Option<usize>) -> Result<Request, String> {
-    const USAGE: &str =
-        "pane split [TARGET] --direction right|down [--ratio F] [--cwd PATH] [--focus|--no-focus]";
-    let a = scan(rest, SPLIT_OPTS)?;
+    const USAGE: &str = "pane split [TARGET] --direction right|down [--ratio F] [--cwd PATH] [--focus|--no-focus] [--command TEXT]";
+    let mut opts = SPLIT_OPTS.to_vec();
+    opts.push(val("command"));
+    let a = scan(rest, &opts)?;
     a.exclusive(&["focus", "no-focus"])?;
     let words = a.words();
     check_count(&words, 0, 1, USAGE)?;
     let pane = target_of(&a, words.first().map(String::as_str), current)?.or(current);
+    crate::workspace::check_command(a.get("command")).map_err(|e| e.message)?;
     Ok(Request::PaneSplit {
         pane,
         direction: split_direction(a.get("direction"))?,
         ratio: ratio_opt(&a)?,
         cwd: a.get("cwd").map(str::to_string),
         focus: a.has("focus"),
+        command: a.get("command").map(str::to_string),
     })
 }
 

@@ -278,6 +278,7 @@ Mouse: drag inside a pane to select; releasing copies (also to the system clipbo
 | 按鍵 Key | 動作 Action |
 |---|---|
 | `j` `k` / `↑` `↓` | 移動選取 Move selection |
+| `Tab` / `Shift+Tab` | 移動選取，到頭尾時循環 Move selection, wrapping at either end |
 | `Enter` | 跳到該列：session、視窗或窗格（窗格列會聚焦該窗格）Jump to the row (a pane row focuses that pane) |
 | `b` `w` `d` `i` | 只顯示 blocked／working／done／idle 的窗格（連同上層列）Show only panes in that state, with their parent rows |
 | `a` | 取消篩選 Show all |
@@ -305,7 +306,7 @@ Other keys are ignored and the chooser stays open. A mouse click closes it; the 
 Usable from `prefix :`, key bindings, `commands = [...]`, plain command files, or the shell (`crew <command>`).
 
 ```
-split-window [-h|-v]          new-window [-n NAME]        rename-window [NAME]
+split-window [-h|-v] [--command TEXT]   new-window [-n NAME] [--command TEXT]   rename-window [NAME]
 rename-session [NAME]         kill-pane   kill-window     kill-session   kill-server
 select-pane -L|-R|-U|-D|-t :.+                            resize-pane -L|-R|-U|-D [N] | -Z
 next-window  previous-window  select-window -t N          copy-mode [-u]   paste-buffer
@@ -371,7 +372,7 @@ A JSON command interface over the same local socket, so scripts and coding agent
 | pane | `pane list [--session S]` | 列出窗格 List panes |
 | pane | `pane get <id>` | 單一窗格資料 One pane |
 | pane | `pane current [--pane ID \| --current]` | 查詢目前窗格 Current pane |
-| pane | `pane split [ID] --direction right\|down [--ratio F] [--cwd P] [--focus\|--no-focus]` | 分割窗格，預設不改變焦點 Split; focus unchanged by default |
+| pane | `pane split [ID] --direction right\|down [--ratio F] [--cwd P] [--focus\|--no-focus] [--command TEXT]` | 分割窗格，預設不改變焦點；TEXT 為單一 shell 指令字串 Split; focus unchanged by default; TEXT is one shell command string |
 | pane | `pane focus <id>` / `pane focus --direction D` | 移動焦點 Move focus |
 | pane | `pane zoom [ID] [--toggle\|--on\|--off]` | 縮放 Zoom |
 | pane | `pane rename <id> <label>` / `--clear` | 設定窗格標籤 Pane label |

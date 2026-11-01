@@ -45,6 +45,15 @@ const ATTENTION_GRACE: Duration = Duration::from_secs(2);
 
 pub type Shared = Arc<Mutex<State>>;
 
+/// Options for creating one side of a split.
+#[derive(Default)]
+pub(crate) struct SplitOptions {
+    pub ratio: Option<f32>,
+    pub cwd: Option<String>,
+    pub focus: bool,
+    pub shell: Option<Vec<String>>,
+}
+
 /// In-memory state for handler tests; no listener, PTY or background thread is started.
 #[cfg(test)]
 pub(crate) fn test_state() -> State {
@@ -586,9 +595,25 @@ impl State {
         shared: &Shared,
         si: usize,
         name: Option<String>,
-    ) -> Result<()> {
-        self.new_tab(shared, si, name, None, Launch::default(), true)
-            .map(|_| ())
+        command: Option<String>,
+    ) -> Result<usize> {
+        let shell = crate::workspace::startup_shell(self, command.as_deref())
+            .map_err(|e| anyhow!(e.message))?;
+        let native_startup = shell.is_some();
+        self.new_tab(
+            shared,
+            si,
+            name,
+            None,
+            Launch {
+                shell,
+                ..Launch::default()
+            },
+            true,
+        )?;
+        let pid = self.active_pane(si);
+        Self::submit_startup(shared, pid, command, native_startup);
+        Ok(pid)
     }
 
     /// Create a tab with optional cwd/env overrides without changing another tab's identity.
@@ -643,10 +668,41 @@ impl State {
         Ok(tid)
     }
 
-    fn split(&mut self, shared: &Shared, si: usize, dir: Dir) -> Result<()> {
+    fn split(
+        &mut self,
+        shared: &Shared,
+        si: usize,
+        dir: Dir,
+        command: Option<String>,
+    ) -> Result<usize> {
         let pid = self.active_pane(si);
-        self.split_pane(shared, pid, dir, None, None, true)
-            .map(|_| ())
+        let shell = crate::workspace::startup_shell(self, command.as_deref())
+            .map_err(|e| anyhow!(e.message))?;
+        let native_startup = shell.is_some();
+        let new_id = self.split_pane(
+            shared,
+            pid,
+            dir,
+            SplitOptions {
+                focus: true,
+                shell,
+                ..SplitOptions::default()
+            },
+        )?;
+        Self::submit_startup(shared, new_id, command, native_startup);
+        Ok(new_id)
+    }
+
+    /// The command executor holds the state lock. Submit after it releases the lock.
+    fn submit_startup(shared: &Shared, pid: usize, command: Option<String>, native_startup: bool) {
+        if !native_startup && let Some(command) = command {
+            let shared = shared.clone();
+            std::thread::spawn(move || {
+                if let Err(error) = crate::api::pane::submit(&shared, pid, &command, 30) {
+                    crate::log!("pane {pid}: startup command failed: {}", error.message);
+                }
+            });
+        }
     }
 
     /// Split pane `pid` (the new pane goes right/below). `ratio` = share of the existing pane.
@@ -656,9 +712,7 @@ impl State {
         shared: &Shared,
         pid: usize,
         dir: Dir,
-        ratio: Option<f32>,
-        cwd: Option<String>,
-        focus: bool,
+        opts: SplitOptions,
     ) -> Result<usize> {
         let (si, wi) = self.locate(pid).ok_or_else(|| anyhow!("pane not found"))?;
         let cur = self.panes.get(&pid).map(|p| p.rect).unwrap_or_default();
@@ -667,7 +721,8 @@ impl State {
         } else {
             (cur.h / 2, cur.w)
         };
-        let cwd = cwd
+        let cwd = opts
+            .cwd
             .or_else(|| self.panes.get(&pid).and_then(|p| p.cwd.clone()))
             .or_else(|| self.sessions[si].cwd.clone());
         let env = self
@@ -675,12 +730,13 @@ impl State {
             .get(&pid)
             .map(|p| p.env.clone())
             .unwrap_or_default();
-        let id = self.spawn_pane_with_env(shared, h, wd, cwd.as_deref(), &env)?;
+        let id =
+            self.spawn_pane_with_shell(shared, h, wd, cwd.as_deref(), &env, opts.shell.as_deref())?;
         let w = &mut self.sessions[si].windows[wi];
         w.layout
-            .split_with(pid, id, dir, ratio.unwrap_or(0.5).clamp(0.05, 0.95));
+            .split_with(pid, id, dir, opts.ratio.unwrap_or(0.5).clamp(0.05, 0.95));
         w.zoomed = false;
-        if focus {
+        if opts.focus {
             self.focus_pane(id);
         }
         self.relayout(si);
@@ -1112,10 +1168,21 @@ impl State {
         };
         let e = |e: anyhow::Error| e.to_string();
         match cmd {
-            Cmd::SplitWindow { horizontal } => self
-                .split(shared, si, if horizontal { Dir::H } else { Dir::V })
-                .map_err(e)?,
-            Cmd::NewWindow { name } => self.new_window(shared, si, name).map_err(e)?,
+            Cmd::SplitWindow {
+                horizontal,
+                command,
+            } => {
+                self.split(
+                    shared,
+                    si,
+                    if horizontal { Dir::H } else { Dir::V },
+                    command,
+                )
+                .map_err(e)?;
+            }
+            Cmd::NewWindow { name, command } => {
+                self.new_window(shared, si, name, command).map_err(e)?;
+            }
             Cmd::RenameWindow(None) | Cmd::RenameSession(None) | Cmd::CommandPrompt => {
                 let s = &self.sessions[si];
                 let (kind, buf) = match cmd {
@@ -1475,6 +1542,26 @@ fn handle_conn(shared: Shared, cid: usize, stream: interprocess::local_socket::S
                 // headless: the CLI gets the chosen pane on its own line
                 Cmd::NextAttention { backward } => {
                     commands::headless_attention(&mut st, backward).map(|t| format!("{t}\n"))
+                }
+                Cmd::SplitWindow {
+                    horizontal,
+                    command,
+                } => {
+                    let si = st.target_session(None)?;
+                    st.split(
+                        &shared,
+                        si,
+                        if horizontal { Dir::H } else { Dir::V },
+                        command,
+                    )
+                    .map(|id| format!("{}\n", crate::api::pane_id_str(id)))
+                    .map_err(|e| e.to_string())
+                }
+                Cmd::NewWindow { name, command } => {
+                    let si = st.target_session(None)?;
+                    st.new_window(&shared, si, name, command)
+                        .map(|id| format!("{}\n", crate::api::pane_id_str(id)))
+                        .map_err(|e| e.to_string())
                 }
                 c => st.exec_global(c).map(|_| String::new()),
             });

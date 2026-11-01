@@ -122,6 +122,8 @@ pub enum Request {
         ratio: Option<f32>,
         cwd: Option<String>,
         focus: bool,
+        #[serde(default)]
+        command: Option<String>,
     },
     PaneFocus {
         pane: usize,

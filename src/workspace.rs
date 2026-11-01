@@ -226,7 +226,7 @@ fn checked_cwd(raw: Option<String>) -> Result<Option<String>, ApiError> {
     .transpose()
 }
 
-fn check_command(command: Option<&str>) -> Result<(), ApiError> {
+pub(crate) fn check_command(command: Option<&str>) -> Result<(), ApiError> {
     if command.is_some_and(|c| c.trim().is_empty() || c.contains('\0')) {
         return Err(ApiError::invalid(
             "command must not be empty or contain NUL",
@@ -324,7 +324,10 @@ fn powershell_startup_shell(
     Ok(Some(words))
 }
 
-fn startup_shell(st: &State, command: Option<&str>) -> Result<Option<Vec<String>>, ApiError> {
+pub(crate) fn startup_shell(
+    st: &State,
+    command: Option<&str>,
+) -> Result<Option<Vec<String>>, ApiError> {
     if cfg!(windows) {
         powershell_startup_shell(&st.cfg.default_shell(), command)
     } else {

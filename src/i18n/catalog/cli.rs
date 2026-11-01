@@ -117,7 +117,7 @@ server stop
 pane list [--session NAME]
 pane get <id>
 pane current [--pane ID | --current]
-pane split [TARGET] --direction right|down [--ratio F] [--cwd PATH] [--focus | --no-focus]
+pane split [TARGET] --direction right|down [--ratio F] [--cwd PATH] [--focus | --no-focus] [--command TEXT]
 pane focus <id>
 pane focus --direction left|right|up|down [--pane ID | --current]
 pane zoom [TARGET] [--toggle | --on | --off]
@@ -158,7 +158,7 @@ server stop
 pane list [--session NAME]
 pane get <id>
 pane current [--pane ID | --current]
-pane split [TARGET] --direction right|down [--ratio F] [--cwd PATH] [--focus | --no-focus]
+pane split [TARGET] --direction right|down [--ratio F] [--cwd PATH] [--focus | --no-focus] [--command TEXT]
 pane focus <id>
 pane focus --direction left|right|up|down [--pane ID | --current]
 pane zoom [TARGET] [--toggle | --on | --off]

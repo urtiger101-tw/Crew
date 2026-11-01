@@ -27,9 +27,11 @@ pub struct FrameOpts {
 pub enum Cmd {
     SplitWindow {
         horizontal: bool,
+        command: Option<String>,
     },
     NewWindow {
         name: Option<String>,
+        command: Option<String>,
     },
     RenameWindow(Option<String>),
     RenameSession(Option<String>),
@@ -196,6 +198,19 @@ fn flag_val(args: &[String], f: &str) -> Option<String> {
         .and_then(|i| args.get(i + 1).cloned())
 }
 
+/// A creation command is one shell string, and must be the trailing option.
+fn creation_command(args: &[String]) -> Result<(&[String], Option<String>), String> {
+    let Some(i) = args.iter().position(|a| a == "--command") else {
+        return Ok((args, None));
+    };
+    if args.len() != i + 2 {
+        return Err("--command needs one trailing shell string".into());
+    }
+    let command = args[i + 1].clone();
+    crate::workspace::check_command(Some(&command)).map_err(|e| e.message)?;
+    Ok((&args[..i], Some(command)))
+}
+
 /// Positional arguments, skipping flags (and the values of flags that take one).
 fn positional(args: &[String], with_val: &[&str]) -> Vec<String> {
     let mut v = vec![];
@@ -327,12 +342,20 @@ pub fn parse(line: &str) -> Result<Cmd, String> {
     };
     let has = |f: &str| args.iter().any(|a| a == f);
     Ok(match name.as_str() {
-        "split-window" | "splitw" => Cmd::SplitWindow {
-            horizontal: has("-h"),
-        },
-        "new-window" | "neww" => Cmd::NewWindow {
-            name: flag_val(args, "-n"),
-        },
+        "split-window" | "splitw" => {
+            let (options, command) = creation_command(args)?;
+            Cmd::SplitWindow {
+                horizontal: options.iter().any(|a| a == "-h"),
+                command,
+            }
+        }
+        "new-window" | "neww" => {
+            let (options, command) = creation_command(args)?;
+            Cmd::NewWindow {
+                name: flag_val(options, "-n"),
+                command,
+            }
+        }
         "rename-window" | "renamew" => Cmd::RenameWindow(rest()),
         "rename-session" | "rename" => Cmd::RenameSession(rest()),
         "kill-pane" | "killp" => Cmd::KillPane,

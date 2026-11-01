@@ -56,11 +56,17 @@ fn cli_values_survive_command_transport_as_literal_arguments() {
 fn parse_commands() {
     assert_eq!(
         parse("splitw -h").unwrap(),
-        Cmd::SplitWindow { horizontal: true }
+        Cmd::SplitWindow {
+            horizontal: true,
+            command: None
+        }
     );
     assert_eq!(
         parse("split-window").unwrap(),
-        Cmd::SplitWindow { horizontal: false }
+        Cmd::SplitWindow {
+            horizontal: false,
+            command: None
+        }
     );
     assert_eq!(
         parse("resize-pane -L 10").unwrap(),
@@ -82,7 +88,8 @@ fn parse_commands() {
     assert_eq!(
         parse("new-window -n logs").unwrap(),
         Cmd::NewWindow {
-            name: Some("logs".into())
+            name: Some("logs".into()),
+            command: None,
         }
     );
     assert_eq!(
@@ -102,6 +109,43 @@ fn parse_commands() {
     for (k, c) in DEFAULT_BINDINGS {
         assert!(parse(c).is_ok(), "{c}");
         assert_eq!(&normalize_key(k).unwrap(), k);
+    }
+}
+
+#[test]
+fn creation_commands_preserve_shell_text_and_validate_command() {
+    let command = r#"Write-Output 'a b'; Write-Output \"-h\""#;
+    let line = ["splitw", "-h", "--command", command].map(quote).join(" ");
+    assert_eq!(
+        parse(&line).unwrap(),
+        Cmd::SplitWindow {
+            horizontal: true,
+            command: Some(command.into())
+        }
+    );
+    let line = ["new-window", "-n", "my logs", "--command", command]
+        .map(quote)
+        .join(" ");
+    assert_eq!(
+        parse(&line).unwrap(),
+        Cmd::NewWindow {
+            name: Some("my logs".into()),
+            command: Some(command.into())
+        }
+    );
+    assert_eq!(
+        parse("split-window --command -h").unwrap(),
+        Cmd::SplitWindow {
+            horizontal: false,
+            command: Some("-h".into())
+        }
+    );
+    for line in [
+        "split-window --command",
+        "new-window --command ''",
+        "split-window --command x extra",
+    ] {
+        assert!(parse(line).is_err(), "{line}");
     }
 }
 

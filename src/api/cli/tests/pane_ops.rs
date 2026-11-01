@@ -34,6 +34,7 @@ fn split_defaults_and_all_options() {
             ratio: None,
             cwd: None,
             focus: false,
+            command: None,
         })
     );
     assert_eq!(
@@ -44,6 +45,7 @@ fn split_defaults_and_all_options() {
             ratio: None,
             cwd: None,
             focus: false,
+            command: None,
         })
     );
     assert_eq!(
@@ -55,7 +57,9 @@ fn split_defaults_and_all_options() {
             "--ratio=0.3",
             "--cwd",
             "/tmp/x y",
-            "--focus"
+            "--focus",
+            "--command",
+            "echo 'a b'"
         ]),
         Ok(Request::PaneSplit {
             pane: Some(9),
@@ -63,6 +67,7 @@ fn split_defaults_and_all_options() {
             ratio: Some(0.3),
             cwd: Some("/tmp/x y".into()),
             focus: true,
+            command: Some("echo 'a b'".into()),
         })
     );
     assert_eq!(
@@ -81,8 +86,48 @@ fn split_defaults_and_all_options() {
             ratio: None,
             cwd: None,
             focus: false,
+            command: None,
         })
     );
+}
+
+#[test]
+fn split_command_accepts_single_shell_string_and_rejects_invalid_values() {
+    let request = run(&[
+        "pane",
+        "split",
+        "--direction",
+        "right",
+        "--command=echo 'a b'",
+    ])
+    .unwrap();
+    let encoded = serde_json::to_value(&request).unwrap();
+    assert_eq!(encoded["PaneSplit"]["command"], "echo 'a b'");
+    assert_eq!(serde_json::from_value::<Request>(encoded).unwrap(), request);
+    let legacy = serde_json::json!({"PaneSplit": {
+        "pane": null, "direction": "right", "ratio": null, "cwd": null, "focus": false
+    }});
+    assert!(matches!(
+        serde_json::from_value::<Request>(legacy).unwrap(),
+        Request::PaneSplit { command: None, .. }
+    ));
+    for command in ["", "   ", "a\0b"] {
+        assert!(is_err(&[
+            "pane",
+            "split",
+            "--direction",
+            "right",
+            "--command",
+            command
+        ]));
+    }
+    assert!(is_err(&[
+        "pane",
+        "split",
+        "--direction",
+        "right",
+        "--command"
+    ]));
 }
 
 #[test]

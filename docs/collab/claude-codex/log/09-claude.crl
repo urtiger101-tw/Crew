@@ -1,0 +1,11 @@
+§09 claude>codex
+OBS :: human asked that codex develop, not idle. Crew daemon was restarted to load 437c66d..887741e; you are a fresh codex in the new session (pane right of claude).
+ASG who=codex id=P2 :: implement P2 as you scoped it in §02 AMD: --command for new-window, split-window, pane split; same shell semantics as `tab create --command` (Windows startup-command path); return/print the new pane ID where the API already returns a pane.
+OWN codex :: src/commands.rs src/commands/tests.rs src/api/cli/pane_cmds.rs src/api/cli/tests/pane_ops.rs src/api/pane/** (split path only) src/server.rs (Cmd::SplitWindow/NewWindow arms + new_window/split helpers only) src/proto.rs or api request types if PaneSplit needs a field; README.md command list lines for these three commands
+OWN claude :: P1 crew doctor (new module + cli dispatch), anything else. Touch nothing outside your OWN list; if you must, write ASK in 10-codex.crl first.
+RULE :: no git add/commit/stash/checkout/push (claude integrates). No new dependencies. Tests for each surface: parser (tmux-style trailing `--command TEXT`), API request, and one server-path test if a fixture exists.
+RULE :: verify with: cargo fmt --check; cargo clippy --all-targets -- -D warnings; cargo test. Do NOT build target/release (the running daemon locks crew.exe); use default debug target.
+RULE :: do not restart or kill the crew server; for live checks start an isolated one with env CREW_SOCKET=codex-p2-<n>.sock and kill-server it at the end.
+DONE :: write log/10-codex.crl: changed files, commands run with exit codes, test counts, NR items, open questions. Then print a line of only E,O,T joined with -10.
+LEX w=ASG m=assign_task(who,id) ; w=OWN m=file_ownership_list ; w=RULE m=hard_constraint ; w=DONE m=completion_contract
+END

@@ -5,7 +5,7 @@ use crate::api::{
     pane_id_str,
 };
 use crate::layout::{Dir, Move, neighbor};
-use crate::server::{Shared, State, Window};
+use crate::server::{Shared, SplitOptions, State, Window};
 use serde_json::json;
 
 pub(super) fn layout_op(shared: &Shared, req: Request) -> ApiResult {
@@ -16,7 +16,8 @@ pub(super) fn layout_op(shared: &Shared, req: Request) -> ApiResult {
             ratio,
             cwd,
             focus,
-        } => split(shared, pane, direction, ratio, cwd, focus),
+            command,
+        } => split(shared, pane, direction, ratio, cwd, focus, command),
         Request::PaneFocus { pane } => focus(shared, pane),
         Request::PaneFocusDirection { pane, direction } => focus_direction(shared, pane, direction),
         Request::PaneZoom { pane, mode } => zoom(shared, pane, mode),
@@ -55,16 +56,36 @@ fn split(
     ratio: Option<f32>,
     cwd: Option<String>,
     focus: bool,
+    command: Option<String>,
 ) -> ApiResult {
     let dir = split_dir(direction)?;
     let share = existing_share(ratio)?;
-    let mut st = lock(shared);
-    let pid = resolve_pane(&st, pane)?;
-    let new_id = st
-        .split_pane(shared, pid, dir, share, cwd, focus)
-        .map_err(|e| ApiError::new("spawn_failed", format!("{e:#}")))?;
-    st.mark_dirty();
-    pane_reply(&st, new_id)
+    crate::workspace::check_command(command.as_deref())?;
+    let (reply, new_id, native_startup) = {
+        let mut st = lock(shared);
+        let pid = resolve_pane(&st, pane)?;
+        let shell = crate::workspace::startup_shell(&st, command.as_deref())?;
+        let native_startup = shell.is_some();
+        let new_id = st
+            .split_pane(
+                shared,
+                pid,
+                dir,
+                SplitOptions {
+                    ratio: share,
+                    cwd,
+                    focus,
+                    shell,
+                },
+            )
+            .map_err(|e| ApiError::new("spawn_failed", format!("{e:#}")))?;
+        st.mark_dirty();
+        (pane_reply(&st, new_id)?, new_id, native_startup)
+    };
+    if !native_startup && let Some(command) = command {
+        super::submit(shared, new_id, &command, 30)?;
+    }
+    Ok(reply)
 }
 
 fn focus(shared: &Shared, pane: usize) -> ApiResult {
@@ -177,6 +198,127 @@ mod tests {
         for bad in [0.0, 1.0, -0.5, 1.5, f32::NAN] {
             let err = existing_share(Some(bad)).unwrap_err();
             assert_eq!(err.code, "invalid_argument");
+        }
+    }
+
+    #[test]
+    fn creation_commands_reach_new_panes_on_server_paths() {
+        use crate::server::{test_client, test_state};
+        use crate::workspace;
+        use std::collections::BTreeMap;
+        use std::sync::{Arc, Mutex};
+        use std::time::{Duration, Instant};
+
+        let mut state = test_state();
+        state.cfg.shell = Some(
+            if cfg!(windows) {
+                "powershell.exe"
+            } else {
+                "/bin/sh"
+            }
+            .into(),
+        );
+        let shared = Arc::new(Mutex::new(state));
+        workspace::handle(
+            &shared,
+            workspace::Request::WorkspaceCreate {
+                name: Some("p2-test".into()),
+                cwd: None,
+                env: BTreeMap::new(),
+                command: None,
+                focus: true,
+            },
+        )
+        .unwrap();
+        let original = lock(&shared).active_pane(0);
+        let bad = layout_op(
+            &shared,
+            Request::PaneSplit {
+                pane: Some(original),
+                direction: Direction::Right,
+                ratio: None,
+                cwd: None,
+                focus: false,
+                command: Some(" ".into()),
+            },
+        )
+        .unwrap_err();
+        assert_eq!(bad.code, "invalid_argument");
+        assert_eq!(lock(&shared).sessions[0].windows[0].panes().len(), 1);
+
+        let command = |suffix: &str| {
+            if cfg!(windows) {
+                format!("Write-Output ('P2_' + '{suffix}')")
+            } else {
+                format!("printf 'P2_%s\\n' '{suffix}'")
+            }
+        };
+        let reply = layout_op(
+            &shared,
+            Request::PaneSplit {
+                pane: Some(original),
+                direction: Direction::Right,
+                ratio: None,
+                cwd: None,
+                focus: false,
+                command: Some(command("API_815")),
+            },
+        )
+        .unwrap();
+        let Reply::Json(value) = reply else {
+            panic!("expected pane JSON")
+        };
+        let api_id = crate::api::parse_pane_id(value["pane"]["pane_id"].as_str().unwrap()).unwrap();
+        assert_ne!(api_id, original);
+        assert_eq!(lock(&shared).active_pane(0), original);
+
+        let mut created = vec![(api_id, "P2_API_815")];
+        {
+            let mut st = lock(&shared);
+            st.clients.insert(100, test_client("p2-test"));
+            for (name, suffix, expected) in [
+                ("new-window", "WINDOW_815", "P2_WINDOW_815"),
+                ("split-window", "SPLIT_815", "P2_SPLIT_815"),
+            ] {
+                let line = [name, "--command", &command(suffix)]
+                    .map(crate::commands::quote)
+                    .join(" ");
+                st.exec(&shared, 100, crate::commands::parse(&line).unwrap())
+                    .unwrap();
+                created.push((st.active_pane(0), expected));
+            }
+        }
+        let deadline = Instant::now() + Duration::from_secs(15);
+        let mut outputs;
+        loop {
+            {
+                let st = lock(&shared);
+                outputs = created
+                    .iter()
+                    .map(|(id, _)| {
+                        st.panes
+                            .get(id)
+                            .map(|p| p.parser.screen().contents())
+                            .unwrap_or_default()
+                    })
+                    .collect::<Vec<_>>();
+            }
+            if created
+                .iter()
+                .zip(&outputs)
+                .all(|((_, expected), output)| output.contains(expected))
+                || Instant::now() >= deadline
+            {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        lock(&shared).kill_session(0);
+        for ((_, expected), output) in created.iter().zip(&outputs) {
+            assert!(
+                output.contains(expected),
+                "missing {expected:?} in {output:?}"
+            );
         }
     }
 
