@@ -47,6 +47,15 @@ const INVERSE: u8 = 8;
 /// SGR 2: faint text (mono-mode replacement for muted color).
 const DIM: u8 = 16;
 
+impl Cell {
+    /// Turn this cell into a narrow space, keeping its colors and attributes.
+    fn blank(&mut self) {
+        self.s = " ".into();
+        self.wide = false;
+        self.skip = false;
+    }
+}
+
 impl Default for Cell {
     fn default() -> Self {
         Cell {
@@ -80,10 +89,30 @@ struct Grid {
 }
 
 impl Grid {
-    fn put(&mut self, x: u16, y: u16, c: Cell) {
-        if x < self.w && y < self.h {
-            self.cells[(y as usize) * self.w as usize + x as usize] = c;
+    /// Store one cell, keeping wide pairs whole: overwriting either half of a wide character
+    /// blanks the other half (a later layer such as a label, divider or overlay may start on
+    /// a continuation cell), and a wide character that does not fit before the right edge
+    /// becomes a blank. Without this the terminal is sent half a pair and erases the glyph.
+    fn put(&mut self, x: u16, y: u16, mut c: Cell) {
+        if x >= self.w || y >= self.h {
+            return;
         }
+        let row = y as usize * self.w as usize;
+        let i = row + x as usize;
+        if c.wide && x + 1 >= self.w {
+            c = Cell {
+                s: " ".into(),
+                wide: false,
+                ..c
+            };
+        }
+        if !c.skip && self.cells[i].skip && x > 0 && self.cells[i - 1].wide {
+            self.cells[i - 1].blank();
+        }
+        if !c.wide && self.cells[i].wide && x + 1 < self.w && self.cells[i + 1].skip {
+            self.cells[i + 1].blank();
+        }
+        self.cells[i] = c;
     }
     /// Write text truncated to `max` display columns (CJK aware). Returns columns used.
     #[allow(clippy::too_many_arguments)]
@@ -301,9 +330,18 @@ fn emit(frame: &mut Frame, g: Grid, cursor_pos: Option<(u16, u16)>) -> String {
                 out.push_str(&sgr_color(c.bg, false));
                 cur_bg = Some(c.bg);
             }
+            if c.wide {
+                // Clear both columns first: a terminal that draws this glyph one column wide
+                // then leaves a blank instead of a stale character in the second column.
+                ansi!(out, Print("  "), cursor::MoveTo(x, y));
+            }
             ansi!(out, Print(&c.s));
+            // The terminal's width table may disagree with ours for anything outside ASCII
+            // (East Asian ambiguous glyphs, emoji, a CJK-codepage console). Never trust its
+            // advance after such a cell: the next cell gets an absolute move, so a mismatch
+            // stays inside one cell instead of shifting the rest of the row.
             let adv = if c.wide { 2 } else { 1 };
-            pos = if x + adv < g.w {
+            pos = if c.s.is_ascii() && x + adv < g.w {
                 Some((x + adv, y))
             } else {
                 None
@@ -341,6 +379,75 @@ mod tests {
         assert!(out.contains("中"));
         assert!(out.ends_with("\x1b[?2026l"), "{out:?}");
         assert_eq!(cut("中文名稱很長", 7, "…"), "中文名…");
+    }
+
+    fn grid(w: u16) -> Grid {
+        Grid {
+            w,
+            h: 1,
+            cells: vec![Cell::default(); w as usize],
+        }
+    }
+
+    fn row(g: &Grid) -> String {
+        g.cells
+            .iter()
+            .map(|c| if c.skip { "_".into() } else { c.s.clone() })
+            .collect()
+    }
+
+    #[test]
+    fn overwriting_a_continuation_cell_blanks_the_wide_lead() {
+        let mut g = grid(6);
+        g.text(0, 0, 6, "中文字", Color::Reset, Color::Reset, 0);
+        g.text(3, 0, 1, "x", Color::Reset, Color::Reset, 0);
+        assert_eq!(row(&g), "中_ x字_");
+        assert!(!g.cells[2].wide && !g.cells[2].skip);
+    }
+
+    #[test]
+    fn overwriting_a_wide_lead_blanks_its_continuation() {
+        let mut g = grid(6);
+        g.text(0, 0, 6, "中文字", Color::Reset, Color::Reset, 0);
+        g.text(2, 0, 1, "x", Color::Reset, Color::Reset, 0);
+        assert_eq!(row(&g), "中_x 字_");
+        assert!(!g.cells[3].skip);
+    }
+
+    #[test]
+    fn wide_cell_in_the_last_column_becomes_a_blank() {
+        let mut g = grid(3);
+        g.put(
+            2,
+            0,
+            Cell {
+                s: "中".into(),
+                wide: true,
+                ..Cell::default()
+            },
+        );
+        assert_eq!(row(&g), "   ");
+    }
+
+    #[test]
+    fn emit_moves_absolutely_after_non_ascii_and_clears_wide_columns() {
+        let mut g = grid(8);
+        g.text(0, 0, 8, "•a中b", Color::Reset, Color::Reset, 0);
+        let mut f = Frame::default();
+        let out = emit(&mut f, g, None);
+        // after "•" the next cell is positioned absolutely, not by the terminal's advance
+        assert!(out.contains("•\x1b[1;2Ha"), "{out:?}");
+        // the wide cell clears both columns, returns, prints, and "b" is placed absolutely
+        assert!(out.contains("  \x1b[1;3H中\x1b[1;5Hb"), "{out:?}");
+    }
+
+    #[test]
+    fn ascii_runs_still_use_the_terminal_advance() {
+        let mut g = grid(4);
+        g.text(0, 0, 4, "abcd", Color::Reset, Color::Reset, 0);
+        let mut f = Frame::default();
+        let out = emit(&mut f, g, None);
+        assert!(out.contains("abcd"), "{out:?}");
     }
 
     /// Any SGR that sets a classic or bright 8/16-color foreground or background.
