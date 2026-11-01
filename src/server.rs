@@ -69,6 +69,15 @@ fn enable_child_ctrl_c() {
     }
 }
 
+/// Environment variables that identify the agent session which happened to start the server,
+/// never meant for the independent programs in its panes. Explicit `--env` values still win.
+fn is_agent_session_var(name: &str) -> bool {
+    let upper = name.to_ascii_uppercase();
+    upper == "CLAUDECODE"
+        || upper.starts_with("CLAUDE_CODE_")
+        || matches!(upper.as_str(), "CLAUDE_PID" | "CLAUDE_EFFORT")
+}
+
 /// Options for creating one side of a split.
 #[derive(Default)]
 pub(crate) struct SplitOptions {
@@ -399,6 +408,14 @@ impl State {
         // would silently strip color from every program in every pane. Crew's own chrome
         // still honours each client's NO_COLOR; a pane that wants it sets it via --env.
         cmd.env_remove("NO_COLOR");
+        // A server started from inside an agent's tool shell inherits that agent's session
+        // identity (Claude Code's session id, child-session flag and messaging token). Every
+        // pane would then look like a child of that one session and could reach its socket.
+        for (key, _) in std::env::vars_os() {
+            if key.to_str().is_some_and(is_agent_session_var) {
+                cmd.env_remove(&key);
+            }
+        }
         for (key, value) in env {
             cmd.env(key, value);
         }

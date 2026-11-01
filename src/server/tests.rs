@@ -216,3 +216,30 @@ fn vt100_wide_char_resize_panic_is_contained() {
     assert!(p.screen().contents().contains("ok"));
     assert_eq!(contain_vt(&mut p, 5, 3, 0, |_| 7), Some(7));
 }
+
+#[test]
+fn agent_session_vars_are_not_inherited_by_panes() {
+    for name in [
+        "CLAUDECODE",
+        "CLAUDE_CODE_CHILD_SESSION",
+        "CLAUDE_CODE_SESSION_ID",
+        "CLAUDE_CODE_MESSAGING_TOKEN",
+        "claude_code_entrypoint",
+        "CLAUDE_PID",
+        "CLAUDE_EFFORT",
+    ] {
+        assert!(super::is_agent_session_var(name), "{name}");
+    }
+    for name in [
+        "CLAUDE_CONFIG_DIR",
+        "ANTHROPIC_API_KEY",
+        "PATH",
+        "CLAUDE",
+        "CODEX_HOME",
+    ] {
+        assert!(
+            !super::is_agent_session_var(name),
+            "{name} is user configuration"
+        );
+    }
+}
