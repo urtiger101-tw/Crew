@@ -48,6 +48,24 @@ const ATTENTION_GRACE: Duration = Duration::from_secs(2);
 
 pub type Shared = Arc<Mutex<State>>;
 
+/// The client starts the daemon with CREATE_NEW_PROCESS_GROUP, which sets the
+/// ignore-Ctrl-C attribute, and every pane child inherits it: Ctrl-C then cannot stop a
+/// native program such as `ping -t`. Clear it once so panes get normal Ctrl-C handling
+/// whether or not the UTF-8 bootstrap runs. The daemon has no console, so it never receives
+/// a Ctrl-C event itself.
+fn enable_child_ctrl_c() {
+    #[cfg(windows)]
+    // SAFETY: a NULL handler with FALSE only clears this process's inherited ignore flag.
+    unsafe {
+        if windows_sys::Win32::System::Console::SetConsoleCtrlHandler(None, 0) == 0 {
+            crate::log!(
+                "could not enable Ctrl-C for panes: {}",
+                std::io::Error::last_os_error()
+            );
+        }
+    }
+}
+
 /// Options for creating one side of a split.
 #[derive(Default)]
 pub(crate) struct SplitOptions {
@@ -1673,6 +1691,7 @@ fn handle_conn(shared: Shared, cid: usize, stream: interprocess::local_socket::S
 
 pub fn run() -> Result<()> {
     crate::log!("server starting, pid {}", std::process::id());
+    enable_child_ctrl_c();
     let listener = ipc::listen().inspect_err(|e| crate::log!("listen failed: {e}"))?;
     let (tx, rx) = mpsc::channel();
     let cfg = Config::load();
