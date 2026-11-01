@@ -2,10 +2,12 @@
 mod catalog;
 mod install;
 mod manifest;
+mod path_dirs;
 mod process;
 mod store;
 
 use anyhow::{Context, Result, bail, ensure};
+pub(crate) use path_dirs::PanePluginPaths;
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -240,14 +242,38 @@ fn discover(query: &str) -> Result<Vec<Value>> {
     Ok(entries)
 }
 
+// The pane-spawn integration consumes this contract in the next implementation step.
+#[allow(dead_code)]
+pub(crate) fn pane_path_dirs() -> Result<PanePluginPaths> {
+    path_dirs::collect(&store::home()?)
+}
+
 fn entries(home: &Path) -> Result<Vec<Value>> {
-    store::read(home)?.plugins.into_iter().map(|(id,entry)| {
-        let parsed=manifest::Manifest::parse(&entry.manifest_toml)?;
-        let current=store::loaded(&entry);
-        Ok(json!({"id":id,"name":parsed.name,"version":parsed.version,"enabled":entry.enabled,
-            "source":entry.source,"root":entry.root,"platform_compatible":manifest::compatible(&[],&parsed.platforms),
-            "manifest_unchanged":current.is_ok(),"diagnostic":current.err().map(|e|e.to_string())}))
-    }).collect()
+    store::read(home)?
+        .plugins
+        .into_iter()
+        .map(|(id, entry)| {
+            let parsed = manifest::Manifest::parse(&entry.manifest_toml)?;
+            let compatible = manifest::compatible(&[], &parsed.platforms);
+            let current = store::loaded(&entry);
+            let unchanged = current.is_ok();
+            let resolved = current.and_then(|manifest| path_dirs::resolve(&entry, &manifest));
+            let diagnostic = resolved.as_ref().err().map(|error| format!("{error:#}"));
+            let dirs = resolved.unwrap_or_default();
+            let available = entry.enabled && compatible && diagnostic.is_none();
+            let effective_dirs = if entry.enabled && compatible {
+                dirs.clone()
+            } else {
+                Vec::new()
+            };
+            Ok(json!({
+                "id": id, "name": parsed.name, "version": parsed.version, "enabled": entry.enabled,
+                "source": entry.source, "root": entry.root, "platform_compatible": compatible,
+                "manifest_unchanged": unchanged, "available": available, "diagnostic": diagnostic,
+                "resolved_path_dirs": dirs, "effective_path_dirs": effective_dirs
+            }))
+        })
+        .collect()
 }
 
 fn mutate(home: &Path, verb: &str, id: &str) -> Result<Value> {

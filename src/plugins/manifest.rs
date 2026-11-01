@@ -18,6 +18,8 @@ pub struct Manifest {
     pub build: Vec<Build>,
     #[serde(default)]
     pub actions: Vec<Action>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub path_dirs: Vec<PathDir>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,6 +36,14 @@ pub struct Action {
     pub id: String,
     pub title: String,
     pub command: Vec<String>,
+    #[serde(default)]
+    pub platforms: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PathDir {
+    pub path: String,
     #[serde(default)]
     pub platforms: Vec<String>,
 }
@@ -131,12 +141,14 @@ impl Manifest {
         );
         platforms(&manifest.platforms, true)?;
         ensure!(
-            manifest.build.len() <= 16 && manifest.actions.len() <= 64,
-            "manifest exceeds 16 build steps or 64 actions"
+            manifest.build.len() <= 16
+                && manifest.actions.len() <= 64
+                && manifest.path_dirs.len() <= 32,
+            "manifest exceeds 16 build steps, 64 actions or 32 PATH directories"
         );
         ensure!(
-            !manifest.actions.is_empty(),
-            "plugin must declare at least one action"
+            !manifest.actions.is_empty() || !manifest.path_dirs.is_empty(),
+            "plugin must declare at least one action or PATH directory"
         );
         for build in &manifest.build {
             command(&build.command)?;
@@ -153,6 +165,32 @@ impl Manifest {
             text(&action.title, 80, "action title")?;
             command(&action.command)?;
             platforms(&action.platforms, false)?;
+        }
+        let mut paths = BTreeSet::new();
+        for dir in &manifest.path_dirs {
+            ensure!(
+                !dir.path.is_empty()
+                    && dir.path.len() <= 4096
+                    && !dir
+                        .path
+                        .chars()
+                        .any(|c| c.is_control() || matches!(c, '\\' | ':' | ';'))
+                    && dir
+                        .path
+                        .split('/')
+                        .all(|part| !part.is_empty() && part != "." && part != "..")
+                    && std::path::Path::new(&dir.path)
+                        .components()
+                        .all(|part| matches!(part, std::path::Component::Normal(_))),
+                "PATH directory must be a portable relative path: {}",
+                dir.path
+            );
+            ensure!(
+                paths.insert(dir.path.to_ascii_lowercase()),
+                "duplicate PATH directory: {}",
+                dir.path
+            );
+            platforms(&dir.platforms, false)?;
         }
         Ok(manifest)
     }
@@ -199,5 +237,34 @@ mod tests {
         assert!(version("01.0.0").is_err());
         assert!(!identifier("a/b", true));
         assert!(!identifier("a:", true));
+    }
+
+    #[test]
+    fn path_only_plugins_require_safe_relative_paths() {
+        let raw = format!(
+            "id='example.bin'\nname='Tools'\nversion='1.0.0'\nmin_crew_version='{}'\nplatforms=['linux','windows','macos']\n[[path_dirs]]\npath='bin'\n",
+            env!("CARGO_PKG_VERSION")
+        );
+        assert!(Manifest::parse(&raw).is_ok());
+        for bad in ["../bin", "/bin", "C:/bin", "bin\\escape", "", "bin;other"] {
+            assert!(
+                Manifest::parse(&raw.replace("path='bin'", &format!("path='{bad}'"))).is_err(),
+                "accepted {bad:?}"
+            );
+        }
+        assert!(
+            Manifest::parse(&raw.replace(
+                "[[path_dirs]]\npath='bin'",
+                "[[path_dirs]]\npath='bin'\nplatforms=['windows','windows']"
+            ))
+            .is_err()
+        );
+        assert!(
+            Manifest::parse(&raw.replace(
+                "[[path_dirs]]\npath='bin'",
+                "[[path_dirs]]\npath='bin'\n[[path_dirs]]\npath='bin'"
+            ))
+            .is_err()
+        );
     }
 }
