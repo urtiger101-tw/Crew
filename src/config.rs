@@ -26,6 +26,8 @@ pub struct Config {
     pub prefix: String,
     /// Shell to launch in new panes (default: $SHELL / powershell)
     pub shell: Option<String>,
+    /// Set new Windows pane console code pages to UTF-8.
+    pub pane_utf8: bool,
     pub scrollback: usize,
     pub mouse: bool,
     /// Show herdr-like sidebar with pane/agent status
@@ -78,6 +80,7 @@ impl Default for Config {
         Config {
             prefix: "C-b".into(),
             shell: None,
+            pane_utf8: true,
             scrollback: 10000,
             mouse: true,
             sidebar: false,
@@ -249,6 +252,7 @@ impl Config {
                 self.prefix = val.to_string()
             }
             "shell" | "default-shell" | "default-command" => self.shell = Some(val.to_string()),
+            "pane-utf8" => self.pane_utf8 = parse_bool(val)?,
             "mouse" => self.mouse = parse_bool(val)?,
             "sidebar" => self.sidebar = parse_bool(val)?,
             "sidebar-width" => self.sidebar_width = num(val)?.clamp(10.0, 100.0) as u16,
@@ -359,6 +363,18 @@ sidebar_pane_segments = ["$workspace", {template="$task", fg="#abc", bold=false,
                 "accepted invalid config {input}"
             );
         }
+    }
+
+    #[test]
+    fn pane_utf8_defaults_on_and_can_be_disabled() {
+        assert!(Config::default().pane_utf8);
+        assert!(load_text("").unwrap().pane_utf8);
+        assert!(!crate::server::test_state().cfg.pane_utf8);
+        let mut cfg = load_text("pane_utf8 = false").unwrap();
+        assert!(!cfg.pane_utf8);
+        cfg.set("pane-utf8", "on").unwrap();
+        assert!(cfg.pane_utf8);
+        assert!(cfg.set("pane_utf8", "invalid").is_err());
     }
 
     #[test]

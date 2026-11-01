@@ -473,6 +473,7 @@ crew agent read reviewer --source recent --lines 80
 ```toml
 prefix = "C-a"          # 前綴鍵 prefix key
 shell = "pwsh -NoLogo"  # 預設 shell（Windows 預設 powershell.exe，Unix 為 $SHELL）
+pane_utf8 = true        # Windows 新窗格使用 UTF-8；false 沿用原本的編碼 / UTF-8 in new Windows panes
 scrollback = 10000      # 回溯行數 scrollback lines
 mouse = true            # 滑鼠支援 mouse support
 sidebar = false         # 啟動時顯示側邊欄 show sidebar on start
@@ -507,7 +508,10 @@ border_active = "#e5c07b"
 `[theme.colors]` 的值必須是字串，色碼要加引號（例如 `accent = "74"`）；其他設定依上例使用 TOML 數字、布林值、字串或陣列。設定檔無法解析時（例如 `accent = 74` 忘了引號），啟動時會印出 `config error` 並改用全部預設值；執行中的 `source-file` 則回報錯誤並保留原設定。
 Values under `[theme.colors]` must be strings, so quote color values (for example `accent = "74"`). Other settings use the TOML number, boolean, string or array types shown above. If the file cannot be parsed (for example `accent = 74` without quotes), startup prints `config error` and uses all defaults; a running `source-file` reports the error and keeps the current settings.
 
-`set` 可用選項 options: `prefix`, `shell`, `mouse`, `sidebar`, `sidebar-width`, `scrollback`/`history-limit`（僅影響新窗格 new panes only）, `busy-secs`, `automatic-rename`, `osc52`/`set-clipboard`, `persist`, `hints on|off`, `confirm-close on|off`, `toolbar on|off`, `toolbar-fkeys on|off`, `scroll-keys on|off`, `pane-titles off|auto|always`, `theme terminal|dark|light|mono`, `ascii-glyphs auto|on|off`.
+`pane_utf8` 預設為 `true`，讓 Windows 新窗格的主控台輸入與輸出碼頁使用 UTF-8（65001），shell 與其子程序皆受影響；設為 `false` 保留原本的碼頁。已執行的窗格不受影響，Linux／macOS 不變。
+`pane_utf8` defaults to `true`, setting the console input and output code pages to UTF-8 (65001) for new Windows panes, their shells and child processes. Set it to `false` to retain the original code pages. Existing panes and Linux/macOS are unchanged.
+
+`set` 可用選項 options: `prefix`, `shell`, `pane-utf8`（僅影響 Windows 新窗格 new Windows panes only）, `mouse`, `sidebar`, `sidebar-width`, `scrollback`/`history-limit`（僅影響新窗格 new panes only）, `busy-secs`, `automatic-rename`, `osc52`/`set-clipboard`, `persist`, `hints on|off`, `confirm-close on|off`, `toolbar on|off`, `toolbar-fkeys on|off`, `scroll-keys on|off`, `pane-titles off|auto|always`, `theme terminal|dark|light|mono`, `ascii-glyphs auto|on|off`.
 
 窗格環境：每個新窗格都會設定 `TERM=xterm-256color` 與 `COLORTERM=truecolor`，並**移除**從伺服器繼承來的 `NO_COLOR`，以免啟動伺服器的那個 shell 剛好帶著 `NO_COLOR` 時，讓所有窗格的程式都失去顏色。要讓某個窗格不顯示顏色，請明確指定：`crew workspace create … --env NO_COLOR=1`（`tab create` 同理）。Crew 自身介面（狀態列、側邊欄）仍依各客戶端自己的 `NO_COLOR` 決定是否上色。已在執行的窗格保有原本的環境，需重啟伺服器或開新窗格才會套用。
 Pane environment: every new pane gets `TERM=xterm-256color` and `COLORTERM=truecolor`, and an inherited server `NO_COLOR` is **removed**, so a shell that happened to start the server with `NO_COLOR` no longer strips color from every pane. Opt a pane out explicitly with `--env NO_COLOR=1` on `workspace create` or `tab create`. Crew's own chrome still follows each client's `NO_COLOR`. Running panes keep their environment; restart the server or open new panes to pick this up.

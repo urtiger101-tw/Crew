@@ -27,6 +27,8 @@ mod ipc;
 mod keys;
 mod layout;
 mod metadata;
+#[cfg(windows)]
+mod pane_utf8;
 mod persist;
 mod plugins;
 mod process_path;
@@ -52,6 +54,19 @@ pub fn run() {
     let sub = args.first().map(|s| s.as_str()).unwrap_or("");
     let lang = client::lang();
     let res = match sub {
+        #[cfg(windows)]
+        "__pane_utf8" => {
+            if std::env::var_os("CREW_PANE_ID").is_none() {
+                Err(anyhow::anyhow!(
+                    "internal pane bootstrap requires a Crew pane"
+                ))
+            } else {
+                match pane_utf8::run(std::env::args_os().skip(2)) {
+                    Ok(code) => std::process::exit(code),
+                    Err(e) => Err(e),
+                }
+            }
+        }
         "__server" => server::run(),
         "__remote-api" => remote::transport_serve(),
         "machine" | "federation" | "--machine" => match remote::run(&args) {

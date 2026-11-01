@@ -63,6 +63,7 @@ pub(crate) fn test_state() -> State {
     // legacy geometry (panes from row 0); toolbar tests turn it on explicitly
     let cfg = Config {
         toolbar: false,
+        pane_utf8: false,
         ..Config::default()
     };
     let (bindings, _) = cfg.bindings();
@@ -358,7 +359,15 @@ impl State {
         let shell = self.cfg.default_shell();
         let words = commands::tokenize(&shell);
         let words = startup_shell.unwrap_or(&words);
-        let mut cmd = CommandBuilder::new(words.first().map(|s| s.as_str()).unwrap_or("sh"));
+        let program = words.first().map(|s| s.as_str()).unwrap_or("sh");
+        let mut cmd = if cfg!(windows) && self.cfg.pane_utf8 {
+            let mut bootstrap = CommandBuilder::new(std::env::current_exe()?);
+            bootstrap.arg("__pane_utf8");
+            bootstrap.arg(program);
+            bootstrap
+        } else {
+            CommandBuilder::new(program)
+        };
         for a in words.iter().skip(1) {
             cmd.arg(a);
         }
