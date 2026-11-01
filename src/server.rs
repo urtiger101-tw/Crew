@@ -78,6 +78,13 @@ fn is_agent_session_var(name: &str) -> bool {
         || matches!(upper.as_str(), "CLAUDE_PID" | "CLAUDE_EFFORT")
 }
 
+/// The user-supplied pane variables, minus the retired `TMUXLIKE*` names. Restored sessions and
+/// old state can carry such names, and a pane must never receive them.
+fn pane_user_env(env: &BTreeMap<String, String>) -> impl Iterator<Item = (&String, &String)> {
+    env.iter()
+        .filter(|(key, _)| !crate::brand::is_legacy_env_name(key))
+}
+
 /// Options for creating one side of a split.
 #[derive(Default)]
 pub(crate) struct SplitOptions {
@@ -416,15 +423,18 @@ impl State {
                 cmd.env_remove(&key);
             }
         }
-        for (key, value) in env {
+        // A stale TMUXLIKE* value from an old parent shell must not reach the pane.
+        for (key, _) in std::env::vars_os() {
+            if key.to_str().is_some_and(crate::brand::is_legacy_env_name) {
+                cmd.env_remove(&key);
+            }
+        }
+        for (key, value) in pane_user_env(env) {
             cmd.env(key, value);
         }
         cmd.env("CREW", format!("{id}"));
         cmd.env("CREW_PANE_ID", crate::api::pane_id_str(id));
         cmd.env("CREW_SOCKET", ipc::base_name());
-        cmd.env("TMUXLIKE", format!("{id}"));
-        cmd.env("TMUXLIKE_PANE_ID", crate::api::pane_id_str(id));
-        cmd.env("TMUXLIKE_SOCKET", ipc::base_name());
         let start_dir = match cwd {
             Some(d) if std::path::Path::new(d).is_dir() => Some(d.to_string()),
             Some(d) => return Err(anyhow!("cwd is not a directory: {d}")),

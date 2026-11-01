@@ -8,7 +8,7 @@ use std::io::Write;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-/// Language of client-side text (CLI help, connection and exit messages): `TMUXLIKE_LANG`
+/// Language of client-side text (CLI help, connection and exit messages): `CREW_LANG`
 /// (`en` | `zh-TW`) when set, otherwise the detected locale. The attached TUI keeps using the
 /// `lang` config option through each client's detected locale.
 pub fn lang() -> Lang {
@@ -88,6 +88,19 @@ fn spawn_server() -> Result<()> {
     Ok(())
 }
 
+/// Warn once, right before a new server starts, when that server will defer to a live older
+/// server: its layout is not loaded or saved until the older server stops and crew restarts.
+fn warn_if_legacy_server_live(lang: Lang) {
+    if ipc::socket_overridden() || !crate::persist::legacy_deferral_expected() {
+        return;
+    }
+    let legacy = ipc::legacy_base_name();
+    eprintln!(
+        "{}",
+        trf(lang, "cli.warn.legacy_live", &[("socket", &legacy)])
+    );
+}
+
 /// `lang` translates the connection errors. The JSON API passes `Lang::En` (its messages stay
 /// English).
 pub fn connect(start: bool, lang: Lang) -> Result<Stream> {
@@ -95,6 +108,7 @@ pub fn connect(start: bool, lang: Lang) -> Result<Stream> {
         Ok(s) => Ok(s),
         Err(e) if !start => Err(anyhow!(trf(lang, "cli.err.no_server", &[("err", &e)]))),
         Err(_) => {
+            warn_if_legacy_server_live(lang);
             spawn_server()?;
             let t = Instant::now();
             loop {

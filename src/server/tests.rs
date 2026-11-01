@@ -243,3 +243,32 @@ fn agent_session_vars_are_not_inherited_by_panes() {
         );
     }
 }
+
+#[test]
+fn pane_user_env_drops_retired_tmuxlike_names_from_restored_or_supplied_env() {
+    let env = std::collections::BTreeMap::from([
+        ("TMUXLIKE_PANE_ID".to_string(), "9".to_string()),
+        ("TMUXLIKE".to_string(), "x".to_string()),
+        ("FOO".to_string(), "1".to_string()),
+        ("CREW_KEEP".to_string(), "2".to_string()),
+    ]);
+    let kept: Vec<&str> = super::pane_user_env(&env)
+        .map(|(key, _)| key.as_str())
+        .collect();
+    assert_eq!(kept, vec!["CREW_KEEP", "FOO"]);
+}
+
+#[test]
+fn legacy_tmuxlike_vars_are_stripped_from_panes_but_crew_vars_are_kept() {
+    for name in [
+        "TMUXLIKE",
+        "TMUXLIKE_PANE_ID",
+        "TMUXLIKE_SOCKET",
+        "tmuxlike_state",
+    ] {
+        assert!(crate::brand::is_legacy_env_name(name), "{name}");
+    }
+    for name in ["CREW", "CREW_PANE_ID", "CREW_SOCKET", "TMUXLIKEX", "PATH"] {
+        assert!(!crate::brand::is_legacy_env_name(name), "{name}");
+    }
+}

@@ -184,8 +184,7 @@ impl IsolatedServer {
             .env("CREW_SOCKET", &self.socket)
             .env("CREW_STATE", &self.state)
             .env("CREW_CONFIG", &self.config)
-            .env_remove("CREW_PANE_ID")
-            .env_remove("TMUXLIKE_PANE_ID");
+            .env_remove("CREW_PANE_ID");
         command
     }
 

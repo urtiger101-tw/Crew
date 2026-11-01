@@ -215,11 +215,7 @@ fn register(
             command.args(&build.command[1..]);
             for (key, _) in std::env::vars_os() {
                 let name = key.to_string_lossy();
-                if name == "CREW"
-                    || name == "TMUXLIKE"
-                    || name.starts_with("CREW_")
-                    || name.starts_with("TMUXLIKE_")
-                {
+                if name == "CREW" || name.starts_with("CREW_") {
                     command.env_remove(key);
                 }
             }

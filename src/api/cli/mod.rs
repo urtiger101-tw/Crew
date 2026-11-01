@@ -31,7 +31,7 @@ pub const API_COMMANDS: &[&str] = &[
 pub const HELP: &str = "__help__";
 
 /// Parse `args` (starting at the group word, e.g. `["pane", "list"]`).
-/// `current` is the caller's pane id from `$TMUXLIKE_PANE_ID`, used by `--current` and as the
+/// `current` is the caller's pane id from `$CREW_PANE_ID`, used by `--current` and as the
 /// fallback for omitted pane targets. Err = usage error message (CLI exits with status 2), or
 /// `HELP` exactly for every help request.
 pub fn parse(args: &[String], current: Option<usize>) -> Result<Request, String> {

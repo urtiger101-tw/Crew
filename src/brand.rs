@@ -1,22 +1,27 @@
-//! Crew naming and compatibility with tmuxlike installations.
+//! Crew naming. Only `CREW*` variables are read; the retired `tmuxlike` names are never read.
+//! Config and data saved under the old `tmuxlike/` directory are still found (`compatible_file`).
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-/// New variables win, including an explicitly empty value. Legacy hooks keep working.
-pub fn env_os(suffix: &str) -> Option<OsString> {
-    let tail = if suffix.is_empty() {
-        String::new()
+/// Variable name for `suffix`: `CREW` for an empty suffix, otherwise `CREW_<suffix>`.
+fn env_name(suffix: &str) -> String {
+    if suffix.is_empty() {
+        "CREW".to_string()
     } else {
-        format!("_{suffix}")
-    };
-    choose_env(
-        std::env::var_os(format!("CREW{tail}")),
-        std::env::var_os(format!("TMUXLIKE{tail}")),
-    )
+        format!("CREW_{suffix}")
+    }
 }
 
-fn choose_env(new: Option<OsString>, old: Option<OsString>) -> Option<OsString> {
-    new.or(old)
+/// Value of `CREW_<suffix>` (or `CREW`). An explicitly empty value is returned as set.
+pub fn env_os(suffix: &str) -> Option<OsString> {
+    std::env::var_os(env_name(suffix))
+}
+
+/// The retired `TMUXLIKE` and `TMUXLIKE_*` names, matched case-insensitively. They are never
+/// read, never exported to panes, and rejected as user `--env` keys.
+pub fn is_legacy_env_name(name: &str) -> bool {
+    let upper = name.to_ascii_uppercase();
+    upper == "TMUXLIKE" || upper.starts_with("TMUXLIKE_")
 }
 
 pub fn env_var(suffix: &str) -> Result<String, std::env::VarError> {
@@ -42,16 +47,24 @@ pub fn compatible_file(base: &Path, file: &str) -> PathBuf {
 mod tests {
     use super::*;
     #[test]
-    fn new_environment_has_priority_and_old_hooks_are_accepted() {
-        assert_eq!(
-            choose_env(Some("new".into()), Some("old".into())),
-            Some("new".into())
-        );
-        assert_eq!(choose_env(None, Some("old".into())), Some("old".into()));
-        assert_eq!(
-            choose_env(Some("".into()), Some("old".into())),
-            Some("".into())
-        );
+    fn env_names_are_crew_only() {
+        assert_eq!(env_name(""), "CREW");
+        assert_eq!(env_name("PANE_ID"), "CREW_PANE_ID");
+        assert_eq!(env_name("SOCKET"), "CREW_SOCKET");
+        assert_eq!(env_name("STATE"), "CREW_STATE");
+        for suffix in ["", "PANE_ID", "SOCKET", "STATE", "LOG", "LANG", "CONFIG"] {
+            assert!(!env_name(suffix).starts_with("TMUXLIKE"), "{suffix}");
+        }
+    }
+
+    #[test]
+    fn legacy_names_match_case_insensitively_and_nothing_else() {
+        for name in ["TMUXLIKE", "TMUXLIKE_PANE_ID", "tmuxlike_socket"] {
+            assert!(is_legacy_env_name(name), "{name}");
+        }
+        for name in ["CREW", "CREW_PANE_ID", "TMUXLIKEX", "PATH"] {
+            assert!(!is_legacy_env_name(name), "{name}");
+        }
     }
     #[test]
     fn legacy_file_is_selected_without_copying_or_deleting_it() {

@@ -1,4 +1,4 @@
-/// Append a line to $TMUXLIKE_LOG (if set). Used to diagnose the detached server.
+/// Append a line to $CREW_LOG (if set). Used to diagnose the detached server.
 #[macro_export]
 macro_rules! log {
     ($($t:tt)*) => {{

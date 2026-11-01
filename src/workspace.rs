@@ -173,15 +173,14 @@ pub(crate) fn validate_env(env: &BTreeMap<String, String>) -> Result<(), ApiErro
                 "environment keys must use [A-Za-z_][A-Za-z0-9_]* and values must not contain NUL",
             ));
         }
-        if matches!(
-            key.to_ascii_uppercase().as_str(),
-            "CREW"
-                | "CREW_PANE_ID"
-                | "CREW_SOCKET"
-                | "TMUXLIKE"
-                | "TMUXLIKE_PANE_ID"
-                | "TMUXLIKE_SOCKET"
-        ) {
+        // Panes get CREW* from the server; a user key must never supply them, nor a retired
+        // TMUXLIKE* name that a pane would otherwise receive.
+        if crate::brand::is_legacy_env_name(key)
+            || matches!(
+                key.to_ascii_uppercase().as_str(),
+                "CREW" | "CREW_PANE_ID" | "CREW_SOCKET"
+            )
+        {
             return Err(ApiError::invalid(format!(
                 "reserved environment key: {key}"
             )));

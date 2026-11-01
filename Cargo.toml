@@ -11,12 +11,6 @@ repository = "https://github.com/urtiger101-tw/Crew"
 name = "crew"
 path = "src/main.rs"
 
-[[bin]]
-name = "tmuxlike"
-path = "src/bin/tmuxlike.rs"
-test = false
-bench = false
-
 [dependencies]
 anyhow = "1.0.104"
 crossterm = { version = "0.29.0", features = ["serde"] }

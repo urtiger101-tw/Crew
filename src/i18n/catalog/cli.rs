@@ -28,7 +28,7 @@ AUTOMATION (herdr-style, JSON output; see `crew pane --help`):
   crew agent list|get|read|prompt|wait|rename|focus|send-keys
   crew session list   crew api snapshot   crew server [stop]
 
-Config: $TMUXLIKE_CONFIG or <config_dir>/crew/config.toml"#,
+Config: $CREW_CONFIG or <config_dir>/crew/config.toml"#,
         r#"crew - 跨平台終端多工器
 
 用法 USAGE:
@@ -49,7 +49,7 @@ Config: $TMUXLIKE_CONFIG or <config_dir>/crew/config.toml"#,
   crew agent list|get|read|prompt|wait|rename|focus|send-keys
   crew session list   crew api snapshot   crew server [stop]
 
-設定檔 Config：$TMUXLIKE_CONFIG，或 <config_dir>/crew/config.toml"#,
+設定檔 Config：$CREW_CONFIG，或 <config_dir>/crew/config.toml"#,
     ),
     (
         "cli.keys",
@@ -106,8 +106,8 @@ Custom bindings: [bind] in config.toml, or `bind-key KEY COMMAND` at the : promp
         r#"crew pane|agent|api|session|server  (herdr-style JSON automation)
 
 Pane ids: p<N> (tmux-style %<N> also accepted). Pane TARGET is one of:
-  <id>  |  --pane ID  |  --current   (--current = $TMUXLIKE_PANE_ID inside a pane)
-Omitted pane targets use the caller's pane ($TMUXLIKE_PANE_ID) when set, else the focused
+  <id>  |  --pane ID  |  --current   (--current = $CREW_PANE_ID inside a pane)
+Omitted pane targets use the caller's pane ($CREW_PANE_ID) when set, else the focused
 pane of the most recently used session.
 Output: success prints {"result": ...} on stdout, exit 0; text replies print raw.
 Errors print {"error":{"code","message"}} on stderr, exit 1. Usage errors exit 2.
@@ -148,8 +148,8 @@ agent rename <target> <name>  |  agent rename <target> --clear
         r#"crew pane|agent|api|session|server  （herdr 風格 JSON 自動化）
 
 窗格 ID：p<N>（也接受 tmux 風格的 %<N>）。窗格目標 TARGET 為下列其一：
-  <id>  |  --pane ID  |  --current   （--current 指窗格內的 $TMUXLIKE_PANE_ID）
-省略窗格目標時，使用呼叫者的窗格（若已設定 $TMUXLIKE_PANE_ID），否則使用最近使用之工作階段的焦點窗格。
+  <id>  |  --pane ID  |  --current   （--current 指窗格內的 $CREW_PANE_ID）
+省略窗格目標時，使用呼叫者的窗格（若已設定 $CREW_PANE_ID），否則使用最近使用之工作階段的焦點窗格。
 輸出：成功時在 stdout 印出 {"result": ...} 並以 0 結束；文字回覆則原樣輸出。
 錯誤時在 stderr 印出 {"error":{"code","message"}} 並以 1 結束。用法錯誤以 2 結束。
 文字若以 '-' 開頭，前面加 --。值若以 '--' 開頭，請用 --opt=value。
@@ -199,8 +199,13 @@ agent rename <target> <name>  |  agent rename <target> --clear
     ),
     (
         "cli.err.nested",
-        "sessions should be nested with care, unset $TMUXLIKE to force",
-        "工作階段不宜巢狀使用，請先取消設定 $TMUXLIKE 以強制執行",
+        "sessions should be nested with care, unset $CREW to force",
+        "工作階段不宜巢狀使用，請先取消設定 $CREW 以強制執行",
+    ),
+    (
+        "cli.warn.legacy_live",
+        "warning: an older Crew/tmuxlike server is still running on {socket}. This crew server will not load or save this session's layout until that server is stopped AND crew is restarted. Stop the old server with `crew server stop` run from that version, or from this build with CREW_SOCKET={socket} set. Never use kill-server on it: that deletes its saved layout. Then unset CREW_SOCKET and restart with `crew kill-server` and `crew`.",
+        "警告：仍有舊版 Crew/tmuxlike 伺服器在 {socket} 上執行。在該伺服器停止且本 crew 重新啟動之前，本工作階段的版面配置不會被載入或儲存。請用該版本的 `crew server stop` 停止舊伺服器，或於本版本設定 CREW_SOCKET={socket} 後執行 `crew server stop`；切勿對它使用 kill-server，那會刪除其已儲存的版面配置。之後先取消設定 CREW_SOCKET，再執行 `crew kill-server` 並重新啟動 crew。",
     ),
     (
         "cli.exit.detached",

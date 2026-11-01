@@ -37,7 +37,7 @@ pub struct ClientEnv {
     pub no_color: bool,
     /// TERM=dumb
     pub dumb: bool,
-    /// TMUXLIKE_ASCII=1 or a non-UTF-8 locale
+    /// CREW_ASCII=1 or a non-UTF-8 locale
     pub ascii: bool,
     /// UI language detected from the client's locale (None = not recognised)
     #[serde(default)]

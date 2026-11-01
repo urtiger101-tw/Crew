@@ -212,6 +212,9 @@ fn environment_validation_is_portable_and_keeps_identity() {
     for key in [
         "CREW",
         "CREW_PANE_ID",
+        "crew_socket",
+        "TMUXLIKE",
+        "TMUXLIKE_PANE_ID",
         "tmuxlike_socket",
         "A=B",
         "1X",

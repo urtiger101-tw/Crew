@@ -1,5 +1,5 @@
 //! `pane` group: argv -> `Request::Pane*`. An omitted target falls back to the caller's pane
-//! (`current`, from `$TMUXLIKE_PANE_ID`); without a caller pane the request carries `None`.
+//! (`current`, from `$CREW_PANE_ID`); without a caller pane the request carries `None`.
 use super::args::{
     agent_label, check_count, lines_opt, none, one_id, opt_num, pane_id, ratio_opt, read_source,
     regex_arg, report_state, required, resume_cmd, source_id, unknown_sub,
@@ -75,7 +75,7 @@ fn flag_target(a: &Args, current: Option<usize>) -> Result<Option<usize>, String
         (Some(p), false) => pane_id(p).map(Some),
         (None, true) => current
             .map(Some)
-            .ok_or_else(|| "--current needs TMUXLIKE_PANE_ID (run inside a crew pane)".to_string()),
+            .ok_or_else(|| "--current needs CREW_PANE_ID (run inside a crew pane)".to_string()),
         (None, false) => Ok(None),
     }
 }

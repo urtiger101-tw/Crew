@@ -20,7 +20,7 @@ Events: start/working -> working, blocked -> blocked, idle/done -> idle,
         unknown -> unknown, exit -> release-agent.
 done becomes the server's done badge only when the completion is unseen.
 Use one unique source ID per agent process and report exit before reusing it.
-Omitted --pane uses CREW_PANE_ID, then TMUXLIKE_PANE_ID; it never guesses a pane.
+Omitted --pane uses CREW_PANE_ID; it never guesses a pane.
 Arguments after -- are saved as resume argv, not executed by this command.
 explain distinguishes explicit reports, live process-kind hints and PTY activity.
 Kind hints never provide lifecycle completion or create an agent wait identity.
@@ -272,7 +272,7 @@ fn parse(args: &[String], current: Option<usize>) -> std::result::Result<Action,
                 return Err("usage: crew integration explain TARGET|--current [--json]".into());
             }
             let target = if words[0] == "--current" {
-                Target::Pane(current.ok_or("--current requires CREW_PANE_ID or TMUXLIKE_PANE_ID")?)
+                Target::Pane(current.ok_or("--current requires CREW_PANE_ID")?)
             } else if let Some(pane) = crate::api::parse_pane_id(words[0]) {
                 Target::Pane(pane)
             } else if crate::api::is_agent_name(words[0]) {

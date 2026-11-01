@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Drop the legacy `tmuxlike` name. The `tmuxlike` executable is removed, and
+  `TMUXLIKE*` environment variables are no longer read or set for panes. Workspace
+  `--env` rejects `TMUXLIKE` keys. The default socket is now `crew-<user>.sock`.
+  On its first start, a new server adopts the state file of the old
+  `tmuxlike-<user>.sock` socket, once. While an old server still listens on that
+  socket, the new server neither adopts nor saves state, and the client warns once.
+  Stop the old server with `crew server stop` from that version first. Do not use
+  `kill-server`, which deletes the state file being migrated. Then restart Crew.
+- Keep a pane whose console host died while programs in it still run. The pane
+  shows what survives until you close it. If only the root process exits, the
+  pane stays live. Known limit: when the host and the shell die together before
+  the server has scanned the process tree once, a running child can be orphaned.
+  An ignored test in `tests/pane_host_lost.rs` records this.
+
 - Add a function-key toolbar on the top row over the pane columns: twelve localized
   default buttons (help, new, split, zoom, next, copy, paste, tree, close, sidebar,
   detach) that run on click or `prefix` then `F1`..`F12`; `toolbar_fkeys` lets plain
