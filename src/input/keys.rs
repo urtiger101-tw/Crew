@@ -55,6 +55,16 @@ impl State {
             return;
         }
         let pid = self.active_pane(si);
+        // `scroll-keys`: Shift+Up/Down (line) and Shift+PageUp/PageDown (page) browse the
+        // pane's earlier output; on the alternate screen the key still reaches the app.
+        if self.cfg.scroll_keys {
+            let page = self.panes.get(&pid).map_or(1, |p| p.rect.h.max(1));
+            if let Some(delta) = scroll_key_delta(&k, page)
+                && self.scroll_pane(pid, delta)
+            {
+                return;
+            }
+        }
         if self.panes.get(&pid).is_some_and(|p| p.copy.is_some()) {
             self.copy_key(cid, pid, k);
             return;
@@ -337,6 +347,22 @@ impl State {
 }
 
 /// Whether a key carries no Ctrl or Alt chord.
+/// Scrollback lines for a `scroll-keys` key: Shift+Up/Down one line, Shift+PageUp/PageDown
+/// one pane height (`page` rows). Positive scrolls back. `None` for every other key.
+fn scroll_key_delta(k: &KeyEvent, page: u16) -> Option<isize> {
+    if k.modifiers != KeyModifiers::SHIFT {
+        return None;
+    }
+    let page = page as isize;
+    match k.code {
+        KeyCode::Up => Some(1),
+        KeyCode::Down => Some(-1),
+        KeyCode::PageUp => Some(page),
+        KeyCode::PageDown => Some(-page),
+        _ => None,
+    }
+}
+
 fn plain_key(k: &KeyEvent) -> bool {
     !k.modifiers
         .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
@@ -675,6 +701,29 @@ mod tests {
 
     fn press(st: &mut State, shared: &Shared, k: KeyEvent) {
         st.handle_key(shared, 1, 0, k);
+    }
+
+    #[test]
+    fn scroll_keys_need_exactly_shift() {
+        let shift = |c| key(c, KeyModifiers::SHIFT);
+        assert_eq!(scroll_key_delta(&shift(KeyCode::Up), 20), Some(1));
+        assert_eq!(scroll_key_delta(&shift(KeyCode::Down), 20), Some(-1));
+        assert_eq!(scroll_key_delta(&shift(KeyCode::PageUp), 20), Some(20));
+        assert_eq!(scroll_key_delta(&shift(KeyCode::PageDown), 20), Some(-20));
+        // plain arrows stay with the shell (history), other modifiers with the app
+        assert_eq!(scroll_key_delta(&plain(KeyCode::Up), 20), None);
+        assert_eq!(scroll_key_delta(&plain(KeyCode::PageUp), 20), None);
+        let ctrl_shift = KeyModifiers::SHIFT | KeyModifiers::CONTROL;
+        assert_eq!(scroll_key_delta(&key(KeyCode::Up, ctrl_shift), 20), None);
+        assert_eq!(scroll_key_delta(&shift(KeyCode::Left), 20), None);
+    }
+
+    #[test]
+    fn scroll_keys_without_a_pane_fall_through_harmlessly() {
+        let (mut st, shared) = fkey_state(false, false);
+        assert!(st.cfg.scroll_keys, "on by default");
+        press(&mut st, &shared, key(KeyCode::Up, KeyModifiers::SHIFT));
+        assert!(st.clients[&1].popup.is_none() && st.clients[&1].message.is_none());
     }
 
     #[test]

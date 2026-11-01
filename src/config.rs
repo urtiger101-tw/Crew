@@ -67,6 +67,8 @@ pub struct Config {
     pub toolbar: bool,
     /// F1..F12 trigger toolbar buttons directly; when off only `prefix` then `F<n>` does
     pub toolbar_fkeys: bool,
+    /// Shift+Up/Down and Shift+PageUp/PageDown scroll the active pane's earlier output
+    pub scroll_keys: bool,
     /// Custom toolbar buttons in F-key order (at most 12); empty = the default buttons
     pub toolbar_buttons: Vec<ToolbarButton>,
 }
@@ -99,6 +101,7 @@ impl Default for Config {
             lang: "auto".into(),
             toolbar: true,
             toolbar_fkeys: false,
+            scroll_keys: true,
             toolbar_buttons: Vec::new(),
         }
     }
@@ -274,6 +277,7 @@ impl Config {
             "confirm-close" => self.confirm_close = parse_bool(val)?,
             "toolbar" => self.toolbar = parse_bool(val)?,
             "toolbar-fkeys" => self.toolbar_fkeys = parse_bool(val)?,
+            "scroll-keys" => self.scroll_keys = parse_bool(val)?,
             "pane-titles" => match val {
                 "off" | "auto" | "always" => self.pane_titles = val.to_string(),
                 _ => return Err(format!("pane-titles: expected off|auto|always, got {val}")),

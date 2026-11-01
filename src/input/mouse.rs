@@ -284,7 +284,7 @@ impl State {
         self.mark_dirty();
     }
 
-    fn wheel_pane(&mut self, pid: usize, r: Rect, up: bool) {
+    fn wheel_pane(&mut self, pid: usize, _r: Rect, up: bool) {
         let Some(p) = self.panes.get_mut(&pid) else {
             return;
         };
@@ -296,25 +296,64 @@ impl State {
             let _ = p.writer.flush();
             return;
         }
-        let cur = p.parser.screen().scrollback();
-        let new = if up {
-            cur + WHEEL_LINES
+        let delta = if up {
+            WHEEL_LINES as isize
         } else {
-            cur.saturating_sub(WHEEL_LINES)
+            -(WHEEL_LINES as isize)
         };
-        p.parser.screen_mut().set_scrollback(new);
-        if p.parser.screen().scrollback() > 0 {
-            p.copy.get_or_insert(CopyState {
-                cx: 0,
-                cy: r.h.saturating_sub(1),
-                anchor: None,
-                line: false,
-            });
-        } else if p.copy.as_ref().is_some_and(|c| c.anchor.is_none()) {
-            p.copy = None;
-        }
-        self.mark_dirty();
+        self.scroll_pane(pid, delta);
     }
+
+    /// Scroll pane `pid` back (`delta > 0`) or forward through its scrollback. A pane scrolled
+    /// off the live screen enters scroll mode (copy mode without a selection); returning to the
+    /// bottom leaves it again. Returns `false`, changing nothing, when the pane is on the
+    /// alternate screen (full-screen apps own their own scrolling) or does not exist.
+    pub(crate) fn scroll_pane(&mut self, pid: usize, delta: isize) -> bool {
+        let Some(p) = self.panes.get_mut(&pid) else {
+            return false;
+        };
+        let had_copy = p.copy.is_some();
+        let scrolled = scroll_view(&mut p.parser, &mut p.copy, p.rect.h, delta);
+        if scrolled || had_copy != p.copy.is_some() {
+            self.mark_dirty();
+        }
+        scrolled
+    }
+}
+
+/// Scrollback step behind [`State::scroll_pane`], kept free of the PTY so it can be tested.
+/// On the alternate screen nothing scrolls and `false` is returned; a leftover scroll mode
+/// (copy state without a selection, e.g. the app switched screens while the user was scrolled
+/// back) is dropped there too, so the caller's key reaches the app instead of copy mode.
+pub(crate) fn scroll_view(
+    parser: &mut vt100::Parser,
+    copy: &mut Option<CopyState>,
+    rows: u16,
+    delta: isize,
+) -> bool {
+    let unanchored = |c: &Option<CopyState>| c.as_ref().is_some_and(|c| c.anchor.is_none());
+    if parser.screen().alternate_screen() {
+        if unanchored(copy) {
+            *copy = None;
+            parser.screen_mut().set_scrollback(0);
+        }
+        return false;
+    }
+    let cur = parser.screen().scrollback();
+    parser
+        .screen_mut()
+        .set_scrollback(cur.saturating_add_signed(delta));
+    if parser.screen().scrollback() > 0 {
+        copy.get_or_insert(CopyState {
+            cx: 0,
+            cy: rows.saturating_sub(1),
+            anchor: None,
+            line: false,
+        });
+    } else if unanchored(copy) {
+        *copy = None;
+    }
+    true
 }
 
 /// Selection after one wheel tick over rows `0..=last`: up stops at the first row, down at
@@ -342,6 +381,65 @@ mod tests {
     use crate::render::Filter;
 
     use crossterm::event::KeyModifiers;
+
+    /// 5-row parser holding 30 numbered lines, so 25+ lines sit in scrollback.
+    fn populated() -> vt100::Parser {
+        let mut p = vt100::Parser::new(5, 20, 100);
+        for i in 0..30 {
+            p.process(format!("line {i}\r\n").as_bytes());
+        }
+        p
+    }
+
+    #[test]
+    fn scroll_view_enters_scroll_mode_and_leaves_at_bottom() {
+        let (mut p, mut copy) = (populated(), None);
+        assert!(scroll_view(&mut p, &mut copy, 5, 1));
+        assert_eq!(p.screen().scrollback(), 1);
+        let cs = copy.as_ref().expect("scrolled back -> scroll mode");
+        assert!(cs.anchor.is_none() && cs.cy == 4);
+        assert!(scroll_view(&mut p, &mut copy, 5, 5));
+        assert_eq!(p.screen().scrollback(), 6);
+        assert!(p.screen().contents().contains("line 20"));
+        assert!(
+            scroll_view(&mut p, &mut copy, 5, -100),
+            "clamps at the bottom"
+        );
+        assert_eq!(p.screen().scrollback(), 0);
+        assert!(copy.is_none(), "back at the bottom leaves scroll mode");
+    }
+
+    #[test]
+    fn scroll_view_keeps_a_selection_at_the_bottom() {
+        let (mut p, mut copy) = (populated(), None);
+        scroll_view(&mut p, &mut copy, 5, 3);
+        copy.as_mut().unwrap().anchor = Some((-2, 0));
+        scroll_view(&mut p, &mut copy, 5, -3);
+        assert!(copy.is_some_and(|c| c.anchor.is_some()));
+    }
+
+    #[test]
+    fn alternate_screen_drops_leftover_scroll_mode_so_keys_reach_the_app() {
+        let (mut p, mut copy) = (populated(), None);
+        scroll_view(&mut p, &mut copy, 5, 4);
+        assert!(copy.is_some());
+        // the program switches to the alternate screen while the user is scrolled back
+        p.process(b"\x1b[?1049h");
+        assert!(!scroll_view(&mut p, &mut copy, 5, 1), "nothing to scroll");
+        assert!(
+            copy.is_none(),
+            "handle_key then encodes the key for the app"
+        );
+        // with a live selection the user keeps copy mode
+        let mut copy = Some(CopyState {
+            cx: 0,
+            cy: 0,
+            anchor: Some((0, 0)),
+            line: false,
+        });
+        assert!(!scroll_view(&mut p, &mut copy, 5, 1));
+        assert!(copy.is_some());
+    }
 
     /// 120x30 session `t` with pane 7, client 1 attached, toolbar `on`.
     fn toolbar_state(on: bool) -> State {
