@@ -66,8 +66,8 @@ Every native run requires these commands, in order:
 | Tools | `rustc -vV`, `cargo --version`, `git --version`, Python version |
 | Rust | Format, Clippy with warnings denied, locked unit tests |
 | Tooling | Release tooling self-tests and local validation/packaging regression tests |
-| Build | Locked release build of `crew` and `tmuxlike`, both version commands |
-| Existing smoke tests | Legacy PTY, API, workspace, workspace ordering, metadata, worktree, agent identity, bridge/events |
+| Build | Locked release build of `crew`, with its version command |
+| Existing smoke tests | PTY, API, workspace, workspace ordering, metadata, worktree, agent identity, bridge/events |
 | New smoke tests | Cross-workspace tab transfer, metadata presentation, agent detection, plugin installation/lifecycle |
 
 The exact script names and commands are in `SMOKES` and `command_plan()` in
@@ -194,7 +194,7 @@ lifecycle prevent output creation.
 The output contains:
 
 - One `Crew-vVERSION-TARGET-local.tar.gz` or `-local.zip` for the actual native
-  target, with `crew`, the `tmuxlike` compatibility command, README, LICENSE, and
+  target, with `crew`, README, LICENSE, and
   a local package manifest. Unix command executable permissions are retained.
 - `local-manifest.json`, the source/evidence/artifact relationships and explicit
   native coverage; `local-validation.json`, a copy of the original report; and

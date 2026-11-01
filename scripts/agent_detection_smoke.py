@@ -30,7 +30,7 @@ def main():
         config.write_text('persist = false\nautomatic_rename = false\nagent_detection = true\nshell = ' +
                           json.dumps("powershell -NoProfile" if WIN else "/bin/bash --noprofile --norc") + "\n", encoding="utf-8")
         log = root / "server.log"
-        env = {k: v for k, v in os.environ.items() if not k.upper().startswith(("CREW", "TMUXLIKE"))}
+        env = {k: v for k, v in os.environ.items() if not k.upper().startswith("CREW")}
         env.update(CREW_SOCKET="crew-detection-" + uuid.uuid4().hex + ".sock",
                    CREW_CONFIG=str(config), CREW_STATE=str(root / "state.json"),
                    CREW_LOG=str(log), CREW_LANG="en")

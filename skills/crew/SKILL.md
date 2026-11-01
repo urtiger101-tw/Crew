@@ -1,20 +1,20 @@
 ---
-name: tmuxlike
-description: Orchestrate other panes from inside a tmuxlike pane. Use only when TMUXLIKE_PANE_ID is set and the task needs a worker pane, a command run and watched, or another agent CLI started and prompted.
+name: crew
+description: Orchestrate other panes from inside a Crew pane. Use only when CREW_PANE_ID is set and the task needs a worker pane, a command run and watched, or another agent CLI started and prompted.
 ---
 
-# tmuxlike 窗格協調 Pane orchestration
+# Crew 窗格協調 Pane orchestration
 
-tmuxlike 的 `tmuxlike <group> <command>` 指令都會印出 JSON。成功時為 `{"result": ...}`（exit 0）；失敗時 stderr 為 `{"error": {"code", "message"}}`（exit 1）；語法錯誤 exit 2。`pane read` 與 `agent read` 印出純文字。解析時請從 JSON 讀取 ID，不要自行推測。
+Crew 的 `crew <group> <command>` 指令都會印出 JSON。成功時為 `{"result": ...}`（exit 0）；失敗時 stderr 為 `{"error": {"code", "message"}}`（exit 1）；語法錯誤 exit 2。`pane read` 與 `agent read` 印出純文字。解析時請從 JSON 讀取 ID，不要自行推測。
 
 ## 0. 確認自己的位置 Identify yourself
 
 ```sh
-test -n "$TMUXLIKE_PANE_ID" || { echo "not inside tmuxlike"; exit 1; }
-tmuxlike pane current --current
+test -n "$CREW_PANE_ID" || { echo "not inside Crew"; exit 1; }
+crew pane current --current
 ```
 
-若不在 tmuxlike 窗格內，回報使用者並停止。不要從外部操作「目前焦點」窗格。
+若不在 Crew 窗格內，回報使用者並停止。不要從外部操作「目前焦點」窗格。
 
 ## 1. 基本規則 Rules
 
@@ -27,7 +27,7 @@ tmuxlike pane current --current
 ## 2. 分割工作窗格 Split a worker pane
 
 ```sh
-W=$(tmuxlike pane split --current --direction right --cwd "$PWD" --no-focus | jq -r .result.pane.pane_id)
+W=$(crew pane split --current --direction right --cwd "$PWD" --no-focus | jq -r .result.pane.pane_id)
 ```
 
 - 寬窗格用 `right`，高窗格用 `down`。不要連續同方向分割到過窄。
@@ -37,9 +37,9 @@ W=$(tmuxlike pane split --current --direction right --cwd "$PWD" --no-focus | jq
 ## 3. 執行指令並等待輸出 Run and wait
 
 ```sh
-tmuxlike pane run "$W" "npm test"
-tmuxlike pane wait-output "$W" --regex 'Tests:.*(passed|failed)' --timeout 300000
-tmuxlike pane read "$W" --source recent --lines 80
+crew pane run "$W" "npm test"
+crew pane wait-output "$W" --regex 'Tests:.*(passed|failed)' --timeout 300000
+crew pane read "$W" --source recent --lines 80
 ```
 
 - `pane run` 成功只代表指令已送入 shell，不代表已執行完成。
@@ -49,32 +49,32 @@ tmuxlike pane read "$W" --source recent --lines 80
 
 ## 4. 啟動另一個 agent CLI Start another agent
 
-tmuxlike 沒有 agent 啟動指令。做法是在空白 shell 窗格中用 `pane run` 啟動該 CLI，再讓它回報狀態：
+Crew 沒有 agent 啟動指令。做法是在空白 shell 窗格中用 `pane run` 啟動該 CLI，再讓它回報狀態：
 
 ```sh
-tmuxlike pane run "$W" "claude"             # 使用者指定的 CLI 才啟動
-tmuxlike pane read "$W" --source visible    # 確認已到互動提示
-tmuxlike agent list                          # 等 hook 回報後，$W 才會出現在清單中
-tmuxlike agent rename "$W" reviewer          # 最後才改名
+crew pane run "$W" "claude"             # 使用者指定的 CLI 才啟動
+crew pane read "$W" --source visible    # 確認已到互動提示
+crew agent list                          # 等 hook 回報後，$W 才會出現在清單中
+crew agent rename "$W" reviewer          # 最後才改名
 ```
 
 - **順序：`agent rename` 只對已有回報 agent 的窗格有效。** 必須先啟動 CLI、等它的 hook 呼叫 `pane report-agent`，再執行 `agent rename`。窗格尚未回報時回傳 `agent_not_found`。
   Order matters: `agent rename` works only after the pane has a reported agent. Start the CLI, wait for its hook to call `pane report-agent`, then rename.
 - **名稱格式：** agent 名稱必須符合 `[a-z][a-z0-9_-]{0,31}`，且不可長得像窗格 ID（例如 `p12`、`%12`），否則回傳 `invalid_argument`。
   Name format: an agent name must match `[a-z][a-z0-9_-]{0,31}` and must not look like a pane id (such as `p12`); otherwise the reply is `invalid_argument`.
-- 在該 CLI 的 hook 中呼叫 `tmuxlike pane report-agent "$TMUXLIKE_PANE_ID" --source <hook> --agent <kind> --state working|idle|blocked --seq <遞增數字>`。
+- 在該 CLI 的 hook 中呼叫 `crew pane report-agent "$CREW_PANE_ID" --source <hook> --agent <kind> --state working|idle|blocked --seq <遞增數字>`。
 - `--seq` 必須遞增；較舊的回報會回傳 `applied: false`，不會生效。
 - 沒有回報時，狀態只是依輸出活動推定，不可視為可靠的完成訊號。
 
 ## 5. 派送工作並等待 Prompt and wait
 
 ```sh
-tmuxlike agent prompt reviewer "只回報可行動的問題。" --wait --until idle --timeout 300000
-tmuxlike agent read reviewer --source recent --lines 120
+crew agent prompt reviewer "只回報可行動的問題。" --wait --until idle --timeout 300000
+crew agent read reviewer --source recent --lines 120
 ```
 
 - `agent_blocked` 表示 agent 正等待核准或提問：不要送入任何輸入。先 `agent read` 看畫面，需要使用者決定時請使用者決定，再用 `agent send-keys reviewer esc` 之類的按鍵回應。
-- 若只想等待提問，使用 `tmuxlike agent wait reviewer --until blocked --timeout 120000`。
+- 若只想等待提問，使用 `crew agent wait reviewer --until blocked --timeout 120000`。
 - `unknown` 不代表完成，`idle` 或 `done` 也不保證它處理了你的那一則提示；要以輸出內容為證據。
 
 ## 6. 讀取輸出 Read output
@@ -85,8 +85,8 @@ tmuxlike agent read reviewer --source recent --lines 120
 
 ## 7. 清理 Clean up
 
-- 只關閉自己建立的窗格：`tmuxlike pane close "$W"`。
-- agent 不再使用時先釋放回報：`tmuxlike pane release-agent "$W" --source <hook> --agent <kind>`。
+- 只關閉自己建立的窗格：`crew pane close "$W"`。
+- agent 不再使用時先釋放回報：`crew pane release-agent "$W" --source <hook> --agent <kind>`。
 - 不要為了「清乾淨」而關閉其他窗格或 session。
 
 ## 8. 錯誤處理 Errors

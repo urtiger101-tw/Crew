@@ -31,7 +31,7 @@ def main():
         plugin_home = root / "plugin-data"
         config = root / "config.toml"
         config.write_text("persist = false\nautomatic_rename = false\nshell = " + json.dumps("powershell -NoProfile" if os.name == "nt" else "/bin/sh") + "\n", encoding="utf-8")
-        env = {k: v for k, v in os.environ.items() if k not in ("CREW", "TMUXLIKE") and not k.startswith(("CREW_", "TMUXLIKE_"))}
+        env = {k: v for k, v in os.environ.items() if k != "CREW" and not k.startswith("CREW_")}
         env.update(CREW_PLUGIN_HOME=str(plugin_home), CREW_SOCKET="crew-plugins-" + uuid.uuid4().hex + ".sock", CREW_CONFIG=str(config), CREW_STATE=str(root / "state.json"), CREW_LANG="en")
         checks = []
 

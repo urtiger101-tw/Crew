@@ -211,7 +211,7 @@ def native_smoke(args):
         state.write_bytes(b'{"installer-sentinel": "preserve bytes"}\n')
         user_files = {path: path.read_bytes() for path in (config, state)}
         env = {key: value for key, value in os.environ.items()
-               if key not in ("CREW", "TMUXLIKE") and not key.startswith(("CREW_", "TMUXLIKE_"))}
+               if key != "CREW" and not key.startswith("CREW_")}
         env.update(CREW_CONFIG=str(config), CREW_STATE=str(state), CREW_LANG="en")
         current = None
         daemon_env = None
@@ -237,16 +237,16 @@ def native_smoke(args):
             preserved()
             return result
 
-        def payload_snapshot(directory):
-            return {name: (directory / name).read_bytes() for name in record["files"]}
+        def payload_snapshot(directory, names=None):
+            return {name: (directory / name).read_bytes() for name in (record["files"] if names is None else names)}
 
         def commands(directory, version):
             # This PATH only belongs to a test subprocess; the installer does not register PATH.
             command_env = dict(env, PATH=str(directory) + os.pathsep + os.environ["PATH"])
-            for name in ("crew", "tmuxlike"):
+            for name in ("crew",):
                 binary = directory / (name + ".exe")
                 text = execute([binary, "--version"], env=env, timeout=30)
-                require(text in {"crew " + version, "tmuxlike " + version}, "installed command version differs")
+                require(text == "crew " + version, "installed command version differs")
                 command_env.update(CREW_COMMAND=name, CREW_EXPECTED_BINARY=str(binary))
                 # Compare Unicode paths inside PowerShell. Only the ASCII version crosses stdout;
                 # Windows PowerShell/native command output code pages vary with the system locale.
@@ -331,7 +331,9 @@ def native_smoke(args):
             installer_run(old_setup, "legacy-fixture-install", upgrade)
             commands(upgrade, "0.3.0")
             registered_at(upgrade, "0.3.0")
-            old_snapshot = payload_snapshot(upgrade)
+            # The 0.3.0 install also owns tmuxlike.exe, which the current payload no longer lists.
+            legacy_names = sorted(old_payloads)
+            old_snapshot = payload_snapshot(upgrade, legacy_names)
             require(all(old_snapshot[name] == content for name, content in old_payloads.items()), "legacy fixture payload differs")
             extra = upgrade / "user-notes.txt"
             extra.write_bytes(b"keep this after upgrade and uninstall\n")
@@ -347,10 +349,10 @@ def native_smoke(args):
             wid = created["workspace_id"]
             epoch = json.loads(execute([daemon_binary, "events", "list"], env=daemon_env))["result"]["epoch"]
             installer_run(setup, "busy-upgrade-rejected", upgrade, success=False)
-            require(payload_snapshot(upgrade) == old_snapshot, "rejected upgrade changed installed payload")
+            require(payload_snapshot(upgrade, legacy_names) == old_snapshot, "rejected upgrade changed installed payload")
             passed("busy-upgrade-rejected")
             installer_run(uninstaller(upgrade), "busy-uninstall-rejected", success=False)
-            require(payload_snapshot(upgrade) == old_snapshot and registered() is not None,
+            require(payload_snapshot(upgrade, legacy_names) == old_snapshot and registered() is not None,
                     "rejected uninstall changed installed payload/registration")
             passed("busy-uninstall-rejected")
             alive = json.loads(execute([daemon_binary, "workspace", "get", wid], env=daemon_env, timeout=30))
@@ -376,8 +378,9 @@ def native_smoke(args):
             for name, expected in record["files"].items():
                 data = (upgrade / name).read_bytes()
                 require(expected == {"bytes": len(data), "sha256": sha256(data)}, "upgrade payload differs: " + name)
-            require(all((upgrade / name).read_bytes() != old_snapshot[name] for name in ("crew.exe", "tmuxlike.exe")),
-                    "upgrade did not change both actual 0.3.0 executables")
+            require((upgrade / "crew.exe").read_bytes() != old_snapshot["crew.exe"],
+                    "upgrade did not change the actual 0.3.0 crew executable")
+            require(not (upgrade / "tmuxlike.exe").exists(), "upgrade left the legacy tmuxlike.exe behind")
             passed("real-0.3.0-upgrade")
             upgraded = payload_snapshot(upgrade)
             installer_run(old_setup, "downgrade-rejected", upgrade, success=False)

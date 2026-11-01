@@ -49,10 +49,20 @@ SetupLogging=yes
 
 [Files]
 Source: "{#PayloadDir}\crew.exe"; DestDir: "{app}"; Flags: ignoreversion
+#ifdef LegacyFixtureTmuxlike
+; Test-only: the 0.3.0 upgrade fixture installs the legacy binary; shipped installers never do.
 Source: "{#PayloadDir}\tmuxlike.exe"; DestDir: "{app}"; Flags: ignoreversion
+#endif
 Source: "{#PayloadDir}\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\manifest.json"; DestDir: "{app}"; Flags: ignoreversion
+
+[InstallDelete]
+; Cleanup only: an older Crew release installed tmuxlike.exe. It is never shipped.
+Type: files; Name: "{app}\tmuxlike.exe"
+
+[UninstallDelete]
+Type: files; Name: "{app}\tmuxlike.exe"
 
 [Icons]
 Name: "{group}\Crew"; Filename: "{app}\crew.exe"; WorkingDir: "{%USERPROFILE}"
@@ -152,6 +162,7 @@ begin
   Result := '';
   SetArrayLength(Names, 5);
   Names[0] := 'crew.exe';
+  { Cleanup only: a running old tmuxlike.exe must still block a change. }
   Names[1] := 'tmuxlike.exe';
   Names[2] := 'README.md';
   Names[3] := 'LICENSE';

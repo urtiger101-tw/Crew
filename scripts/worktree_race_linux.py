@@ -67,7 +67,7 @@ def main():
         )
         wrapper.chmod(0o755)
         env = {key: value for key, value in os.environ.items()
-               if not key.upper().startswith(("CREW", "TMUXLIKE", "GIT_"))}
+               if not key.upper().startswith(("CREW", "GIT_"))}
         env.update(CREW_SOCKET="crew-race-" + uuid.uuid4().hex + ".sock",
                    CREW_CONFIG=str(config), CREW_STATE=str(root / "state.json"),
                    CREW_LOG=str(root / "server.log"),

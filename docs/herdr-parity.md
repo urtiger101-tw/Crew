@@ -2,7 +2,7 @@
 
 本次對照固定於 Herdr `143bf5fd4781d164260c63fe28e7dc08054ad32f`（0.9.5），
 於 2026-10-20 再次查核仍為 upstream HEAD。
-Crew 由 tmuxlike `12be9e307e47a56d3bfd669ab7bddb1ee7466e09` 演進；0.5.0 以
+Crew 演進自 commit `12be9e307e47a56d3bfd669ab7bddb1ee7466e09`；0.5.0 以
 已發行 0.4.0 的 `5e7e208bca5bf388aded7631aff0d8846b47363f` 為基礎繼續對齊。
 來源：[Herdr](https://github.com/herdrdev/herdr/tree/143bf5fd4781d164260c63fe28e7dc08054ad32f)
 的 README、CLI reference 與 socket API 文件。行為獨立實作，沒有搬入 Herdr 原始碼。

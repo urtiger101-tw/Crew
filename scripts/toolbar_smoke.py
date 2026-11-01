@@ -118,7 +118,7 @@ def run_smoke(binary):
         )
         log = root / "server.log"
         env = {key: value for key, value in os.environ.items()
-               if not key.upper().startswith(("CREW", "TMUXLIKE"))}
+               if not key.upper().startswith("CREW")}
         socket_name = "crew-toolbar-" + uuid.uuid4().hex + ".sock"
         env.update(CREW_SOCKET=socket_name,
                    CREW_CONFIG=str(root / "config.toml"), CREW_STATE=str(root / "state.json"),

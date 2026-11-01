@@ -28,8 +28,7 @@ def main():
                           json.dumps("powershell -NoProfile" if WIN else "/bin/sh") + "\n",
                           encoding="utf-8")
         env = {k: v for k, v in os.environ.items()
-               if k.upper() not in ("CREW", "TMUXLIKE")
-               and not k.upper().startswith(("CREW_", "TMUXLIKE_"))}
+               if k.upper() != "CREW" and not k.upper().startswith("CREW_")}
         env.update(CREW_SOCKET="crew-move-" + uuid.uuid4().hex + ".sock",
                    CREW_CONFIG=str(config), CREW_STATE=str(state),
                    CREW_LOG=str(log), CREW_LANG="en")

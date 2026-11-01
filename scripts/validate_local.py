@@ -26,7 +26,7 @@ SCHEMA = 1
 TARGETS = ("x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc",
            "aarch64-apple-darwin", "x86_64-apple-darwin")
 SMOKES = (
-    ("legacy-pty", "smoke.py", "tmuxlike"),
+    ("pty", "smoke.py", "crew"),
     ("api", "api_smoke.py", "crew"),
     ("workspace", "workspace_smoke.py", "crew"),
     ("workspace-move", "workspace_move_smoke.py", "crew"),
@@ -156,7 +156,7 @@ def native_target():
 
 def binary_paths(target_dir, target):
     suffix = ".exe" if target == TARGETS[1] else ""
-    return {name: Path(target_dir) / target / "release" / (name + suffix) for name in ("crew", "tmuxlike")}
+    return {name: Path(target_dir) / target / "release" / (name + suffix) for name in ("crew",)}
 
 
 def check_binary_format(content, target):
@@ -328,7 +328,7 @@ def verify_evidence(root, evidence_path, *, target_dir=None):
     require(report.get("errors") == [] and report.get("version") == version, "evidence contains errors or a different version")
     require("release: " + rust in logs["tool-rustc"].splitlines() and "host: " + target in logs["tool-rustc"].splitlines(),
             "Rust toolchain evidence differs from the pinned native toolchain")
-    require(all(logs["version-" + name].strip() in ("crew " + version, "tmuxlike " + version) for name in ("crew", "tmuxlike")),
+    require(logs["version-crew"].strip() == "crew " + version,
             "tested binary version differs from Cargo.toml")
     require(report.get("unavailable_checks") == unavailable_checks(target), "platform coverage declaration differs")
     require(report.get("matrix_result") == "NOT_RUN", "one native run cannot claim a complete platform matrix")
@@ -400,7 +400,7 @@ def validate(args):
         elif spec["name"].startswith("tool-"):
             report["tools"][spec["name"][5:]] = log.strip()
         if spec["name"].startswith("version-") and record["result"] == "PASS":
-            if log.strip() not in ("crew " + version, "tmuxlike " + version):
+            if log.strip() != "crew " + version:
                 record.update(result="FAIL", error="binary version differs from Cargo.toml")
         if spec["name"] == "build" and record["result"] == "PASS":
             try:

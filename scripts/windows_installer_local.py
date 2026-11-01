@@ -97,10 +97,9 @@ def build(args):
     source = source_snapshot(ROOT)
     binaries = binary_records(binary_dir.parent.parent, TARGET)
     meta, payloads = portable_payload(ROOT, source, TARGET, binaries)
-    for name in ("crew", "tmuxlike"):
-        observed = installer.execute([binaries[name]["path"], "--version"])
-        require(observed in ("crew " + meta["version"], "tmuxlike " + meta["version"]), "binary version differs from local source")
-        require_static_crt(payloads[name + ".exe"])
+    observed = installer.execute([binaries["crew"]["path"], "--version"])
+    require(observed == "crew " + meta["version"], "binary version differs from local source")
+    require_static_crt(payloads["crew.exe"])
     output = artifact_directory(ROOT, args.output, empty=True)
     logs = artifact_directory(ROOT, args.logs)
     output.mkdir(parents=True, exist_ok=True)

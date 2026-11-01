@@ -28,7 +28,7 @@ def main():
                           'sidebar_workspace_template = "W:$title"\nshell = ' +
                           json.dumps("powershell -NoProfile" if WIN else "/bin/sh") + "\n", encoding="utf-8")
         log = root / "server.log"
-        env = {k: v for k, v in os.environ.items() if not k.upper().startswith(("CREW", "TMUXLIKE"))}
+        env = {k: v for k, v in os.environ.items() if not k.upper().startswith("CREW")}
         env.update(CREW_SOCKET="crew-presentation-" + uuid.uuid4().hex + ".sock",
                    CREW_CONFIG=str(config), CREW_STATE=str(root / "state.json"),
                    CREW_LOG=str(log), CREW_LANG="en")

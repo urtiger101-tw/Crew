@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Automation API smoke test: drives a real tmuxlike server through its JSON CLI.
+"""Automation API smoke test: drives a real crew server through its JSON CLI.
 
 Each step prints "ok <step>". Covers session/pane listing, split with and without
 focus, wait-output, text input with special characters, send-keys validation,
@@ -8,7 +8,7 @@ layout persistence across `server stop` and a fresh start. Regression steps cove
 pane-id-shaped agent names, `--help` exit 0, wrapped wait-output, and the no-server
 JSON error plus clearing the saved layout when the last session closes.
 Works on Windows (ConPTY) and Linux/macOS (PTY); stdlib only.
-Usage: python scripts/api_smoke.py [path-to-tmuxlike]
+Usage: python scripts/api_smoke.py [path-to-crew]
 """
 import collections
 import json
@@ -23,7 +23,7 @@ import time
 import traceback
 
 WIN = os.name == "nt"
-EXE = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else os.path.join("target", "release", "tmuxlike" + (".exe" if WIN else "")))
+EXE = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else os.path.join("target", "release", "crew" + (".exe" if WIN else "")))
 PROMPT_RE = r"PS [^\r\n]*>" if WIN else r"\S"
 PANE_ID_RE = re.compile(r"^p\d+$")
 SPECIAL = 'x\\y 中文 "q"'  # backslash, CJK and quotes; typed without Enter
@@ -34,14 +34,14 @@ CALL_TIMEOUT = 60  # seconds per CLI call; ConPTY is slow
 POLL_TIMEOUT = 60  # seconds per poll()
 WRAP_FILL = "A" * 110  # makes START + WRAP_FILL + END wider than a narrow pane
 
-WORK = tempfile.mkdtemp(prefix="tmuxlike-api-")
+WORK = tempfile.mkdtemp(prefix="crew-api-")
 LOG = os.path.join(WORK, "server.log")
 STATE = os.path.join(WORK, "state.json")
 CWD_DIR = os.path.join(WORK, "cwd-test")
 CONFIG = os.path.join(WORK, "config.toml")
 with open(CONFIG, "w", encoding="utf-8") as config:
     config.write('lang = "en"\n')
-ENV = {k: v for k, v in os.environ.items() if not k.upper().startswith(("CREW", "TMUXLIKE"))}
+ENV = {k: v for k, v in os.environ.items() if not k.upper().startswith("CREW")}
 ENV.update(CREW_SOCKET="crew-api-%d.sock" % os.getpid(), CREW_LOG=LOG,
            CREW_STATE=STATE, CREW_CONFIG=CONFIG)
 
@@ -60,12 +60,12 @@ def ok(step):
 
 
 def run(args, timeout=CALL_TIMEOUT):
-    """Run one tmuxlike command. Returns CompletedProcess; only a hang raises Fail."""
+    """Run one crew command. Returns CompletedProcess; only a hang raises Fail."""
     try:
         return subprocess.run([EXE, *args], env=ENV, capture_output=True, text=True,
                               encoding="utf-8", errors="replace", timeout=timeout)
     except subprocess.TimeoutExpired:
-        fail(f"tmuxlike {' '.join(args)} did not return within {timeout}s")
+        fail(f"crew {' '.join(args)} did not return within {timeout}s")
 
 
 def describe(r):
@@ -506,7 +506,7 @@ def main():
     for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(errors="replace")
     if not os.path.exists(EXE):
-        print(f"FAIL: tmuxlike binary not found: {EXE}", file=sys.stderr)
+        print(f"FAIL: crew binary not found: {EXE}", file=sys.stderr)
         shutil.rmtree(WORK, ignore_errors=True)
         return 1
     failed = True

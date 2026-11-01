@@ -28,7 +28,7 @@ def portable_payload(root, source, target, binaries):
     require(cargo["name"] == "crew", "source package must be Crew")
     suffix = ".exe" if target == TARGETS[1] else ""
     payloads = {}
-    for name in ("crew", "tmuxlike"):
+    for name in ("crew",):
         path = Path(binaries[name]["path"])
         require({"path": str(path), **file_record(path)} == binaries[name], "binary changed before packaging: " + name)
         content = path.read_bytes()

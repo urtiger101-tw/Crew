@@ -94,12 +94,12 @@ def compiler(logs):
     return iscc
 
 
-def compile_payload(payloads, version, output, filename, iscc, logs):
+def compile_payload(payloads, version, output, filename, iscc, logs, *, legacy_tmuxlike=False):
     require(sys.platform == "win32", "installer compilation requires native Windows")
     installer_name("v" + version)
     require(all(int(part) <= 65535 for part in version.split(".")), "installer version component is too large")
-    require(set(payloads) == {"crew.exe", "tmuxlike.exe", "README.md", "LICENSE", "manifest.json"},
-            "installer payload must be the complete portable package")
+    expected = {"crew.exe", "README.md", "LICENSE", "manifest.json"} | ({"tmuxlike.exe"} if legacy_tmuxlike else set())
+    require(set(payloads) == expected, "installer payload must be the complete portable package")
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=True)
     destination = output / filename
@@ -109,9 +109,11 @@ def compile_payload(payloads, version, output, filename, iscc, logs):
         payload_dir = Path(temporary)
         for name, content in payloads.items():
             (payload_dir / name).write_bytes(content)
+        # Only the test-only 0.3.0 fixture opts in to the legacy binary; shipped installers never contain it.
+        defines = ["/DLegacyFixtureTmuxlike=1"] if legacy_tmuxlike else []
         execute([iscc, "/Qp", "/DCrewVersion=" + version,
                  "/DPayloadDir=" + str(payload_dir), "/DInstallerOutputDir=" + str(output),
-                 "/DInstallerBaseName=" + destination.stem, ROOT / "installer/windows/crew.iss"],
+                 "/DInstallerBaseName=" + destination.stem, *defines, ROOT / "installer/windows/crew.iss"],
                 log=logs / (destination.stem + "-compile.log"))
     require(destination.is_file(), "Inno Setup did not produce the expected installer")
     pe_imports(destination.read_bytes())
@@ -130,6 +132,7 @@ def legacy_fixture(iscc, output, logs):
     """Compile a test-only old-version installer from real, pinned 0.3.0 binaries.
 
     This is not a historical public installer. Crew 0.3.0 only published a portable ZIP.
+    It is the only build that installs tmuxlike.exe, so the upgrade cleanup has a real file to remove.
     """
     archive = download(LEGACY, output / "Crew-v0.3.0-windows-portable.zip")
     with zipfile.ZipFile(archive) as stream:
@@ -138,7 +141,7 @@ def legacy_fixture(iscc, output, logs):
             and package.get("tag") == "v0.3.0" and package.get("target") == TARGET
             and package.get("sha") == LEGACY["source_sha"], "legacy fixture provenance differs")
     payloads = portable_payload(archive, package)
-    path = compile_payload(payloads, "0.3.0", output, "Crew-0.3.0-test-fixture.exe", iscc, logs)
+    path = compile_payload(payloads, "0.3.0", output, "Crew-0.3.0-test-fixture.exe", iscc, logs, legacy_tmuxlike=True)
     return path, payloads
 
 
@@ -174,8 +177,7 @@ def build(args):
     require(sidecar["archive"] == {"name": archive.name, "bytes": len(content), "sha256": sha256(content)},
             "portable package archive hash differs")
     payloads = portable_payload(archive, package)
-    for name in ("crew.exe", "tmuxlike.exe"):
-        require_static_crt(payloads[name])
+    require_static_crt(payloads["crew.exe"])
     path = compile_payload(payloads, version, output, installer_name(tag), compiler(logs), logs)
     content = path.read_bytes()
     record = {**meta, "name": path.name, "sha256": sha256(content), "bytes": len(content),

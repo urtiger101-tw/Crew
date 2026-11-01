@@ -20,7 +20,7 @@ EXE = str(Path(sys.argv[1] if len(sys.argv) > 1 else "target/release/crew" + (".
 def main():
     with tempfile.TemporaryDirectory(prefix="crew-agent-identity-") as root:
         root = Path(root)
-        env = {k: v for k, v in os.environ.items() if not k.upper().startswith(("CREW", "TMUXLIKE"))}
+        env = {k: v for k, v in os.environ.items() if not k.upper().startswith("CREW")}
         config = root / "config.toml"
         config.write_text("persist = false\n", encoding="utf-8")
         env.update(CREW_SOCKET=f"crew-agent-{os.getpid()}.sock", CREW_STATE=str(root / "state.json"),

@@ -26,7 +26,7 @@ def main():
         config.write_text('persist = true\nautomatic_rename = false\nshell = ' + json.dumps("powershell -NoProfile" if WIN else "/bin/sh") + '\n', encoding="utf-8")
         state = root / "state.json"
         log = root / "server.log"
-        env = {k: v for k, v in os.environ.items() if k not in ("CREW", "TMUXLIKE") and not k.startswith(("CREW_", "TMUXLIKE_"))}
+        env = {k: v for k, v in os.environ.items() if k != "CREW" and not k.startswith("CREW_")}
         env.update(CREW_SOCKET="crew-workspace-" + uuid.uuid4().hex + ".sock", CREW_CONFIG=str(config), CREW_STATE=str(state), CREW_LOG=str(log), CREW_LANG="en")
 
         def run(*args):
@@ -101,7 +101,7 @@ def main():
             startup_once(2)
             assert not review["active"]
             assert api("workspace", "get", wid)["workspace"]["active_tab"] == initial["tab_id"]
-            for pane_key in ("CREW_PANE_ID", "TMUXLIKE_PANE_ID"):
+            for pane_key in ("CREW_PANE_ID",):
                 env[pane_key] = review["active_pane"]
                 try:
                     assert api("tab", "current")["tab"]["tab_id"] == review["tab_id"]

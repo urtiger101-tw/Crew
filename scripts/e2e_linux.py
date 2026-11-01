@@ -5,9 +5,8 @@ WORK=tempfile.TemporaryDirectory(prefix="crew-e2e-")
 atexit.register(WORK.cleanup)
 CFG=os.path.join(WORK.name,"config.toml")
 open(CFG,"w").write('shell = "bash --norc --noprofile"\n[bind]\ny = "display hello-bind"\nv = "split-window -h"\n')
-env=dict({k:v for k,v in os.environ.items() if not k.upper().startswith(("CREW", "TMUXLIKE"))}, CREW_SOCKET=f"crew-e2e-{os.getpid()}.sock", CREW_CONFIG=CFG, CREW_STATE=os.path.join(WORK.name,"state.json"), PS1="$ ", TERM="xterm-256color", TMUXLIKE_LANG="en", LANG="C.UTF-8", LC_ALL="C.UTF-8")
-env.pop("TMUXLIKE",None)
-B=os.environ.get("TMUXLIKE_BIN", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "target", "debug", "tmuxlike"))
+env=dict({k:v for k,v in os.environ.items() if not k.upper().startswith("CREW")}, CREW_SOCKET=f"crew-e2e-{os.getpid()}.sock", CREW_CONFIG=CFG, CREW_STATE=os.path.join(WORK.name,"state.json"), PS1="$ ", TERM="xterm-256color", CREW_LANG="en", LANG="C.UTF-8", LC_ALL="C.UTF-8")
+B=os.environ.get("CREW_BIN", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "target", "debug", "crew"))
 def cli(*a): r=subprocess.run([B,*a],env=env,capture_output=True,text=True); return r.returncode, r.stdout+r.stderr
 atexit.register(lambda: cli("kill-server"))
 def run(args):

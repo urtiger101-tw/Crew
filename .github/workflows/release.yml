@@ -85,7 +85,7 @@ jobs:
           python-version: '3.12'
       - name: Rust toolchain
         run: rustup toolchain install 1.96.1 --profile minimal --target ${{ matrix.target }}
-      - name: Build both executables
+      - name: Build executable
         env:
           RUSTFLAGS: ${{ runner.os == 'Windows' && '-C target-feature=+crt-static' || '' }}
         run: cargo build --locked --release --bins --target ${{ matrix.target }}

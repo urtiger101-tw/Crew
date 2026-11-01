@@ -84,7 +84,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="crew-ssh-") as tmp:
         root = Path(tmp)
         base_env = {k: v for k, v in os.environ.items()
-                    if k not in ("CREW", "TMUXLIKE") and not k.startswith(("CREW_", "TMUXLIKE_"))}
+                    if k != "CREW" and not k.startswith("CREW_")}
         base_env.update(CREW_LANG="en", TERM="xterm-256color")
         envs = []
         for name in ("local", "remote", "absent", "restart"):

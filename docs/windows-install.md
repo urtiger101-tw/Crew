@@ -26,12 +26,11 @@ Crew 0.4.0 的 Windows 發行包含兩種檔案：
 ```powershell
 & "$env:LOCALAPPDATA\Programs\Crew\crew.exe"
 & "$env:LOCALAPPDATA\Programs\Crew\crew.exe" --version
-& "$env:LOCALAPPDATA\Programs\Crew\tmuxlike.exe" --version
 ```
 
-`tmuxlike.exe` 是相容命令，與 `crew.exe` 一起安裝。選擇自訂目錄時，請替換上述路徑。
+選擇自訂目錄時，請替換上述路徑。
 
-若希望在任意新 terminal 直接輸入 `crew` 或 `tmuxlike`，請自行在 Windows
+若希望在任意新 terminal 直接輸入 `crew`，請自行在 Windows
 「編輯帳戶的環境變數」中，將安裝目錄新增到**使用者**的 `Path`，然後開啟新 terminal。
 也可以只對目前 PowerShell 工作階段加入路徑：
 
@@ -48,14 +47,16 @@ crew --version
 執行新版安裝包即可沿用既有安裝目錄與卸載入口。安裝身分固定為
 `urtiger101-tw.Crew`，不隨版本改變。
 
+**第一次執行新版之前，請先停止舊伺服器。** 0.5.x 以舊的 `crew.exe` 執行 `crew server stop`；更舊的安裝以 `tmuxlike server stop` 停止。預設 socket 已由 `tmuxlike-<user>.sock` 改為 `crew-<user>.sock`，新版不會接手仍在執行的舊伺服器：它會發出警告並以空白版面啟動，不搬移舊版面。停止舊伺服器後重新啟動 `crew` 即可遷移。`crew.exe` 仍在執行時，安裝包會拒絕升級。
+
 若 Crew 的執行檔仍由 daemon 或其他程式使用，安裝與卸載會停止，請先自行保存工作、
 關閉使用中的 Crew，再重試。安裝包不會自動關閉、強制終止或重新啟動你的 daemon。
 如要主動停止 Crew server，可以在確認工作已保存後自行執行 `crew server stop`；
 這會停止該 server 及其正在執行的程式，不能當成不中斷工作的升級方式。
 
 升級保留使用者設定與狀態，包括 `CREW_CONFIG`、`CREW_STATE` 指向的檔案、
-Crew 的 AppData 資料，以及相容模式使用的舊 tmuxlike 設定。安裝包只處理列明的
-程式、README、LICENSE、package manifest 與自己的卸載資料，不刪除工作樹或專案。
+Crew 的 AppData 資料，以及仍會被讀取的舊版 `tmuxlike/` 設定目錄。安裝包只處理列明的
+程式、README、LICENSE、package manifest 與自己的卸載資料，不刪除工作樹或專案。若安裝目錄中有舊版遺留的 `tmuxlike.exe`，升級與卸載時會一併移除。
 
 未註冊為 Crew 安裝、但已有檔案的目的目錄會被拒絕，避免覆寫原有資料。
 若原本使用 portable ZIP，請選擇另一個空目錄安裝；設定與狀態仍依 Crew 原本的

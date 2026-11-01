@@ -63,13 +63,10 @@ jobs:
         run: python scripts/package_release.py self-test 2>&1 | tee ci-logs/release-tooling.log
       - name: Local validation tooling tests
         run: python -B scripts/test_local_validation.py 2>&1 | tee ci-logs/local-tooling.log
-      - name: Build both executables
+      - name: Build executable
         env:
           RUSTFLAGS: ${{ runner.os == 'Windows' && '-C target-feature=+crt-static' || '' }}
         run: cargo build --locked --release --bins --target ${{ matrix.target }} 2>&1 | tee ci-logs/build.log
-      - name: Legacy PTY smoke
-        timeout-minutes: 5
-        run: python scripts/smoke.py target/${{ matrix.target }}/release/tmuxlike${{ matrix.ext }} 2>&1 | tee ci-logs/legacy-pty.log
       - name: Automation API smoke
         timeout-minutes: 8
         run: python scripts/api_smoke.py target/${{ matrix.target }}/release/crew${{ matrix.ext }} 2>&1 | tee ci-logs/api.log

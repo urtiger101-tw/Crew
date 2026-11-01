@@ -18,7 +18,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='crew-bridge-') as tmp:
         root = Path(tmp)
         (root / 'config.toml').write_text('persist = false\n', encoding='utf-8')
-        env = {k: v for k, v in os.environ.items() if not k.upper().startswith(('CREW', 'TMUXLIKE'))}
+        env = {k: v for k, v in os.environ.items() if not k.upper().startswith('CREW')}
         env.update(CREW_SOCKET=f'crew-bridge-{os.getpid()}.sock', CREW_CONFIG=str(root / 'config.toml'),
                    CREW_STATE=str(root / 'state.json'), CREW_LOG=str(root / 'server.log'))
 

@@ -255,9 +255,11 @@ class LocalChecks(unittest.TestCase):
         self.assertNotIn("ci_run_id", manifest)
         archive = output / manifest["portable"]["name"]
         with tarfile.open(archive) as stream:
-            self.assertEqual({Path(item.name).name for item in stream.getmembers()}, {"crew", "tmuxlike", "README.md", "LICENSE", "manifest.json"})
+            names = {Path(item.name).name for item in stream.getmembers()}
+            self.assertEqual(names, {"crew", "README.md", "LICENSE", "manifest.json"})
+            self.assertNotIn("tmuxlike", names)
             for item in stream.getmembers():
-                if Path(item.name).name in ("crew", "tmuxlike"):
+                if Path(item.name).name == "crew":
                     self.assertEqual(item.mode, 0o755)
         for line in (output / "SHA256SUMS").read_text().splitlines():
             value, name = line.split("  ", 1)

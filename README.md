@@ -14,9 +14,9 @@ A cross-platform terminal multiplexer written in Rust, inspired by tmux and herd
 
 ## Crew 0.5.0：任務呈現、跨工作區分頁與多機協作
 
-專案已由 tmuxlike 改名為 **Crew**，後續 PR、CI 與 GitHub Release 位於
-[urtiger101-tw/Crew](https://github.com/urtiger101-tw/Crew)。原專案是唯讀來源。
-`crew` 是主要指令；`tmuxlike` 相容執行檔使用同一份程式實作。
+後續 PR、CI 與 GitHub Release 位於
+[urtiger101-tw/Crew](https://github.com/urtiger101-tw/Crew)。
+`crew` 是唯一的指令。
 
 0.5.0 延續既有 workspace、Git worktree、agent hooks、事件串流與 Inno Setup，
 加入五項 Herdr 行為對齊：
@@ -90,16 +90,18 @@ ignored、locked、primary 與 Crew 已知使用中的 checkout，保留 Git bra
 Linux 另檢查窗格當前前景行程與 shell 的目錄；Windows／macOS 使用已知啟動目錄。
 其他程序或檢查後的目錄切換仍由使用者協調，Git 不提供跨程序使用鎖。
 
-### 舊版升級
+### 升級注意
 
-- `CREW_*` 環境變數優先；未設定時讀取對應 `TMUXLIKE_*`，保留舊 hooks。
-- 新安裝設定使用 `crew/config.toml`；有舊設定且沒有新設定時讀取
-  `tmuxlike/config.toml`。狀態檔亦保留舊路徑相容。
-- 選用新狀態檔後，會留下 `.crew-selected` 標記；清除或隔離新狀態檔後不會
-  再復活較舊的 tmuxlike 狀態。標記不是 session 資料，無須手動刪除。
-- 預設 socket 名稱維持 `tmuxlike-<user>.sock`，兩個執行檔連到同一個伺服器。
-  **升級後使用新 API 前，先以舊程式執行 `server stop`，再啟動新版 Crew。**
-  停止伺服器會終止現有程序；保存的是版面，請先完成或保存正在進行的工作。
+- 環境變數只讀取 `CREW*`。舊 hooks 或腳本中的 `TMUXLIKE*` 變數請改為對應的 `CREW_*`。
+- 預設 socket 名稱由 `tmuxlike-<user>.sock` 改為 `crew-<user>.sock`。**升級前請先停止舊伺服器，不要先執行新版。**
+  0.5.x 以舊的 `crew.exe` 執行 `crew server stop`；更舊的安裝以 `tmuxlike server stop` 停止。
+  停止伺服器會終止現有程序，請先完成或保存進行中的工作。
+- 若升級時舊伺服器仍在執行，新版會偵測到它、發出警告，並以空白版面啟動、不搬移舊版面；此時請停止舊伺服器，再重新啟動 `crew` 即可遷移。
+  Windows 安裝包在 `crew.exe` 執行中會拒絕升級。
+- 新狀態檔從未使用時，依序尋找 `crew/state-tmuxlike-<user>.sock.json`、`tmuxlike/state-tmuxlike-<user>.sock.json`、`tmuxlike/state-crew-<user>.sock.json`。
+  找到的舊狀態檔會被直接沿用、繼續寫入，並在最後一個 session 關閉或 `kill-server` 時刪除。
+  新狀態檔一經選用、清除或隔離後，就不會再復活舊版版面（`.crew-selected` 標記無須手動刪除）。
+- 舊版 `tmuxlike/config.toml` 只讀取，且僅在沒有 `crew/config.toml` 時使用。
 - `--env` 覆寫值會存入本機狀態檔以供恢復；請只傳需要保存的環境設定。
   任意 `--command` 不會在還原時重播。
 - `agent wait/prompt` 現在要求目標已有 agent 回報，並綁定該次 agent 身分。
@@ -519,7 +521,7 @@ Pane environment: every new pane gets `TERM=xterm-256color` and `COLORTERM=truec
 重新載入 Reload: `prefix r`、`:source-file [PATH]` 或 `crew source-file`。`.toml` 檔會整個取代設定；其他副檔名視為每行一條指令（類似 `.tmux.conf`）。
 A `.toml` file replaces the whole config; any other file is run line by line as commands (like `.tmux.conf`).
 
-環境變數 Env: `CREW_SOCKET` 可指定 socket 名稱以執行多個獨立伺服器 / set to run independent servers; `CREW_STATE` 指定版面保存檔路徑 / path of the saved-layout file.
+環境變數 Env: `CREW_SOCKET` 可指定 socket 名稱（預設 `crew-<user>.sock`）以執行多個獨立伺服器 / set to run independent servers (default `crew-<user>.sock`); `CREW_STATE` 指定版面保存檔路徑 / path of the saved-layout file.
 
 ### 窗格標題 Pane titles
 

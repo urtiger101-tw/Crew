@@ -102,7 +102,6 @@ reports are recorded; this is not a log of every keystroke or every UI state cha
 
 ## Running tests safely
 
-The smoke tests clear inherited Crew/tmuxlike environment variables, then use their own
+The smoke tests clear inherited `CREW*` environment variables, then use their own
 socket and temporary config/state/Git paths. They do not connect to the caller's pane server.
 Run `cargo build --bins`, then pass `target/debug/crew` (Windows: `crew.exe`) to each script.
-`tmuxlike` remains a compatibility alias and supports the same commands.

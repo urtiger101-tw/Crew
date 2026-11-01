@@ -38,7 +38,7 @@ TARGETS = (
 CI_PLATFORMS = {"Linux x86_64", "Windows x86_64", "macOS arm64"}
 CI_STEPS = {
     "Repository guard", "Checkout", "Python", "Rust toolchain", "Format", "Clippy",
-    "Unit tests", "Release tooling tests", "Build both executables", "Legacy PTY smoke",
+    "Unit tests", "Release tooling tests", "Build executable",
     "Automation API smoke", "Workspace smoke", "Worktree smoke", "Agent identity smoke",
     "Bridge and events smoke", "Workspace move smoke", "Metadata smoke",
     "Local validation tooling tests", "Workspace transfer smoke", "Metadata presentation smoke",
@@ -231,7 +231,7 @@ def write_archive(destination, top, payloads):
         with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as archive:
             for name, content in payloads.items():
                 info = zipfile.ZipInfo(top + "/" + name)
-                info.external_attr = ((0o100755 if name.startswith(("crew", "tmuxlike")) else 0o100644) << 16)
+                info.external_attr = ((0o100755 if name.startswith("crew") else 0o100644) << 16)
                 info.compress_type = zipfile.ZIP_DEFLATED
                 archive.writestr(info, content)
     else:
@@ -239,7 +239,7 @@ def write_archive(destination, top, payloads):
             for name, content in payloads.items():
                 info = tarfile.TarInfo(top + "/" + name)
                 info.size = len(content)
-                info.mode = 0o755 if name in {"crew", "tmuxlike"} else 0o644
+                info.mode = 0o755 if name == "crew" else 0o644
                 archive.addfile(info, io.BytesIO(content))
 
 
@@ -262,8 +262,7 @@ def validate_archive(path, package, *, check_windows_runtime=False):
         require(package["files"][name] == {"sha256": digest(content), "bytes": len(content)},
                 "archive member digest differs: " + name)
     if check_windows_runtime and package["target"] == WINDOWS_TARGET:
-        for name in ("crew.exe", "tmuxlike.exe"):
-            require_static_crt(contents[name])
+        require_static_crt(contents["crew.exe"])
 
 
 def package(args):
@@ -273,15 +272,13 @@ def package(args):
     ext = ".exe" if target.endswith("windows-msvc") else ""
     binaries = Path("target") / target / "release"
     payloads = {}
-    for name in ["crew", "tmuxlike"]:
-        path = binaries / (name + ext)
-        require(path.is_file() and not path.is_symlink(), "release binary is missing: " + str(path))
-        version = run(str(path.resolve()), "--version")
-        require(version in {f"crew {meta['version']}", f"tmuxlike {meta['version']}"},
-                "binary version does not match the tag: " + version)
-        payloads[name + ext] = path.read_bytes()
-        if target == WINDOWS_TARGET:
-            require_static_crt(payloads[name + ext])
+    path = binaries / ("crew" + ext)
+    require(path.is_file() and not path.is_symlink(), "release binary is missing: " + str(path))
+    version = run(str(path.resolve()), "--version")
+    require(version == f"crew {meta['version']}", "binary version does not match the tag: " + version)
+    payloads["crew" + ext] = path.read_bytes()
+    if target == WINDOWS_TARGET:
+        require_static_crt(payloads["crew" + ext])
     for name in ["README.md", "LICENSE"]:
         payloads[name] = Path(name).read_bytes()
     package_meta = {**meta, "target": target, "rust": "1.96.1", "signed": False,
@@ -319,8 +316,8 @@ def collect_packages(folder, meta):
                 and package_meta.get("runtime") == ("static-msvc-crt" if target == WINDOWS_TARGET else "system"),
                 "package source/version/CI/target/runtime provenance differs")
         ext = ".exe" if target.endswith("windows-msvc") else ""
-        require(set(package_meta["files"]) == {"crew" + ext, "tmuxlike" + ext, "README.md", "LICENSE"},
-                "package does not contain both executables and license/readme")
+        require(set(package_meta["files"]) == {"crew" + ext, "README.md", "LICENSE"},
+                "package must contain only the crew executable and license/readme")
         require(record["name"] == archive_name(meta["tag"], target), "unexpected archive name")
         archive = folder / record["name"]
         content = archive.read_bytes()
@@ -423,7 +420,7 @@ def publish(args):
     require(tag_commit(args.tag) == args.sha, "release tag changed before publication")
     notes = (f"Crew {args.tag}\n\nSource: https://github.com/{REPOSITORY}/commit/{args.sha}\n"
              f"Verified CI: {evidence['ci_url']}\n\n"
-             "Four native portable packages include the crew command, the tmuxlike compatibility command, "
+             "Four native portable packages include the crew command, "
              "README.md, LICENSE and a package manifest. Checksums and source/CI provenance are "
              "in SHA256SUMS and release-manifest.json.\n\n"
              "Targets: Linux x86_64, Windows x86_64, macOS arm64 and macOS x86_64. "
@@ -496,7 +493,7 @@ class ReleaseChecks(unittest.TestCase):
         for target in TARGETS:
             ext = ".exe" if target == WINDOWS_TARGET else ""
             binary = cls.fixture_pe() if target == WINDOWS_TARGET else b"fixture"
-            payloads = {"crew" + ext: binary, "tmuxlike" + ext: binary,
+            payloads = {"crew" + ext: binary,
                         "README.md": b"readme", "LICENSE": b"license"}
             package_meta = {**meta, "target": target, "rust": "1.96.1", "signed": False,
                             "runtime": "static-msvc-crt" if target == WINDOWS_TARGET else "system",
@@ -608,7 +605,7 @@ class ReleaseChecks(unittest.TestCase):
         meta = {"repository": REPOSITORY, "tag": "v0.4.0", "version": "0.4.0", "sha": "a" * 40,
                 "ci_run_id": 7, "ci_attempt": 1}
         windows = {**meta, "files": {name: {"bytes": 1, "sha256": digest(b"x")}
-                                     for name in ["crew.exe", "tmuxlike.exe", "README.md", "LICENSE"]}}
+                                     for name in ["crew.exe", "README.md", "LICENSE"]}}
         with tempfile.TemporaryDirectory(prefix="crew-installer-contract-") as temporary:
             folder = Path(temporary)
             good = self.fixture_installer(folder, meta, windows)
@@ -705,7 +702,7 @@ class ReleaseChecks(unittest.TestCase):
             with self.subTest(suffix=suffix), tempfile.TemporaryDirectory(prefix="crew-package-test-") as temporary:
                 target = TARGETS[1] if suffix == ".zip" else TARGETS[0]
                 ext = ".exe" if suffix == ".zip" else ""
-                payloads = {"crew" + ext: b"test executable", "tmuxlike" + ext: b"test alias",
+                payloads = {"crew" + ext: b"test executable",
                             "README.md": b"readme", "LICENSE": b"license"}
                 package_meta = {"tag": "v0.3.0", "target": target, "files": {
                     name: {"sha256": digest(data), "bytes": len(data)} for name, data in payloads.items()}}
@@ -714,6 +711,10 @@ class ReleaseChecks(unittest.TestCase):
                 top = "Crew-v0.3.0-" + target
                 write_archive(archive, top, payloads)
                 validate_archive(archive, package_meta)
+                # A stale executable from an older release must never be accepted as a member.
+                write_archive(archive, top, {**payloads, "tmuxlike" + ext: b"stale executable"})
+                with self.assertRaises(ValueError):
+                    validate_archive(archive, package_meta)
                 payloads["README.md"] = b"tampered"
                 write_archive(archive, top, payloads)
                 with self.assertRaises(ValueError):

@@ -47,7 +47,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="crew-worktree-") as temporary:
         root = Path(temporary).resolve()
         env = {k: v for k, v in os.environ.items()
-               if not k.upper().startswith(("CREW", "TMUXLIKE", "GIT_"))}
+               if not k.upper().startswith(("CREW", "GIT_"))}
         config = root / "config.toml"
         config.write_text("persist = false\n" + ("" if WIN else "shell = '/bin/sh'\n"), encoding="utf-8")
         env.update(CREW_CONFIG=str(config), CREW_STATE=str(root / "state.json"),
