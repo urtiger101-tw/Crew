@@ -1,0 +1,22 @@
+§30 claude>codex NEW TASK (from the user)
+ASG who=codex id=AGENTCMD :: The user asks: add the commands of https://github.com/stevenke1981/linux-bash-command (crate `agentcmd`, MIT, same owner) to Crew with MODULAR LOADING. You own design and implementation, and the user wants you to dispatch MULTIPLE SUB-AGENTS in parallel for the implementation. Claude coordinates, reviews independently and integrates. The user asked for this directly.
+
+FACTS (verified by claude at agentcmd 617a90c):
+- 50 utilities. src/registry.rs has a static `Utility{name, run, summary, origin, windows_conflict: Option<&str>}`. 13 entries conflict on Windows, e.g. find, sort and echo against System32 or PowerShell.
+- A multi-call binary `agentcmd <cmd> ...`; a copy NAMED after a command dispatches by argv0 basename. `agentcmd --list` lists the commands.
+- Heavy deps: reqwest (rustls), sysinfo, ignore, grep-cli, crossterm 0.28 (crew uses 0.29).
+- Crew plugins (docs/plugins.md, src/plugins/*): crew-plugin.toml with id/name/version/platforms/build[]/actions[]. Install is reviewed, build runs after approval, enable/disable exists. There is NO capability to expose executables to panes.
+
+LEAD PROPOSAL (you may improve it; record deviations and reasons in your design crl before coding):
+1. Do NOT compile agentcmd into crew.exe: no new heavy deps in crew, no crossterm version clash.
+2. New plugin capability: a manifest field (e.g. `[[bin]]` / `path_dirs`, platform-filtered, relative to the plugin root, validated to stay inside it). Directories of ENABLED plugins are prepended to PATH of NEWLY spawned panes. Existing panes are not mutated. Ordering and enable/disable must be deterministic. Expose the result in `crew plugin show/list --json`.
+3. Modular loading — USER DECISION: EVERY COMMAND IS ITS OWN INDEPENDENT MODULE (no groups). Build or install ONE agentcmd multi-call binary pinned to a full commit (shared, built once). Each of the ~50 commands is a separately enable/disable-able module, e.g. `agentcmd.wc` or `agentcmd.grep`, that materializes only its own argv0 link or copy. Generate the module manifests from agentcmd's registry: do not hand-write 50 of them. Windows-conflicting commands are disabled by default with an explicit opt-in per command. A convenience "enable all non-conflicting" is fine, but the unit of loading is one command.
+4. Offline-friendly: if cargo is missing, fail clearly. A prebuilt-download path is optional and only via the existing reviewed HTTPS rules.
+
+PROCESS:
+- Work in your own git worktree + branch `feat/agentcmd-modules` from current origin/main (5aa8d35). The main tree has an UNCOMMITTED TMUXLIKE removal (src/brand.rs, ipc.rs, persist/*, server.rs env block, plugins/install.rs, scripts/*, docs). Do not edit those in the main tree. Rebase on top once claude lands it. Note: the env var prefix is CREW_* only; TMUXLIKE_* will no longer be read.
+- First write a design crl (§31+): interfaces, file ownership per sub-agent, test plan. Commit the shared contract (manifest schema + PATH-injection API) before you fan out. Sub-agents: one file-owner each, no git operations, isolated CREW_SOCKET/CREW_STATE, own --target-dir.
+- Never kill-server on the default socket. Never stop processes by name; stop only verified PIDs.
+- Acceptance: fmt --check, clippy --locked --all-targets -D warnings, cargo test --locked green. Plus a live isolated demo: enable ONLY the `wc` module: a new pane resolves `wc` from the module but NOT `sort` or `cat`; disable `wc`: a new pane no longer resolves it; conflicting names not shadowed by default. Update docs/plugins.md and README.
+- Do NOT push. Report in a crl with commits on your branch, sub-agent split, evidence, and what was NOT verified. Claude will review independently, then merge.
+END
