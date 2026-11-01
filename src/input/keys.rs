@@ -132,7 +132,7 @@ impl State {
         self.mark_dirty();
     }
 
-    /// Chooser overlay: j/k and arrows move, Enter jumps, `x` kills, b/w/d/i/a filter, Esc or q
+    /// Chooser overlay: j/k and arrows move, Tab/Shift+Tab move with wrap-around, Enter jumps, `x` kills, b/w/d/i/a filter, Esc or q
     /// closes. Any other key is ignored and keeps the chooser open.
     pub(crate) fn chooser_key(&mut self, shared: &Shared, cid: usize, k: KeyEvent) {
         let Some(raw) = self.clients.get(&cid).and_then(|c| c.chooser) else {
@@ -164,6 +164,11 @@ impl State {
             }
             KeyCode::Down | KeyCode::Char('j') => {
                 self.set_chooser(cid, Some(pack_chooser((sel + 1).min(last), filter)))
+            }
+            KeyCode::Tab | KeyCode::BackTab => {
+                let back = k.code == KeyCode::BackTab || k.modifiers.contains(KeyModifiers::SHIFT);
+                let next = tab_step(sel, entries.len(), back);
+                self.set_chooser(cid, Some(pack_chooser(next, filter)))
             }
             KeyCode::Char(ch) => {
                 if let Some(f) = Filter::from_key(ch) {
@@ -360,6 +365,20 @@ fn scroll_key_delta(k: &KeyEvent, page: u16) -> Option<isize> {
         KeyCode::PageUp => Some(page),
         KeyCode::PageDown => Some(-page),
         _ => None,
+    }
+}
+
+/// Chooser row after Tab (forward) or Shift+Tab (`back`): like a dialog's focus ring it wraps
+/// around at both ends. An empty list stays on row 0.
+fn tab_step(sel: usize, len: usize, back: bool) -> usize {
+    if len == 0 {
+        return 0;
+    }
+    let sel = sel.min(len - 1);
+    if back {
+        (sel + len - 1) % len
+    } else {
+        (sel + 1) % len
     }
 }
 
@@ -806,6 +825,42 @@ mod tests {
         assert!(
             c.message.as_ref().is_some_and(|m| m.error),
             "prefix F1 is unbound"
+        );
+    }
+
+    #[test]
+    fn tab_step_wraps_like_a_focus_ring() {
+        assert_eq!(tab_step(0, 3, false), 1);
+        assert_eq!(tab_step(2, 3, false), 0);
+        assert_eq!(tab_step(0, 3, true), 2);
+        assert_eq!(tab_step(1, 3, true), 0);
+        assert_eq!(tab_step(9, 3, false), 0, "a stale row is clamped first");
+        assert_eq!(tab_step(0, 0, false), 0);
+        assert_eq!(tab_step(0, 0, true), 0);
+    }
+
+    #[test]
+    fn tab_and_shift_tab_move_the_chooser_selection() {
+        let (mut st, shared) = fkey_state(false, false);
+        let rows = visible_entries(&st, Filter::All).len();
+        assert!(rows >= 2, "fixture has a session row and a window row");
+        st.clients.get_mut(&1).unwrap().chooser = Some(pack_chooser(0, Filter::All));
+        let sel = |st: &State| unpack_chooser(st.clients[&1].chooser.unwrap()).0;
+        press(&mut st, &shared, plain(KeyCode::Tab));
+        assert_eq!(sel(&st), 1);
+        press(&mut st, &shared, key(KeyCode::BackTab, KeyModifiers::SHIFT));
+        assert_eq!(sel(&st), 0);
+        press(&mut st, &shared, key(KeyCode::BackTab, KeyModifiers::SHIFT));
+        assert_eq!(
+            sel(&st),
+            rows - 1,
+            "Shift+Tab on the first row wraps to the last"
+        );
+        press(&mut st, &shared, plain(KeyCode::Tab));
+        assert_eq!(sel(&st), 0, "Tab on the last row wraps to the first");
+        assert!(
+            st.clients[&1].chooser.is_some(),
+            "Tab never closes the chooser"
         );
     }
 

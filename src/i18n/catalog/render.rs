@@ -77,13 +77,13 @@ pub const ENTRIES: &[Entry] = &[
     ),
     (
         "render.chooser.hints",
-        "↑↓ move  ⏎ open  x kill  b/w/d/i filter  esc close",
-        "↑↓ 移動  ⏎ 開啟  x 關閉  b/w/d/i 篩選  esc 關閉",
+        "↑↓/tab move  ⏎ open  x kill  b/w/d/i filter  esc close",
+        "↑↓/tab 移動  ⏎ 開啟  x 關閉  b/w/d/i 篩選  esc 關閉",
     ),
     (
         "render.chooser.hints_ascii",
-        "up/dn move  enter open  x kill  b/w/d/i filter  esc close",
-        "up/dn 移動  enter 開啟  x 關閉  b/w/d/i 篩選  esc 關閉",
+        "up/dn/tab move  enter open  x kill  b/w/d/i filter  esc close",
+        "up/dn/tab 移動  enter 開啟  x 關閉  b/w/d/i 篩選  esc 關閉",
     ),
     ("render.chooser.empty_all", "no sessions", "沒有工作階段"),
     (
