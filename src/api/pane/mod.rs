@@ -27,6 +27,24 @@ use read::{Matcher, find_line};
 
 /// Delay between pasting text and sending Enter in `submit` (`PaneRun`).
 const RUN_ENTER_DELAY_MS: u64 = 30;
+/// `PaneRun` into an agent TUI (Codex, Claude Code, ...): those apps detect fast keystroke
+/// bursts as a paste and turn an Enter that arrives too soon into a newline, so the text sits
+/// unsent in the prompt. Matches `agent prompt`'s delay.
+const AGENT_RUN_ENTER_DELAY_MS: u64 = 150;
+
+/// Enter delay for `pane run`: longer when the pane hosts a reported or detected agent.
+fn run_enter_delay(shared: &Shared, pid: usize) -> u64 {
+    let st = lock(shared);
+    let is_agent = st
+        .panes
+        .get(&pid)
+        .is_some_and(|p| p.agent.is_some() || p.detected_agent.is_some());
+    if is_agent {
+        AGENT_RUN_ENTER_DELAY_MS
+    } else {
+        RUN_ENTER_DELAY_MS
+    }
+}
 
 pub fn handle(shared: &Shared, req: Request) -> ApiResult {
     match req {
@@ -101,7 +119,8 @@ fn io_op(shared: &Shared, req: Request) -> ApiResult {
         Request::PaneSendText { pane, text } => send_text(shared, pane, &text),
         Request::PaneSendKeys { pane, keys } => send_keys_op(shared, pane, &keys),
         Request::PaneRun { pane, command } => {
-            submit(shared, pane, &command, RUN_ENTER_DELAY_MS)?;
+            let delay = run_enter_delay(shared, pane);
+            submit(shared, pane, &command, delay)?;
             Ok(sent())
         }
         Request::PaneWaitOutput {

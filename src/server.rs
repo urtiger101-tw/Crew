@@ -350,6 +350,12 @@ impl State {
             cmd.arg(a);
         }
         cmd.env("TERM", "xterm-256color");
+        // Crew re-renders pane cells with 24-bit SGR, so advertise truecolor to children.
+        cmd.env("COLORTERM", "truecolor");
+        // NO_COLOR inherited by the long-lived server (from whichever shell first started it)
+        // would silently strip color from every program in every pane. Crew's own chrome
+        // still honours each client's NO_COLOR; a pane that wants it sets it via --env.
+        cmd.env_remove("NO_COLOR");
         for (key, value) in env {
             cmd.env(key, value);
         }
