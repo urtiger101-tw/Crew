@@ -48,9 +48,11 @@ impl State {
         let mut changed = false;
         for (id, p) in self.panes.iter_mut() {
             let Some(lost) = &p.host_lost else { continue };
-            let now = root_pid(p).map(crate::agent_detection::live_tree);
-            let now = now.unwrap_or_default();
+            let now = refreshed(p, &lost.survivors);
             if now.is_empty() {
+                // Nothing is left to end: forget the stale list so the close below cannot
+                // terminate a pid the system has since handed to an unrelated process.
+                p.host_lost = None;
                 gone.push(*id);
             } else if now != lost.survivors {
                 changed = true;
@@ -73,9 +75,17 @@ fn root_pid(p: &Pane) -> Option<u32> {
 }
 
 fn survivors(p: &Pane) -> Vec<(u32, String)> {
-    root_pid(p)
-        .map(crate::agent_detection::live_tree)
-        .unwrap_or_default()
+    refreshed(p, &[])
+}
+
+/// The pane's processes still running now: its tree from the root, plus everything under
+/// processes seen running before (`known`), whose parents may have exited since.
+fn refreshed(p: &Pane, known: &[(u32, String)]) -> Vec<(u32, String)> {
+    match root_pid(p) {
+        Some(root) => crate::agent_detection::live_tree_with(root, known),
+        // u32::MAX is never a real process id, so only `known` seeds the walk
+        None => crate::agent_detection::live_tree_with(u32::MAX, known),
+    }
 }
 
 pub(crate) fn processes_json(survivors: &[(u32, String)]) -> serde_json::Value {
@@ -89,7 +99,8 @@ pub(crate) fn processes_json(survivors: &[(u32, String)]) -> serde_json::Value {
 /// root (what a normal close does) would leave the descendants running without a console.
 pub(crate) fn kill_tree(p: &Pane) {
     let Some(lost) = &p.host_lost else { return };
-    for (pid, exe) in &lost.survivors {
+    // Rescan right before ending anything: the last list may be up to one tick old.
+    for (pid, exe) in &refreshed(p, &lost.survivors) {
         crate::log!("ending host-lost survivor {exe} ({pid})");
         terminate(*pid);
     }

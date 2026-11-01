@@ -272,23 +272,41 @@ struct Process {
 /// root first then by pid. A descendant whose parent already exited still counts: Windows
 /// keeps the parent id. Empty off Windows (a Unix PTY reaches EOF only when the session
 /// leader is gone) or when the process table cannot be read.
-pub(crate) fn live_tree(root: u32) -> Vec<(u32, String)> {
+///
+/// Also follows `known` processes seen in an earlier scan. When an
+/// intermediate process (say the shell) exits, its children keep a parent id that no longer
+/// resolves, so a walk from `root` alone would lose them. A known pid only counts while it
+/// still runs the same executable, so a reused pid is not adopted.
+pub(crate) fn live_tree_with(root: u32, known: &[(u32, String)]) -> Vec<(u32, String)> {
     #[cfg(windows)]
     {
         windows_processes()
-            .map(|all| tree_of(root, &all))
+            .map(|all| tree_from(root, known, &all))
             .unwrap_or_default()
     }
     #[cfg(not(windows))]
     {
-        let _ = root;
+        let _ = (root, known);
         Vec::new()
     }
 }
 
-#[cfg(any(windows, test))]
+#[cfg(test)]
 fn tree_of(root: u32, processes: &[Process]) -> Vec<(u32, String)> {
+    tree_from(root, &[], processes)
+}
+
+#[cfg(any(windows, test))]
+fn tree_from(root: u32, known: &[(u32, String)], processes: &[Process]) -> Vec<(u32, String)> {
     let mut members: Vec<u32> = vec![root];
+    for (pid, exe) in known {
+        let still_same = processes
+            .iter()
+            .any(|p| p.pid == *pid && p.executable.eq_ignore_ascii_case(exe));
+        if still_same && !members.contains(pid) {
+            members.push(*pid);
+        }
+    }
     // breadth-first over parent links; bounded by the table size, so a pid cycle cannot loop
     let mut i = 0;
     while i < members.len() && members.len() <= processes.len() {
@@ -496,6 +514,33 @@ mod tests {
             tree_of(50, &table),
             vec![(50, "self-parent.exe".to_string())]
         );
+    }
+
+    #[test]
+    fn known_grandchild_survives_after_helper_and_shell_exit() {
+        // 10 = helper, 20 = shell, 30 = ping: helper and shell exited, ping still runs with
+        // parent 20, which no longer resolves from root 10.
+        let known = vec![
+            (10, "crew.exe".to_string()),
+            (20, "powershell.exe".to_string()),
+            (30, "PING.EXE".to_string()),
+        ];
+        let table = vec![proc(30, 20, "PING.EXE"), proc(31, 30, "conhost.exe")];
+        assert_eq!(tree_of(10, &table), vec![]);
+        assert_eq!(
+            tree_from(10, &known, &table),
+            vec![
+                (30, "PING.EXE".to_string()),
+                (31, "conhost.exe".to_string())
+            ]
+        );
+    }
+
+    #[test]
+    fn reused_pid_with_another_executable_is_not_adopted() {
+        let known = vec![(30, "PING.EXE".to_string())];
+        let table = vec![proc(30, 4, "unrelated.exe")];
+        assert_eq!(tree_from(10, &known, &table), vec![]);
     }
 
     #[test]
