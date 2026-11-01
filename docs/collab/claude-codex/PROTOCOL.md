@@ -1,6 +1,6 @@
 # CRL — Crew Relay Lingo
 
-Claude Code (`p1`) 與 Codex CLI (`p3`) 透過 Crew 窗格互相溝通所用的精簡語言。
+Claude Code 與 Codex CLI（窗格 ID 會隨工作階段改變，以 `crew pane list` 的 `detected_agent` 為準；目前 Claude `p1`、Codex `p2`） 透過 Crew 窗格互相溝通所用的精簡語言。
 此語言給 agent 用，不求人類可讀；人類版本見 `TRANSCRIPT.md` 與 `SUMMARY.md`。
 
 ## 傳輸 Transport
@@ -9,7 +9,9 @@ Claude Code (`p1`) 與 Codex CLI (`p3`) 透過 Crew 窗格互相溝通所用的�
 2. 發送方寫好檔案後，經 Crew 通知對方：
    - Claude → Codex：`crew pane run p3 "<短指令>"`（輸入到 Codex 提示列並按 Enter）。
    - Codex → Claude：在自己的窗格輸出單獨一行 `EOT-NN`；Claude 以
-     `crew pane wait-output p3 --match EOT-NN` 等待。
+     `crew pane wait-output <codex> --match EOT-NN` 等待。
+   - Codex 亦可主動喚醒 Claude（v3）：`crew pane run <claude> "<短指令>"`，例如提案、派工或提問需要即時回覆時。
+     Claude 正在工作時，這段文字會排入其下一輪輸入，不會遺失。
 3. 訊息檔是唯一真實來源；窗格文字只是通知。
 
 ## 語法 Syntax
@@ -31,10 +33,22 @@ END                          # 回合結束
 | `AMD` | 修改提案 | `Pn` 加上要改的鍵 |
 | `ASK` / `ANS` | 提問／回答 | `q=Qn` |
 | `LEX` | 為本語言新增或修改詞彙 | `w=新詞` `m=意義` |
+| `ASG` | 派工（v3 起**雙向**：任一方都可派給對方） | `who=` `id=Pn` |
+| `OWN` | 檔案所有權清單；同一檔案同時只歸一方 | `<who> :: 檔案…` |
+| `RULE` | 硬限制 | — |
+| `DONE` | 完成條件與回報格式 | — |
+| `REV` | 獨立審查結果；作者不得自審 | `id=Pn` `PASS\|FAIL` |
 | `FIN` | 提議結案；列出共識的提案 id | `ids=P1,P3` |
 | `END` | 回合結束 | — |
 
 鍵值中的空白改用 `_`。雙方都同意 `FIN` 的同一組 `ids` 時，討論結束。
+
+## 協作角色 Roles（v3 新增）
+
+- 雙方是**對等夥伴**：任一方都可 `PRO` 新工作、`VOT`／`AMD` 對方提案、以 `ASG` 派工給對方，或對收到的 `ASG` 回 `AMD`／`VOT -` 並說明理由。
+- 派工前先確認 `OWN` 不重疊；需要對方檔案時用 `ASK`，不可逕自修改。
+- 人類（主人）的決定優先於雙方共識。git commit／push 仍只由 Claude 整合執行（人類另有指示除外）；實作方不得自審，整合前由另一方 `REV`。
+- 一方等待時應主動 `PRO` 可並行的工作，而非閒置。
 
 ## 實務教訓 Lessons（v1 新增）
 
@@ -56,6 +70,7 @@ END                          # 回合結束
 
 | 版本 | 日期 | 內容 | 影響範圍 |
 |------|------|------|----------|
+| v3 | 2026-11-02 | 雙向派工（ASG/OWN/RULE/DONE/REV 入詞彙）、Codex 可主動喚醒 Claude、對等角色規則 | 本檔 |
 | v2 | 2026-11-02 | 標記行允許 TUI 項目符號（EOT-anchor） | 本檔 |
 | v1 | 2026-11-02 | 新增 IMP、NR 詞彙與傳輸實務教訓 | 本檔 |
 | v0 | 2026-11-02 | 初版，由 Claude 起草 | 本檔 |

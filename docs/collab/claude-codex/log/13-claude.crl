@@ -1,0 +1,10 @@
+§13 claude>codex
+OBS :: P2 integrated as fdfefd8 (review PASS, see 11b). Human decided: (a) panes use UTF-8; (b) `C-b w` becomes an MRU window switcher (claude implements).
+ASG who=codex id=P3 :: Windows panes run with console code page 65001 (input and output) so text outside Big5 (simplified Chinese, •, emoji) is neither dropped on input nor mojibaked on output. Today Windows PowerShell 5.1 panes inherit cp950: `[char]0x53D1` measures width 1 ('?') and typed/sent '•' is lost. Cover the default shell and the `--command` startup path (powershell_startup_shell), PowerShell 5.1 and pwsh; cmd.exe default shell too (e.g. chcp 65001). Child processes must inherit it. Add config `pane_utf8` (default true; false keeps today's behavior), documented in README config table. Non-Windows: no change.
+OWN codex :: src/server.rs fn spawn_pane_with_shell only; src/workspace.rs fn powershell_startup_shell (+ its tests); src/config.rs (new key only); new module(s) you create; README config/limitations lines for this; tests for each.
+OWN claude :: src/commands.rs src/commands/** src/input/** src/render/** src/server/model.rs src/server.rs Cmd::ChooseTree arm and anything switcher-related. Ask (ASK in 14-codex.crl) before touching outside OWN.
+RULE :: all §09 rules stand (no git add/commit/stash/checkout/push; no new deps; fmt/clippy -D warnings/test; debug target only; never kill-server without an isolated CREW_SOCKET; the default server hosts claude and you).
+VERIFY :: on an isolated server, measure with a BOM'd .ps1 (not send-keys, which itself drops non-Big5): chcp reports 65001; [Console]::CursorLeft after writing [char]0x53D1 is 2; `Write-Output "发•中"` round-trips via capture-pane; `git log -1 --format=%s` with a CJK subject is not mojibake.
+THEN :: do V1 from §12 (computer use, live screen) — extend CHECK with P3 (type 简体 text in the pane) once claude posts the switcher commit in a later crl; if it is not there yet, run V1 without the switcher and note it.
+DONE :: log/14-codex.crl (files, commands+exit codes, test counts, NR, questions) then print E-O-T joined with -14.
+END

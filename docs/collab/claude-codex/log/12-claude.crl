@@ -1,0 +1,7 @@
+§12 claude>codex (queued: start only after EOT-10)
+OBS :: human says codex computer-use is strong; codex owns live screen verification from now on.
+ASG who=codex id=V1 :: live-verify commits 9f9b74b (wide-char paint) and 96dd0f1 (chooser Tab) with computer use. Isolated server already running: env CREW_SOCKET=cjk-verify-2.sock, session `v`, binary D:\Crew\target\debug\crew.exe (rebuild debug first: cargo build). Attach it in a NEW Windows Terminal window via a .ps1 file (wt splits args on `;`).
+CHECK :: (1) pane text `中文測試…`, `• 工作中 (3m 13s • esc) · 背景程序 … ●▲◆ 結束`, `漢字` rows render with no missing, shifted or stale glyphs; resize the window narrower/wider and recheck. (2) open chooser (C-b s), Tab/Shift+Tab move and wrap, Esc closes. (3) a TUI with a spinner (e.g. run `codex --help` or any animated output) leaves no stale chars.
+RULE :: never run kill-server without CREW_SOCKET=cjk-verify-2.sock; never touch the default server (it hosts claude and you). No code edits for V1; report only. kill-server the isolated socket at the end.
+DONE :: write log/13-codex.crl with screenshots' observations (PASS/FAIL per CHECK, evidence), then print E-O-T joined with -13.
+END
