@@ -251,6 +251,9 @@ After the prefix, the status bar becomes a which-key bar listing the common keys
 工具列按鈕（頂列）：`prefix` 後按 `F1`–`F12` 執行第 n 個按鈕；若該鍵已有自訂綁定（`bind`），以綁定為準。`toolbar_fkeys = true` 時，不加前綴的 `F1`–`F12` 直接執行按鈕，不再送到窗格內的程式。點擊按鈕亦會執行（輸入列開啟時點擊無作用）。`F10`（關閉）與 `x` 相同：`confirm-close` 開啟時先以 y/n 詢問。
 Toolbar buttons: `prefix` then `F1`–`F12` runs button n; a custom binding (`bind`) on that key wins. With `toolbar_fkeys = true`, plain `F1`–`F12` run the buttons directly and no longer reach the program in the pane. Clicking a button runs it too (not while a prompt is open). F10 (close) works like `x`: with `confirm-close` on it asks y/n first.
 
+不按前綴也能回看輸出：`Shift+↑`／`Shift+↓` 逐行捲動目前窗格的先前輸出，`Shift+PgUp`／`Shift+PgDn` 整頁捲動；捲離底部即進入捲動模式（可接著用複製模式按鍵），捲回底部自動結束。不加 Shift 的方向鍵仍交給 shell（指令歷史）。全螢幕程式（alternate screen，如 vim）照常收到按鍵；唯一例外是複製模式中已有選取範圍時，按鍵仍歸複製模式。`scroll_keys = false` 可關閉。
+Browse earlier output without the prefix: `Shift+Up`/`Shift+Down` scroll the active pane one line, `Shift+PgUp`/`Shift+PgDn` one page. Scrolling off the bottom enters scroll mode (copy-mode keys then work); scrolling back to the bottom leaves it. Plain arrows still go to the shell (history). Full-screen apps (alternate screen, e.g. vim) still receive the keys, except while a copy-mode selection is active, which keeps them. Turn off with `scroll_keys = false`.
+
 ### 複製模式 Copy mode
 
 | 按鍵 Key | 動作 Action |
@@ -478,6 +481,7 @@ confirm_close = true    # x 與 & 先以 y/n 確認 / ask y/n before x and &
 pane_titles = "auto"    # 窗格標題列：off | auto | always / pane title rows
 toolbar = true          # 頂列功能鍵工具列 / function-key toolbar on the top row
 toolbar_fkeys = false   # F1..F12 直接執行按鈕 / plain F1..F12 run the buttons
+scroll_keys = true      # Shift+方向鍵/PgUp/PgDn 捲動先前輸出 / Shift+arrows/PgUp/PgDn scroll back
 
 unbind = ["x"]          # 移除預設按鍵；"all" 移除全部 / remove defaults ("all" = every default)
 commands = ["set busy-secs 2"]   # 載入後執行的指令 / commands run after loading
@@ -498,7 +502,10 @@ border_active = "#e5c07b"
 `[theme.colors]` 的值必須是字串，色碼要加引號（例如 `accent = "74"`）；其他設定依上例使用 TOML 數字、布林值、字串或陣列。設定檔無法解析時（例如 `accent = 74` 忘了引號），啟動時會印出 `config error` 並改用全部預設值；執行中的 `source-file` 則回報錯誤並保留原設定。
 Values under `[theme.colors]` must be strings, so quote color values (for example `accent = "74"`). Other settings use the TOML number, boolean, string or array types shown above. If the file cannot be parsed (for example `accent = 74` without quotes), startup prints `config error` and uses all defaults; a running `source-file` reports the error and keeps the current settings.
 
-`set` 可用選項 options: `prefix`, `shell`, `mouse`, `sidebar`, `sidebar-width`, `scrollback`/`history-limit`（僅影響新窗格 new panes only）, `busy-secs`, `automatic-rename`, `osc52`/`set-clipboard`, `persist`, `hints on|off`, `confirm-close on|off`, `toolbar on|off`, `toolbar-fkeys on|off`, `pane-titles off|auto|always`, `theme terminal|dark|light|mono`, `ascii-glyphs auto|on|off`.
+`set` 可用選項 options: `prefix`, `shell`, `mouse`, `sidebar`, `sidebar-width`, `scrollback`/`history-limit`（僅影響新窗格 new panes only）, `busy-secs`, `automatic-rename`, `osc52`/`set-clipboard`, `persist`, `hints on|off`, `confirm-close on|off`, `toolbar on|off`, `toolbar-fkeys on|off`, `scroll-keys on|off`, `pane-titles off|auto|always`, `theme terminal|dark|light|mono`, `ascii-glyphs auto|on|off`.
+
+窗格環境：每個新窗格都會設定 `TERM=xterm-256color` 與 `COLORTERM=truecolor`，並**移除**從伺服器繼承來的 `NO_COLOR`，以免啟動伺服器的那個 shell 剛好帶著 `NO_COLOR` 時，讓所有窗格的程式都失去顏色。要讓某個窗格不顯示顏色，請明確指定：`crew workspace create … --env NO_COLOR=1`（`tab create` 同理）。Crew 自身介面（狀態列、側邊欄）仍依各客戶端自己的 `NO_COLOR` 決定是否上色。已在執行的窗格保有原本的環境，需重啟伺服器或開新窗格才會套用。
+Pane environment: every new pane gets `TERM=xterm-256color` and `COLORTERM=truecolor`, and an inherited server `NO_COLOR` is **removed**, so a shell that happened to start the server with `NO_COLOR` no longer strips color from every pane. Opt a pane out explicitly with `--env NO_COLOR=1` on `workspace create` or `tab create`. Crew's own chrome still follows each client's `NO_COLOR`. Running panes keep their environment; restart the server or open new panes to pick this up.
 
 重新載入 Reload: `prefix r`、`:source-file [PATH]` 或 `crew source-file`。`.toml` 檔會整個取代設定；其他副檔名視為每行一條指令（類似 `.tmux.conf`）。
 A `.toml` file replaces the whole config; any other file is run line by line as commands (like `.tmux.conf`).
@@ -539,6 +546,7 @@ A `.toml` file replaces the whole config; any other file is run line by line as 
 ```toml
 toolbar = true          # 頂列功能鍵工具列 / function-key toolbar on the top row
 toolbar_fkeys = false   # F1..F12 直接執行按鈕 / plain F1..F12 run the buttons
+scroll_keys = true      # Shift+方向鍵/PgUp/PgDn 捲動先前輸出 / Shift+arrows/PgUp/PgDn scroll back
 
 [[toolbar_buttons]]     # 依序對應 F1、F2 … / in order: F1, F2 …
 label = "說明"
