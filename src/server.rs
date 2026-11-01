@@ -17,6 +17,7 @@ use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
 mod model;
+mod mru;
 pub use model::*;
 
 pub struct State {
@@ -37,6 +38,8 @@ pub struct State {
     pub next_workspace_id: usize,
     pub next_tab_id: usize,
     pub dirty: bool,
+    /// Per session id: (current window id, previously used window id), for `choose-window`.
+    pub window_mru: HashMap<usize, (usize, Option<usize>)>,
     notify: mpsc::Sender<()>,
 }
 
@@ -79,6 +82,7 @@ pub(crate) fn test_state() -> State {
         next_workspace_id: 0,
         next_tab_id: 0,
         dirty: false,
+        window_mru: HashMap::new(),
         notify,
     }
 }
@@ -1358,6 +1362,12 @@ impl State {
                     c.chooser = Some(sel);
                 }
             }
+            Cmd::ChooseWindow => {
+                let raw = self.window_switcher(si);
+                if let Some(c) = self.clients.get_mut(&cid) {
+                    c.chooser = Some(raw);
+                }
+            }
             Cmd::ToggleSidebar => {
                 let s = &mut self.sessions[si];
                 s.sidebar = !s.sidebar;
@@ -1673,6 +1683,7 @@ pub fn run() -> Result<()> {
         next_workspace_id: 0,
         next_tab_id: 0,
         dirty: false,
+        window_mru: HashMap::new(),
         notify: tx,
     }));
     {
@@ -1767,6 +1778,7 @@ pub fn run() -> Result<()> {
                 continue;
             }
             st.dirty = false;
+            st.track_window_mru();
             // clear attention for panes being looked at
             let viewed: Vec<usize> = st
                 .clients

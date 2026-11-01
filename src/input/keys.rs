@@ -170,6 +170,11 @@ impl State {
                 let next = tab_step(sel, entries.len(), back);
                 self.set_chooser(cid, Some(pack_chooser(next, filter)))
             }
+            // In the window switcher `w` steps on, like holding Alt and tapping Tab
+            KeyCode::Char('w') if filter == Filter::Windows => {
+                let next = tab_step(sel, entries.len(), false);
+                self.set_chooser(cid, Some(pack_chooser(next, filter)))
+            }
             KeyCode::Char(ch) => {
                 if let Some(f) = Filter::from_key(ch) {
                     self.set_chooser(cid, Some(pack_chooser(0, f)));
@@ -861,6 +866,63 @@ mod tests {
         assert!(
             st.clients[&1].chooser.is_some(),
             "Tab never closes the chooser"
+        );
+    }
+
+    #[test]
+    fn prefix_w_toggles_between_the_last_two_windows() {
+        let (mut st, shared) = fkey_state(false, false);
+        for i in 1..3 {
+            st.sessions[0].windows.push(crate::server::Window {
+                id: 50 + i,
+                name: format!("w{i}"),
+                manual_name: true,
+                layout: crate::layout::Node::Leaf(20 + i),
+                active: 20 + i,
+                zoomed: false,
+            });
+        }
+        st.track_window_mru();
+        st.sessions[0].active = 2;
+        st.track_window_mru();
+        // C-b w opens the window switcher on window 0, the one used before window 2
+        press(&mut st, &shared, ctrl('b'));
+        press(&mut st, &shared, plain(KeyCode::Char('w')));
+        let (sel, filter) = unpack_chooser(st.clients[&1].chooser.expect("switcher open"));
+        assert_eq!(filter, Filter::Windows);
+        assert_eq!(visible_entries(&st, Filter::Windows)[sel].1, Some(0));
+        press(&mut st, &shared, plain(KeyCode::Enter));
+        assert_eq!(st.sessions[0].active, 0);
+        assert!(st.clients[&1].chooser.is_none());
+        // and back again
+        st.track_window_mru();
+        press(&mut st, &shared, ctrl('b'));
+        press(&mut st, &shared, plain(KeyCode::Char('w')));
+        press(&mut st, &shared, plain(KeyCode::Enter));
+        assert_eq!(st.sessions[0].active, 2);
+    }
+
+    #[test]
+    fn w_inside_the_switcher_steps_forward() {
+        let (mut st, shared) = fkey_state(false, false);
+        st.sessions[0].windows.push(crate::server::Window {
+            id: 60,
+            name: "w1".into(),
+            manual_name: true,
+            layout: crate::layout::Node::Leaf(30),
+            active: 30,
+            zoomed: false,
+        });
+        st.clients.get_mut(&1).unwrap().chooser = Some(pack_chooser(0, Filter::Windows));
+        press(&mut st, &shared, plain(KeyCode::Char('w')));
+        assert_eq!(
+            unpack_chooser(st.clients[&1].chooser.unwrap()),
+            (1, Filter::Windows)
+        );
+        press(&mut st, &shared, plain(KeyCode::Char('w')));
+        assert_eq!(
+            unpack_chooser(st.clients[&1].chooser.unwrap()),
+            (0, Filter::Windows)
         );
     }
 

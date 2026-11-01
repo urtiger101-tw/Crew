@@ -151,7 +151,7 @@ snapshot；舊 epoch 會回 `server_restarted`。事件 `pane.output` 只提供�
   Copy mode with vi-style movement and selection (`v` / `V`, `y` to yank), mouse-drag selection, `prefix ]` to paste, system clipboard via OSC 52
 - `:` 指令列，支援 tmux 風格指令 · `:` command prompt with tmux-style commands
 - 自訂按鍵（config.toml 的 `[bind]` / `unbind`，或執行期 `bind-key` / `unbind-key`）· Custom key bindings
-- Session／視窗／窗格選單（`prefix s` / `w` / `g`），可依狀態篩選 · Interactive session/window/pane tree chooser (`prefix s` / `w` / `g`), filterable by state
+- Session／視窗／窗格選單（`prefix s` / `g`），可依狀態篩選；`prefix w` 為類似 Alt+Tab 的視窗切換器 · Interactive session/window/pane tree chooser (`prefix s` / `g`), filterable by state; `prefix w` is an Alt+Tab-like window switcher
 - 重新命名視窗（`prefix ,`）與 session（`prefix $`）；視窗名稱自動依前景程式命名（手動命名後停止）
   Rename window / session; windows auto-named after the foreground process (Linux/macOS) until renamed manually
 - 不需重啟即可重新載入設定（`prefix r` 或 `source-file`）· Reload config without restarting (`prefix r` / `source-file`)
@@ -237,7 +237,8 @@ crew set mouse off          # 任何伺服器指令皆可從命令列執行 / ru
 | `:` | 指令列 Command prompt |
 | `,` | 重新命名視窗 Rename window |
 | `$` | 重新命名 session Rename session |
-| `s` / `w` / `g` | Session／視窗／窗格選單（見下節）Session/window/pane chooser (see below); `g` is an alias |
+| `s` / `g` | Session／視窗／窗格選單（見下節）Session/window/pane chooser (see below); `g` is an alias |
+| `w` | 視窗切換器（類似 Alt+Tab）：只列視窗，預設選上一個用過的視窗，`w`／`Tab` 下一個、`Shift+Tab` 上一個、`Enter` 切換；`C-b w Enter` 即在最近兩個視窗間來回 Window switcher (Alt+Tab-like): window rows only, opens on the last-used window; `w`/`Tab` next, `Shift+Tab` previous, `Enter` switches, so `C-b w Enter` toggles the last two windows |
 | `(` `)` | 上一個／下一個 session Previous / next session |
 | `a` or `b` | 切換側邊欄 Toggle status sidebar |
 | `r` | 重新載入設定 Reload config |
@@ -274,6 +275,9 @@ Browse earlier output without the prefix: `Shift+Up`/`Shift+Down` scroll the act
 Mouse: drag inside a pane to select; releasing copies (also to the system clipboard via OSC 52).
 
 ### 選單 Chooser（`prefix s` / `w` / `g`）
+
+`prefix w` 開啟同一個選單，但只列視窗、預設選上一個用過的視窗（Alt+Tab 會被 Windows 攔截，終端機收不到，故以此替代）；在其中按 `w` 也會前進一列、按 `a` 回到完整樹狀。
+`prefix w` opens the same chooser with window rows only, on the last-used window (Windows itself takes Alt+Tab, so terminals never see it); there `w` also steps forward and `a` returns to the full tree.
 
 | 按鍵 Key | 動作 Action |
 |---|---|

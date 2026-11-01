@@ -70,6 +70,7 @@ pub const ENTRIES: &[Entry] = &[
     ("render.sidebar.more", "{ell} +{n} more", "{ell} +{n} 更多"),
     // chooser (overlay)
     ("render.chooser.title", "Sessions", "工作階段"),
+    ("render.chooser.title_windows", "Switch window", "切換視窗"),
     (
         "render.chooser.title_filter",
         "Sessions [{state}]",

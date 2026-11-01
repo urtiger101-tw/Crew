@@ -20,6 +20,8 @@ pub type Entry = (usize, Option<usize>, Option<usize>);
 pub enum Filter {
     All,
     Only(Status),
+    /// Window rows only, for the `choose-window` switcher (`prefix w`).
+    Windows,
 }
 
 impl Filter {
@@ -43,6 +45,7 @@ impl Filter {
             Filter::Only(Status::Done) => 3,
             Filter::Only(Status::Idle) => 4,
             Filter::Only(Status::Unknown) => 5,
+            Filter::Windows => 6,
         }
     }
 
@@ -53,6 +56,7 @@ impl Filter {
             3 => Filter::Only(Status::Done),
             4 => Filter::Only(Status::Idle),
             5 => Filter::Only(Status::Unknown),
+            6 => Filter::Windows,
             _ => Filter::All,
         }
     }
@@ -200,8 +204,15 @@ fn status_of(tree: &[NodeSession], e: Entry) -> Status {
 /// Keep the panes in `filter`, plus each window and session that holds one of them.
 fn filter_entries(tree: &[NodeSession], filter: Filter) -> Vec<Entry> {
     let all = entries_of(tree);
-    let Filter::Only(want) = filter else {
-        return all;
+    let want = match filter {
+        Filter::All => return all,
+        Filter::Windows => {
+            return all
+                .into_iter()
+                .filter(|e| e.1.is_some() && e.2.is_none())
+                .collect();
+        }
+        Filter::Only(want) => want,
     };
     let panes: Vec<Entry> = all
         .iter()
@@ -534,6 +545,7 @@ fn chooser_hints(g: &Glyphs, lang: Lang) -> &'static str {
 fn chooser_title(lang: Lang, filter: Filter) -> String {
     match filter {
         Filter::All => tr(lang, "render.chooser.title").to_string(),
+        Filter::Windows => tr(lang, "render.chooser.title_windows").to_string(),
         Filter::Only(s) => trf(
             lang,
             "render.chooser.title_filter",
@@ -544,7 +556,7 @@ fn chooser_title(lang: Lang, filter: Filter) -> String {
 
 fn empty_note(lang: Lang, filter: Filter) -> String {
     match filter {
-        Filter::All => tr(lang, "render.chooser.empty_all").to_string(),
+        Filter::All | Filter::Windows => tr(lang, "render.chooser.empty_all").to_string(),
         Filter::Only(s) => trf(
             lang,
             "render.chooser.empty_filter",

@@ -61,11 +61,12 @@ Config: $TMUXLIKE_CONFIG or <config_dir>/crew/config.toml"#,
   o          next pane            z          zoom pane
   x          kill pane (y/n)      &          kill window (y/n)
   Tab        next pane needing you (blocked first, then done)
-  BTab       previous such pane   g          tree chooser (like s / w)
+  BTab       previous such pane   g          tree chooser (like s)
   [ / PgUp   copy mode (hjkl, v/V select, y copy, q exit)
   ]          paste buffer         :          command prompt
   ,          rename window        $          rename session
-  s / w      session chooser      ( )        prev/next session
+  s          session chooser      ( )        prev/next session
+  w          window switcher: opens on the last-used window; w/Tab next, Enter switch
   a  or b    toggle sidebar       r          reload config
   ?          list keys            d          detach
   Ctrl-b     send prefix to the program
@@ -84,11 +85,12 @@ Custom bindings: [bind] in config.toml, or `bind-key KEY COMMAND` at the : promp
   o          下一個窗格            z          放大窗格
   x          關閉窗格（y/n）       &          關閉視窗（y/n）
   Tab        下一個需要你處理的窗格（待回應優先，其次已完成）
-  BTab       上一個需要你處理的窗格  g          選單（同 s / w）
+  BTab       上一個需要你處理的窗格  g          選單（同 s）
   [ / PgUp   複製模式（hjkl，v/V 選取，y 複製，q 離開）
   ]          貼上緩衝區            :          指令列
   ,          重新命名視窗          $          重新命名工作階段
-  s / w      工作階段選單          ( )        上一個／下一個工作階段
+  s          工作階段選單          ( )        上一個／下一個工作階段
+  w          視窗切換器：預設選上一個用過的視窗；w／Tab 下一個，Enter 切換
   a  或 b    切換側邊欄            r          重新載入設定
   ?          列出按鍵              d          離開（detach）
   Ctrl-b     把前綴鍵送給程式
