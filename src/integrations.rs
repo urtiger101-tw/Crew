@@ -223,8 +223,8 @@ fn print_json(value: Value) -> Result<i32> {
 }
 
 fn query(request: Request) -> std::result::Result<Value, ApiError> {
-    let stream =
-        crate::ipc::connect().map_err(|e| ApiError::new("server_not_running", e.to_string()))?;
+    let stream = crate::ipc::connect()
+        .map_err(|e| crate::ipc::connection_error(&crate::ipc::base_name(), &e))?;
     let (mut reader, mut writer) = stream.split();
     write_msg(&mut writer, &ClientMsg::Hello(Command::Api(request)))
         .map_err(|e| ApiError::new("transport_error", e.to_string()))?;

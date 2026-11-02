@@ -281,7 +281,8 @@ fn native_request(req: crate::api::Request, socket: Option<&str>) -> crate::api:
     use crate::proto::{ClientMsg, Command, ServerMsg, read_msg, write_msg};
     use interprocess::local_socket::{GenericFilePath, GenericNamespaced, Stream, prelude::*};
     let stream = match socket {
-        None => crate::client::connect(false, crate::i18n::Lang::En),
+        None => crate::client::connect(false, crate::i18n::Lang::En)
+            .map_err(crate::client::api_connect_error),
         Some(name) => {
             let result = if GenericNamespaced::is_supported() {
                 name.to_owned()
@@ -293,10 +294,9 @@ fn native_request(req: crate::api::Request, socket: Option<&str>) -> crate::api:
                     .to_fs_name::<GenericFilePath>()
                     .and_then(Stream::connect)
             };
-            result.map_err(anyhow::Error::from)
+            result.map_err(|e| crate::ipc::connection_error(name, &e))
         }
-    }
-    .map_err(|e| ApiError::new("server_not_running", e.to_string()))?;
+    }?;
     let (mut reader, mut writer) = stream.split();
     write_msg(&mut writer, &ClientMsg::Hello(Command::Api(req)))
         .map_err(|e| ApiError::new("transport_error", e.to_string()))?;

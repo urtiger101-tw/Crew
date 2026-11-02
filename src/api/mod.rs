@@ -259,6 +259,14 @@ impl ApiError {
     }
 }
 
+impl std::fmt::Display for ApiError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for ApiError {}
+
 /// Successful reply: JSON is printed as `{"result": ...}`; Text is printed verbatim.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum Reply {

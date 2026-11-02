@@ -106,18 +106,32 @@ fn warn_if_legacy_server_live(lang: Lang) {
 pub fn connect(start: bool, lang: Lang) -> Result<Stream> {
     match ipc::connect() {
         Ok(s) => Ok(s),
-        Err(e) if !start => Err(anyhow!(trf(lang, "cli.err.no_server", &[("err", &e)]))),
+        Err(e) if !start || !ipc::server_is_absent(&e) => {
+            let mut failure = ipc::connection_error(&ipc::base_name(), &e);
+            if ipc::server_is_absent(&e) {
+                failure.message = trf(lang, "cli.err.no_server", &[("err", &e)]);
+            }
+            Err(failure.into())
+        }
         Err(_) => {
             warn_if_legacy_server_live(lang);
             spawn_server()?;
             let t = Instant::now();
             loop {
                 std::thread::sleep(Duration::from_millis(50));
-                if let Ok(s) = ipc::connect() {
-                    return Ok(s);
+                match ipc::connect() {
+                    Ok(s) => return Ok(s),
+                    Err(e) if !ipc::server_is_absent(&e) => {
+                        return Err(ipc::connection_error(&ipc::base_name(), &e).into());
+                    }
+                    Err(_) => {}
                 }
                 if t.elapsed() > Duration::from_secs(5) {
-                    return Err(anyhow!(tr(lang, "cli.err.start_failed")));
+                    return Err(crate::api::ApiError::new(
+                        "server_not_running",
+                        tr(lang, "cli.err.start_failed"),
+                    )
+                    .into());
                 }
             }
         }
@@ -327,8 +341,7 @@ pub fn request(req: crate::api::Request) -> crate::api::ApiResult {
         crate::api::Request::Worktree(_) => true,
         _ => false,
     };
-    let s =
-        connect(start, Lang::En).map_err(|e| ApiError::new("server_not_running", e.to_string()))?;
+    let s = connect(start, Lang::En).map_err(api_connect_error)?;
     let (mut r, mut w) = s.split();
     write_msg(&mut w, &ClientMsg::Hello(Command::Api(req)))
         .map_err(|e| ApiError::new("transport_error", e.to_string()))?;
@@ -342,6 +355,12 @@ pub fn request(req: crate::api::Request) -> crate::api::ApiResult {
             "unexpected reply from server",
         )),
     }
+}
+
+pub(crate) fn api_connect_error(error: anyhow::Error) -> crate::api::ApiError {
+    error
+        .downcast::<crate::api::ApiError>()
+        .unwrap_or_else(|error| crate::api::ApiError::new("transport_error", error.to_string()))
 }
 
 pub fn api(req: crate::api::Request) -> Result<i32> {

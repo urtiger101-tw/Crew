@@ -246,7 +246,18 @@ pub fn run() {
                 }
             }
         }
-        "" => client::attach(None, false).or_else(|_| client::attach(None, true)),
+        "" => client::attach(None, false).or_else(|error| {
+            // A denied/failed connection must not turn into a fresh startup attempt.
+            // Keep the existing create-session fallback for a live empty server.
+            if error
+                .downcast_ref::<api::ApiError>()
+                .is_some_and(|failure| failure.code != "server_not_running")
+            {
+                Err(error)
+            } else {
+                client::attach(None, true)
+            }
+        }),
         "new" | "new-session" if args.iter().any(|a| a == "-d") => {
             client::new_detached(flag(&args, "-s"))
         }

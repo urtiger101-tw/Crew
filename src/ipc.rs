@@ -51,6 +51,36 @@ pub fn connect() -> io::Result<Stream> {
     connect_named(&base_name())
 }
 
+/// Only a missing/refused endpoint permits automatic server creation.
+pub(crate) fn server_is_absent(error: &io::Error) -> bool {
+    matches!(
+        error.kind(),
+        io::ErrorKind::NotFound | io::ErrorKind::ConnectionRefused
+    )
+}
+
+pub(crate) fn connection_error(socket: &str, error: &io::Error) -> crate::api::ApiError {
+    let (code, message) = if error.kind() == io::ErrorKind::PermissionDenied {
+        (
+            "ipc_permission_denied",
+            format!(
+                "access denied connecting to Crew socket '{socket}'; the server may be running ({error})"
+            ),
+        )
+    } else if server_is_absent(error) {
+        (
+            "server_not_running",
+            format!("no server running on Crew socket '{socket}' ({error})"),
+        )
+    } else {
+        (
+            "transport_error",
+            format!("cannot connect to Crew socket '{socket}' ({error})"),
+        )
+    };
+    crate::api::ApiError::new(code, message)
+}
+
 /// How long a liveness probe waits for its connect. A connect to a busy named pipe waits in the
 /// OS without a timeout, so a probe that has not returned by then counts as live.
 const PROBE_TIMEOUT: Duration = Duration::from_millis(300);
@@ -71,10 +101,7 @@ pub fn endpoint_is_live(base: &str) -> bool {
     });
     match rx.recv_timeout(PROBE_TIMEOUT) {
         Ok(Ok(())) => true,
-        Ok(Err(e)) => !matches!(
-            e.kind(),
-            io::ErrorKind::NotFound | io::ErrorKind::ConnectionRefused
-        ),
+        Ok(Err(e)) => !server_is_absent(&e),
         Err(_) => true,
     }
 }
@@ -89,6 +116,44 @@ pub fn listen() -> io::Result<interprocess::local_socket::Listener> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn connect_failures_distinguish_absence_permission_and_transport() {
+        for (kind, code, may_start) in [
+            (io::ErrorKind::NotFound, "server_not_running", true),
+            (io::ErrorKind::ConnectionRefused, "server_not_running", true),
+            (
+                io::ErrorKind::PermissionDenied,
+                "ipc_permission_denied",
+                false,
+            ),
+            (io::ErrorKind::TimedOut, "transport_error", false),
+            (io::ErrorKind::InvalidInput, "transport_error", false),
+        ] {
+            let error = io::Error::from(kind);
+            let result = connection_error("crew-test.sock", &error);
+            assert_eq!(result.code, code);
+            assert!(result.message.contains("crew-test.sock"));
+            assert_eq!(server_is_absent(&error), may_start);
+            if kind == io::ErrorKind::PermissionDenied {
+                assert!(result.message.contains("may be running"));
+            }
+        }
+        #[cfg(windows)]
+        for (raw, code) in [(2, "server_not_running"), (5, "ipc_permission_denied")] {
+            assert_eq!(
+                connection_error("test", &io::Error::from_raw_os_error(raw)).code,
+                code
+            );
+        }
+        #[cfg(unix)]
+        for raw in [libc::EACCES, libc::EPERM] {
+            assert_eq!(
+                connection_error("test", &io::Error::from_raw_os_error(raw)).code,
+                "ipc_permission_denied"
+            );
+        }
+    }
 
     #[test]
     fn default_endpoint_is_crew_named() {
