@@ -7,6 +7,7 @@ Usage: python scripts/workspace_transfer_smoke.py [path-to-crew]
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import time
@@ -66,7 +67,15 @@ def main():
 
         def ready(pid):
             if WIN:
-                output(pid, r"PS [^\r\n]*>")
+                deadline = time.monotonic() + 15
+                while time.monotonic() < deadline:
+                    ready = run("pane", "read", pid)
+                    # Split panes can wrap the cwd prompt across terminal rows.
+                    text = ready.stdout.replace("\r", "").replace("\n", "")
+                    if ready.returncode == 0 and re.search(r"PS [^>]*>", text):
+                        return
+                    time.sleep(0.05)
+                raise AssertionError(f"PowerShell prompt not ready: {ready.stdout}")
 
         def snapshot():
             return api("workspace", "list")["workspaces"]
