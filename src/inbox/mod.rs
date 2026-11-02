@@ -235,6 +235,10 @@ fn store_path() -> Result<std::path::PathBuf, ApiError> {
     resolve_store_path(crate::persist::state_path(), &crate::ipc::base_name(), None)
 }
 
+pub(crate) fn open_counts() -> Result<std::collections::BTreeMap<String, usize>, ApiError> {
+    store::open_counts(&store_path()?)
+}
+
 fn resolve_store_path(
     state: Option<std::path::PathBuf>,
     socket: &str,

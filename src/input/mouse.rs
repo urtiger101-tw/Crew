@@ -8,7 +8,7 @@ use crate::copy::{self, CopyState};
 use crate::layout::Rect;
 use crate::render::{
     SidebarKind, pack_chooser, sidebar_rows_lang, sidebar_text_width, status_hit_at,
-    status_regions, toolbar_hit_at, unpack_chooser, visible_entries,
+    status_regions, tab_hit_at, toolbar_hit_at, unpack_chooser, visible_entries,
 };
 use crate::server::{Drag, State};
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
@@ -58,6 +58,51 @@ impl State {
                 c.popup = None;
                 self.mark_dirty();
                 return None;
+            }
+        }
+        if self.aurora() && self.sessions[si].rows >= 4 {
+            let c = self.clients.get(&cid)?;
+            let s = &self.sessions[si];
+            let hit = crate::render::aurora::hit_at(self, c, s, m.column, m.row);
+            let tab_strip = m.row == self.tab_row(s) && tab_hit_at(self, c, s, m.column).is_some();
+            let chrome = tab_strip
+                || m.row == s.rows - 1
+                || m.column < self.tree_width(s)
+                || (self.files_width(s) > 0
+                    && m.column >= s.cols - self.sidebar_width(s) - self.files_width(s)
+                    && m.column < s.cols - self.sidebar_width(s));
+            match hit {
+                Some(crate::render::aurora::Hit::Chooser) => return Some("choose-tree".into()),
+                Some(crate::render::aurora::Hit::Attention) => {
+                    return Some("next-attention".into());
+                }
+                Some(crate::render::aurora::Hit::Doctor) => {
+                    let lines = crate::render::aurora::doctor_lines(self, c);
+                    self.clients.get_mut(&cid).unwrap().popup = Some((lines, 0));
+                    self.mark_dirty();
+                    return None;
+                }
+                Some(crate::render::aurora::Hit::Workspace(target)) => {
+                    self.switch_session(cid, target);
+                    return None;
+                }
+                Some(crate::render::aurora::Hit::Pane(pid)) => {
+                    self.focus_across_sessions(cid, pid);
+                    return None;
+                }
+                Some(crate::render::aurora::Hit::Tab(target, wi)) => {
+                    if target != si {
+                        self.switch_session(cid, target);
+                    }
+                    self.sessions[target].active = wi;
+                    self.relayout(target);
+                    if tab_strip {
+                        self.start_tab_drag(cid, target, m.column);
+                    }
+                    return None;
+                }
+                None if chrome => return None,
+                None => {}
             }
         }
         // The status row spans the sidebar columns too, so it is checked before the sidebar.
@@ -158,18 +203,23 @@ impl State {
         if let Some(wi) = hit {
             self.sessions[si].active = wi;
             self.relayout(si);
-            let s = &self.sessions[si];
-            if let Some(c) = self.clients.get_mut(&cid) {
-                c.drag = Some(Drag::Tab {
-                    workspace: s.id,
-                    tab: s.windows[s.active].id,
-                    start: (col, s.rows - 1),
-                    size: (s.cols, s.rows),
-                    moved: false,
-                });
-            }
+            self.start_tab_drag(cid, si, col);
         }
         None
+    }
+
+    fn start_tab_drag(&mut self, cid: usize, si: usize, col: u16) {
+        let s = &self.sessions[si];
+        let row = self.tab_row(s);
+        if let Some(c) = self.clients.get_mut(&cid) {
+            c.drag = Some(Drag::Tab {
+                workspace: s.id,
+                tab: s.windows[s.active].id,
+                start: (col, row),
+                size: (s.cols, s.rows),
+                moved: false,
+            });
+        }
     }
 
     /// Toolbar row: the command line of the button under the pointer (kill commands come back
@@ -367,18 +417,18 @@ impl State {
                 moved: true,
                 ..
             } if self.drag_surface_valid(cid, si, workspace, tab, size)
-                && m.row == size.1.saturating_sub(1) =>
+                && m.row == self.tab_row(&self.sessions[si]) =>
             {
                 let s = &self.sessions[si];
                 let c = &self.clients[&cid];
-                if let Some(target) = status_hit_at(self, c, s, m.column) {
+                if let Some(target) = tab_hit_at(self, c, s, m.column) {
                     let start = (0..=m.column)
                         .rev()
-                        .take_while(|col| status_hit_at(self, c, s, *col) == Some(target))
+                        .take_while(|col| tab_hit_at(self, c, s, *col) == Some(target))
                         .last()
                         .unwrap_or(m.column);
                     let end = (m.column..s.cols)
-                        .take_while(|col| status_hit_at(self, c, s, *col) == Some(target))
+                        .take_while(|col| tab_hit_at(self, c, s, *col) == Some(target))
                         .last()
                         .unwrap_or(m.column)
                         + 1;

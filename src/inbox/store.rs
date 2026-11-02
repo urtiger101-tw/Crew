@@ -112,6 +112,19 @@ fn read(path: &Path) -> Result<Store, ApiError> {
     Ok(store)
 }
 
+/// The same open predicate as `msg list --open`, without pagination or mutation.
+pub(super) fn open_counts(
+    path: &Path,
+) -> Result<std::collections::BTreeMap<String, usize>, ApiError> {
+    let mut counts = std::collections::BTreeMap::new();
+    for message in read(path)?.messages {
+        if !message.acks.iter().any(|ack| ack.stage == Stage::Done) {
+            *counts.entry(message.content.to).or_default() += 1;
+        }
+    }
+    Ok(counts)
+}
+
 fn save(path: &Path, store: &Store) -> Result<(), ApiError> {
     let parent = path
         .parent()
@@ -581,11 +594,13 @@ mod tests {
         let (stored, _) = f.run(&send("open")).unwrap();
         let id = stored["message"]["id"].as_str().unwrap();
         let before = fs::read(f.path()).unwrap();
+        assert_eq!(open_counts(&f.path()).unwrap().get("crew-claude"), Some(&1));
         let (read, event) = f.run(&Request::Read { id: id.into() }).unwrap();
         assert_eq!(read["message"]["acks"], json!([]));
         assert!(event.is_none());
         assert_eq!(fs::read(f.path()).unwrap(), before);
         f.run(&ack(id, Stage::Read, None, None)).unwrap();
+        assert_eq!(open_counts(&f.path()).unwrap().get("crew-claude"), Some(&1));
         assert_eq!(
             f.run(&list(false, true, None, 20)).unwrap().0["messages"],
             json!([])
@@ -596,6 +611,7 @@ mod tests {
         assert_eq!(open["messages"][0]["done"], Value::Null);
         f.run(&ack(id, Stage::Done, Some(AckResult::Ok), None))
             .unwrap();
+        assert!(open_counts(&f.path()).unwrap().is_empty());
         assert_eq!(
             f.run(&list(true, false, None, 20)).unwrap().0["messages"],
             json!([])

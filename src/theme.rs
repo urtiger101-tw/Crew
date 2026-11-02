@@ -4,20 +4,26 @@
 //! always shape + word; color only reinforces it. `mono` drops chrome colors (NO_COLOR,
 //! TERM=dumb, preset "mono"); `ascii` swaps every glyph for an ASCII one.
 use crate::api::Status;
+use crate::semantic::ColorRole;
 use crossterm::style::Color;
 use serde::Deserialize;
 use std::collections::BTreeMap;
+
+#[cfg(test)]
+mod aurora_tests;
 
 /// `[theme]` table in config.toml.
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(default)]
 pub struct ThemeCfg {
-    /// studio (default) | terminal (ANSI-16) | dark | light | mono (no color)
+    /// studio (default) | aurora | terminal (ANSI-16) | dark | light | mono (no color)
     pub preset: String,
     /// auto | true | false
     pub ascii_glyphs: String,
     /// per-token override: 0-255 | "#rrggbb" | "reset"
     pub colors: BTreeMap<String, String>,
+    /// Stable agent name -> pastel name, palette index, #rrggbb, or reset.
+    pub agent_accents: BTreeMap<String, String>,
 }
 
 impl Default for ThemeCfg {
@@ -26,7 +32,31 @@ impl Default for ThemeCfg {
             preset: "studio".into(),
             ascii_glyphs: "auto".into(),
             colors: BTreeMap::new(),
+            agent_accents: BTreeMap::new(),
         }
+    }
+}
+
+/// Color capability of an attaching terminal. Old clients retain truecolor behavior.
+#[derive(serde::Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum ColorDepth {
+    Ansi16,
+    Ansi256,
+    #[default]
+    TrueColor,
+}
+
+fn color_depth(term: Option<&str>, colorterm: Option<&str>, modern_terminal: bool) -> ColorDepth {
+    if modern_terminal
+        || colorterm
+            .is_some_and(|c| c.eq_ignore_ascii_case("truecolor") || c.eq_ignore_ascii_case("24bit"))
+    {
+        ColorDepth::TrueColor
+    } else if term.is_some_and(|t| t.contains("256color")) {
+        ColorDepth::Ansi256
+    } else {
+        ColorDepth::Ansi16
     }
 }
 
@@ -42,6 +72,12 @@ pub struct ClientEnv {
     /// UI language detected from the client's locale (None = not recognised)
     #[serde(default)]
     pub lang: Option<crate::i18n::Lang>,
+    /// Aurora chrome capability; absent on older clients means the legacy truecolor path.
+    #[serde(default)]
+    pub color_depth: ColorDepth,
+    /// Optional client version for a nonfatal daemon/client version-drift notice.
+    #[serde(default)]
+    pub version: Option<[u16; 3]>,
 }
 
 impl ClientEnv {
@@ -55,14 +91,28 @@ impl ClientEnv {
             let l = l.to_ascii_lowercase();
             !(l.contains("utf-8") || l.contains("utf8")) && l != "c.utf8"
         });
+        let term = var("TERM");
+        let colorterm = var("COLORTERM");
+        let modern_terminal = var("WT_SESSION").is_some()
+            || var("TERM_PROGRAM")
+                .is_some_and(|p| matches!(p.as_str(), "WezTerm" | "vscode" | "iTerm.app"));
+        let version = (|| {
+            Some([
+                env!("CARGO_PKG_VERSION_MAJOR").parse().ok()?,
+                env!("CARGO_PKG_VERSION_MINOR").parse().ok()?,
+                env!("CARGO_PKG_VERSION_PATCH").parse().ok()?,
+            ])
+        })();
         ClientEnv {
             no_color: var("NO_COLOR").is_some(),
-            dumb: var("TERM").is_some_and(|t| t == "dumb"),
+            dumb: term.as_deref() == Some("dumb"),
             ascii: crate::brand::env_var("ASCII")
                 .ok()
                 .is_some_and(|v| v == "1")
                 || (cfg!(unix) && non_utf8),
             lang: crate::i18n::Lang::detect(),
+            color_depth: color_depth(term.as_deref(), colorterm.as_deref(), modern_terminal),
+            version,
         }
     }
 }
@@ -173,6 +223,8 @@ pub const ASCII: Glyphs = Glyphs {
 /// Resolved theme for one client frame.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Theme {
+    /// Aurora is opt-in; existing presets keep their original rendering behavior.
+    pub aurora: bool,
     /// no chrome colors: use BOLD / INVERSE / DIM instead
     pub mono: bool,
     pub ascii: bool,
@@ -195,6 +247,15 @@ pub struct Theme {
     /// Low-emphasis toolbar keys and status chips.
     pub quiet_chrome: bool,
     pub warn: Color,
+    /// Chrome-only surfaces; never used as defaults for child terminal cells.
+    pub base_bg: Color,
+    pub surface_bg: Color,
+    pub raised_bg: Color,
+    pub error: Color,
+    /// Pink, peach, yellow, mint, sky, lavender, in stable identity-hash order.
+    pub palette: [Color; 6],
+    pub color_depth: ColorDepth,
+    pub(crate) agent_accents: BTreeMap<String, Color>,
     pub g: Glyphs,
 }
 
@@ -203,6 +264,7 @@ impl Theme {
     pub fn terminal() -> Theme {
         let a = Color::AnsiValue;
         Theme {
+            aurora: false,
             mono: false,
             ascii: false,
             accent: a(6),
@@ -223,6 +285,13 @@ impl Theme {
             pane_fg: Color::Reset,
             quiet_chrome: false,
             warn: a(3),
+            base_bg: a(0),
+            surface_bg: a(0),
+            raised_bg: a(8),
+            error: a(1),
+            palette: AURORA_PALETTE,
+            color_depth: ColorDepth::TrueColor,
+            agent_accents: BTreeMap::new(),
             g: UNICODE,
         }
     }
@@ -231,10 +300,32 @@ impl Theme {
     /// Presets "dark"/"light" and `colors` overrides are applied by `apply_preset`/`apply_overrides`.
     pub fn resolve(cfg: &ThemeCfg, env: &ClientEnv) -> Theme {
         let mut t = Theme::terminal();
-        let explicit = cfg.preset != "terminal" && cfg.preset != "studio";
+        let explicit = !matches!(cfg.preset.as_str(), "terminal" | "studio" | "aurora");
         t.mono = cfg.preset == "mono" || (!explicit && (env.no_color || env.dumb));
         t.apply_preset(&cfg.preset);
         t.apply_overrides(&cfg.colors);
+        if t.aurora {
+            t.pane_fg = Color::Reset;
+            t.pane_bg = Color::Reset;
+        }
+        t.color_depth = if t.aurora {
+            env.color_depth
+        } else {
+            ColorDepth::TrueColor
+        };
+        const NAMES: [&str; 6] = ["pink", "peach", "yellow", "mint", "sky", "lavender"];
+        t.agent_accents = cfg
+            .agent_accents
+            .iter()
+            .filter_map(|(name, value)| {
+                let color = NAMES
+                    .iter()
+                    .position(|accent| *accent == value.trim())
+                    .map(|index| t.palette[index])
+                    .or_else(|| parse_color(value))?;
+                Some((name.clone(), color))
+            })
+            .collect();
         t.ascii = match cfg.ascii_glyphs.as_str() {
             "true" | "on" | "yes" => true,
             "false" | "off" | "no" => false,
@@ -252,7 +343,8 @@ impl Theme {
         let Some(p) = PRESETS.iter().find(|(name, _)| *name == preset) else {
             return;
         };
-        self.quiet_chrome = preset == "studio";
+        self.aurora = preset == "aurora";
+        self.quiet_chrome = matches!(preset, "studio" | "aurora");
         for (token, value) in p.1 {
             if let (Some(slot), Some(c)) = (self.slot(token), parse_color(value)) {
                 *slot = c;
@@ -290,12 +382,24 @@ impl Theme {
             "pane_bg" => &mut self.pane_bg,
             "pane_fg" => &mut self.pane_fg,
             "warn" => &mut self.warn,
+            "base_bg" => &mut self.base_bg,
+            "surface_bg" => &mut self.surface_bg,
+            "raised_bg" => &mut self.raised_bg,
+            "error" => &mut self.error,
             _ => return None,
         })
     }
 
     /// (glyph, color, word) for a status. Chrome callers must still honor `mono`.
     pub fn status(&self, s: Status) -> (&'static str, Color, &'static str) {
+        if self.aurora {
+            let visual = crate::semantic::Presentation::from(s);
+            return (
+                visual.glyph(self.ascii),
+                self.state_color(visual.color_role),
+                visual.word,
+            );
+        }
         match s {
             Status::Working => (self.g.working, self.working, "working"),
             Status::Blocked => (self.g.blocked, self.blocked, "blocked"),
@@ -305,9 +409,171 @@ impl Theme {
         }
     }
 
+    /// Semantic chrome color, already adjusted for this client's mono/color capability.
+    pub fn state_color(&self, role: ColorRole) -> Color {
+        self.c(match role {
+            ColorRole::Working => self.working,
+            ColorRole::Blocked => self.blocked,
+            ColorRole::Done => self.done,
+            ColorRole::Muted => self.muted,
+            ColorRole::Error => self.error,
+        })
+    }
+
+    /// Stable name accent, already adjusted for this client. FNV-1a fixes the mapping
+    /// across processes, restarts and Rust versions; pane IDs/titles do not enter the hash.
+    pub fn agent_accent(&self, name: &str) -> Color {
+        let hash = name
+            .as_bytes()
+            .iter()
+            .fold(0xcbf29ce484222325u64, |hash, byte| {
+                (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
+            });
+        self.c(self
+            .agent_accents
+            .get(name)
+            .copied()
+            .unwrap_or(self.palette[(hash % 6) as usize]))
+    }
+
     /// `c`, or `Color::Reset` in mono mode. Use for every chrome color.
     pub fn c(&self, c: Color) -> Color {
-        if self.mono { Color::Reset } else { c }
+        if self.mono || c == Color::Reset {
+            return Color::Reset;
+        }
+        if self.aurora && self.color_depth == ColorDepth::Ansi16 {
+            const FALLBACK: [Color; 6] = [
+                Color::Magenta,
+                Color::Yellow,
+                Color::DarkYellow,
+                Color::Green,
+                Color::Cyan,
+                Color::Blue,
+            ];
+            if let Some(index) = self.palette.iter().position(|color| *color == c) {
+                return FALLBACK[index];
+            }
+            if c == self.border || c == self.muted {
+                return Color::DarkGrey;
+            }
+        }
+        downgrade(c, self.color_depth)
+    }
+}
+
+const AURORA_PALETTE: [Color; 6] = [
+    Color::Rgb {
+        r: 0xf2,
+        g: 0xa7,
+        b: 0xc3,
+    },
+    Color::Rgb {
+        r: 0xf5,
+        g: 0xc0,
+        b: 0x8a,
+    },
+    Color::Rgb {
+        r: 0xe8,
+        g: 0xd2,
+        b: 0x7a,
+    },
+    Color::Rgb {
+        r: 0x8f,
+        g: 0xd9,
+        b: 0xa8,
+    },
+    Color::Rgb {
+        r: 0x8a,
+        g: 0xb4,
+        b: 0xf8,
+    },
+    Color::Rgb {
+        r: 0xb5,
+        g: 0x9c,
+        b: 0xf2,
+    },
+];
+
+const ANSI16_RGB: [[u8; 3]; 16] = [
+    [0, 0, 0],
+    [128, 0, 0],
+    [0, 128, 0],
+    [128, 128, 0],
+    [0, 0, 128],
+    [128, 0, 128],
+    [0, 128, 128],
+    [192, 192, 192],
+    [128, 128, 128],
+    [255, 0, 0],
+    [0, 255, 0],
+    [255, 255, 0],
+    [0, 0, 255],
+    [255, 0, 255],
+    [0, 255, 255],
+    [255, 255, 255],
+];
+
+fn palette_rgb(index: u8) -> [u8; 3] {
+    match index {
+        0..=15 => ANSI16_RGB[index as usize],
+        16..=231 => {
+            const CUBE: [u8; 6] = [0, 95, 135, 175, 215, 255];
+            let i = usize::from(index - 16);
+            [CUBE[i / 36], CUBE[(i / 6) % 6], CUBE[i % 6]]
+        }
+        232..=255 => [8 + (index - 232) * 10; 3],
+    }
+}
+
+fn downgrade(color: Color, depth: ColorDepth) -> Color {
+    if depth == ColorDepth::TrueColor {
+        return color;
+    }
+    let rgb = match color {
+        Color::Rgb { r, g, b } => [r, g, b],
+        Color::AnsiValue(index) if depth == ColorDepth::Ansi16 => palette_rgb(index),
+        _ => return color,
+    };
+    let range = if depth == ColorDepth::Ansi16 {
+        0..=15u8
+    } else {
+        16..=255u8
+    };
+    let mut closest = 0;
+    let mut distance = u32::MAX;
+    for index in range {
+        let candidate = palette_rgb(index);
+        let candidate_distance = rgb
+            .iter()
+            .zip(candidate)
+            .map(|(a, b)| (i32::from(*a) - i32::from(b)).unsigned_abs().pow(2))
+            .sum();
+        if candidate_distance < distance {
+            closest = index;
+            distance = candidate_distance;
+        }
+    }
+    if depth == ColorDepth::Ansi256 {
+        Color::AnsiValue(closest)
+    } else {
+        [
+            Color::Black,
+            Color::DarkRed,
+            Color::DarkGreen,
+            Color::DarkYellow,
+            Color::DarkBlue,
+            Color::DarkMagenta,
+            Color::DarkCyan,
+            Color::Grey,
+            Color::DarkGrey,
+            Color::Red,
+            Color::Green,
+            Color::Yellow,
+            Color::Blue,
+            Color::Magenta,
+            Color::Cyan,
+            Color::White,
+        ][closest as usize]
     }
 }
 
@@ -315,6 +581,32 @@ impl Theme {
 /// `border_active` and `selection` equal `accent`; `idle`/`unknown` equal `muted`;
 /// `warn` equals `working`.
 const PRESETS: &[(&str, &[(&str, &str)])] = &[
+    (
+        "aurora",
+        &[
+            ("base_bg", "#111214"),
+            ("surface_bg", "#17181b"),
+            ("raised_bg", "#1d1f23"),
+            ("accent", "#b59cf2"),
+            ("muted", "#6b7079"),
+            ("border", "#2a2c31"),
+            ("border_active", "#b59cf2"),
+            ("working", "#8ab4f8"),
+            ("blocked", "#f5c08a"),
+            ("done", "#8fd9a8"),
+            ("error", "#f2a7c3"),
+            ("idle", "#6b7079"),
+            ("unknown", "#6b7079"),
+            ("bar_bg", "#111214"),
+            ("bar_fg", "#c9ccd3"),
+            ("sidebar_bg", "#17181b"),
+            ("sidebar_fg", "#c9ccd3"),
+            ("pane_bg", "reset"),
+            ("pane_fg", "reset"),
+            ("selection", "#b59cf2"),
+            ("warn", "#f5c08a"),
+        ],
+    ),
     (
         "studio",
         &[
@@ -525,6 +817,7 @@ mod tests {
             preset: "dark".into(),
             ascii_glyphs: "auto".into(),
             colors: map(&[("accent", "#000001")]),
+            ..ThemeCfg::default()
         };
         let t = Theme::resolve(&cfg, &ClientEnv::default());
         assert_eq!(t.accent, Color::Rgb { r: 0, g: 0, b: 1 });

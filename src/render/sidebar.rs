@@ -73,6 +73,8 @@ pub struct SidebarRow {
 struct PaneView {
     pid: usize,
     status: Status,
+    visual: crate::semantic::Presentation,
+    identity: Option<String>,
     name: String,
     spans: Vec<DisplaySpan>,
     state_label: Option<String>,
@@ -157,6 +159,8 @@ fn pane_views(st: &State, sess: &Session, open: bool, lang: Lang) -> Vec<PaneVie
             v.push(PaneView {
                 pid,
                 status,
+                visual: crate::semantic::pane(p, &st.cfg),
+                identity: crate::semantic::identity(p).map(str::to_owned),
                 name: display
                     .as_ref()
                     .map_or_else(|| clean(name), |d| d.sidebar.clone()),
@@ -752,7 +756,12 @@ fn draw_closed(g: &mut Grid, l: &Lane, y: u16, gr: &GroupView) {
 /// dropped when the name would get < `MIN_NAME` columns beside it.
 fn draw_pane(g: &mut Grid, l: &Lane, y: u16, p: &PaneView) {
     let t = l.t;
-    let (glyph, color, _) = t.status(p.status);
+    let (glyph, color) = if t.aurora {
+        (p.visual.glyph(t.ascii), t.state_color(p.visual.color_role))
+    } else {
+        let (glyph, color, _) = t.status(p.status);
+        (glyph, color)
+    };
     let word = p
         .state_label
         .as_deref()
@@ -802,18 +811,15 @@ fn custom_foregrounds(t: &Theme, env: &crate::theme::ClientEnv) -> bool {
 
 fn draw_pane_name(g: &mut Grid, l: &Lane, y: u16, room: u16, p: &PaneView, base: u8) {
     let name = cut(&p.name, room as usize, l.t.g.ellipsis);
+    let default_fg = p
+        .identity
+        .as_deref()
+        .filter(|_| l.t.aurora)
+        .map_or(l.t.c(l.t.sidebar_fg), |identity| l.t.agent_accent(identity));
     let mut x = l.tx + PANE_PREFIX;
     let end = x + room;
     if p.spans.is_empty() {
-        g.text(
-            x,
-            y,
-            room,
-            &name,
-            l.t.c(l.t.sidebar_fg),
-            l.t.c(l.t.sidebar_bg),
-            base,
-        );
+        g.text(x, y, room, &name, default_fg, l.t.c(l.t.sidebar_bg), base);
         return;
     }
     // Cut the complete label once, then split its unchanged prefix at span byte
@@ -836,7 +842,7 @@ fn draw_pane_name(g: &mut Grid, l: &Lane, y: u16, room: u16, p: &PaneView, base:
             .as_deref()
             .filter(|_| l.custom_colors)
             .and_then(segment_rgb)
-            .map_or(l.t.c(l.t.sidebar_fg), |(r, g, b)| Color::Rgb { r, g, b });
+            .map_or(default_fg, |(r, g, b)| Color::Rgb { r, g, b });
         let mut attrs = base;
         for (flag, bit) in [(span.bold, BOLD), (span.dim, DIM)] {
             match flag {

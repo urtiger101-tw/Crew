@@ -8,6 +8,8 @@ fn pv(pid: usize, status: Status, name: &str, message: Option<&str>, focused: bo
     PaneView {
         pid,
         status,
+        visual: status.into(),
+        identity: None,
         name: name.into(),
         spans: Vec::new(),
         state_label: None,
@@ -39,6 +41,33 @@ fn styled_pane() -> PaneView {
         },
     ];
     pane
+}
+
+#[test]
+fn aurora_sidebar_uses_visual_state_and_identity() {
+    let mut pane = pv(1, Status::Done, "codex", None, false);
+    pane.visual = Status::Idle.into();
+    pane.state_label = Some("idle".into());
+    pane.identity = Some("codex".into());
+    let mut theme = Theme::terminal();
+    theme.aurora = true;
+    let lane = Lane {
+        t: &theme,
+        custom_colors: true,
+        tx: 0,
+        tw: 25,
+        prefix: "C-b".into(),
+        lang: Lang::En,
+    };
+    let mut grid = blank(25, 1);
+    draw_pane(&mut grid, &lane, 0, &pane);
+    assert_eq!(cell(&grid, 2, 0).s, pane.visual.glyph(theme.ascii));
+    assert_eq!(
+        cell(&grid, 2, 0).fg,
+        theme.state_color(pane.visual.color_role)
+    );
+    assert_eq!(cell(&grid, 4, 0).fg, theme.agent_accent("codex"));
+    assert!(row_text(&grid, 0).ends_with("idle"));
 }
 
 #[test]

@@ -552,6 +552,9 @@ fn build_windows(
 /// Restored metadata is visible until a live reporter claims the pane. A requested
 /// command is not proof that the saved agent has started.
 pub(crate) fn restore_state(pane: &crate::server::Pane) -> Option<&'static str> {
+    if pane.restored_shell && pane.agent.is_none() && pane.detected_agent.is_none() {
+        return Some("restored-shell");
+    }
     pane.agent
         .as_ref()
         .filter(|agent| agent.source == crate::api::RESTORE_SOURCE)
@@ -571,6 +574,7 @@ fn apply_leaf(st: &mut State, id: usize, leaf: &LeafSnap, names: &mut HashSet<St
     };
     p.label = leaf.label.clone();
     let Some(kind) = leaf.agent.clone() else {
+        p.restored_shell = true;
         return;
     };
     p.agent = Some(AgentInfo {

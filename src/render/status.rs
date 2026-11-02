@@ -692,6 +692,10 @@ pub(super) fn draw_status(g: &mut Grid, cx: &Ctx) -> Option<(u16, u16)> {
         paint(g, sy, &segs, t);
         return None;
     }
+    if cx.st.aurora() && cx.s.rows >= 4 {
+        super::aurora::draw_footer(g, cx);
+        return None;
+    }
     let layout = status_layout(&status_input(cx.st, cx.s, cx.c, &cx.theme), cx.w);
     paint(g, sy, &layout.segs, t);
     None

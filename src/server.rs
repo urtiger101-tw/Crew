@@ -16,6 +16,7 @@ use std::io::Read;
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
+pub(crate) mod chrome;
 pub(crate) mod host;
 mod model;
 mod mru;
@@ -24,6 +25,7 @@ mod reorder;
 pub use model::*;
 
 pub struct State {
+    pub chrome: chrome::Cache,
     pub diagnostics: serde_json::Value,
     pub events: crate::events::Journal,
     pub metadata: crate::metadata::Store,
@@ -109,6 +111,7 @@ pub(crate) fn test_state() -> State {
     let (bindings, _) = cfg.bindings();
     let (notify, _) = mpsc::channel();
     State {
+        chrome: chrome::Cache::default(),
         diagnostics: crate::doctor::snapshot(),
         events: crate::events::Journal::default(),
         metadata: crate::metadata::Store::default(),
@@ -217,14 +220,47 @@ impl State {
         self.cfg.toolbar && s.rows >= 5
     }
 
+    pub(crate) fn aurora(&self) -> bool {
+        self.cfg.theme.preset == "aurora"
+    }
+
+    pub(crate) fn tab_row(&self, s: &Session) -> u16 {
+        s.rows.saturating_sub(1)
+    }
+
+    pub(crate) fn tree_width(&self, s: &Session) -> u16 {
+        if self.aurora()
+            && self.cfg.workspace_tree
+            && s.rows >= 4
+            && s.cols > self.sidebar_width(s) + self.cfg.sidebar_width + 20
+        {
+            self.cfg.sidebar_width
+        } else {
+            0
+        }
+    }
+
+    pub(crate) fn files_width(&self, s: &Session) -> u16 {
+        let width = self.cfg.changed_files_width.clamp(16, 60);
+        if self.aurora()
+            && self.cfg.changed_files
+            && s.cols >= self.sidebar_width(s) + self.tree_width(s) + width + 40
+        {
+            width
+        } else {
+            0
+        }
+    }
+
     /// Columns and rows the panes share: below the toolbar and divider (when shown), above the status
     /// row, left of the sidebar.
     pub fn pane_area(&self, s: &Session) -> Rect {
         let top = 2 * u16::from(self.toolbar_shown(s));
+        let sidebar = self.sidebar_width(s);
         Rect {
-            x: 0,
+            x: self.tree_width(s),
             y: top,
-            w: s.cols - self.sidebar_width(s),
+            w: s.cols - sidebar - self.tree_width(s) - self.files_width(s),
             h: s.rows.saturating_sub(1 + top).max(1),
         }
     }
@@ -496,11 +532,13 @@ impl State {
                 h: size.rows,
             },
             last_output: Instant::now(),
+            done_since: None,
             attention: false,
             started: Instant::now(),
             copy: None,
             agent: None,
             resume_requested: false,
+            restored_shell: false,
             detected_agent: None,
             label: None,
             cwd: start_dir,
@@ -878,6 +916,7 @@ impl State {
         w.active = pid;
         if let Some(p) = self.panes.get_mut(&pid) {
             p.attention = false;
+            p.done_since = None;
         }
         self.relayout(si);
         true
@@ -1089,6 +1128,9 @@ impl State {
 
     pub(crate) fn write_pane(&mut self, pid: usize, bytes: &[u8]) {
         if let Some(p) = self.panes.get_mut(&pid) {
+            if !bytes.is_empty() {
+                p.restored_shell = false;
+            }
             if p.copy.is_some() {
                 p.copy = None;
                 p.parser.screen_mut().set_scrollback(0);
@@ -1127,6 +1169,9 @@ impl State {
             p.copy = None;
             p.parser.screen_mut().set_scrollback(0);
             self.dirty = true;
+        }
+        if !bytes.is_empty() {
+            p.restored_shell = false;
         }
         p.writer.write_all(bytes)?;
         p.writer.flush()
@@ -1256,7 +1301,21 @@ impl State {
     fn exec_global(&mut self, cmd: Cmd) -> Result<(), String> {
         match cmd {
             Cmd::Set(k, v) => {
+                let old_defaults = matches!(k.replace('_', "-").as_str(), "theme" | "theme-preset")
+                    .then(|| self.cfg.bindings().0);
                 self.cfg.set(&k, &v)?;
+                if let Some(old_defaults) = old_defaults {
+                    let new_defaults = self.cfg.bindings().0;
+                    for key in ["n", "N", "b"] {
+                        if self.bindings.get(key) == old_defaults.get(key) {
+                            if let Some(value) = new_defaults.get(key) {
+                                self.bindings.insert(key.into(), value.clone());
+                            } else {
+                                self.bindings.remove(key);
+                            }
+                        }
+                    }
+                }
                 if k == "persist" && !self.cfg.persist {
                     crate::persist::clear();
                 }
@@ -1565,6 +1624,10 @@ impl State {
                 if let Some(c) = self.clients.get_mut(&cid) {
                     c.frame.invalidate();
                 }
+            }
+            Cmd::ToggleTree => {
+                self.cfg.workspace_tree = !self.cfg.workspace_tree;
+                self.relayout_all();
             }
             Cmd::SourceFile(p) => {
                 let lang = self.client_lang(cid);
@@ -1952,6 +2015,7 @@ pub fn run() -> Result<()> {
     let cfg = Config::load();
     let (bindings, _) = cfg.bindings();
     let shared: Shared = Arc::new(Mutex::new(State {
+        chrome: chrome::Cache::default(),
         diagnostics: crate::doctor::snapshot(),
         events: crate::events::Journal::default(),
         metadata: crate::metadata::Store::default(),
@@ -2065,6 +2129,26 @@ pub fn run() -> Result<()> {
                 }
                 std::process::exit(0);
             }
+            if st.cfg.theme.preset == "aurora" {
+                let mut directories = Vec::new();
+                if st.cfg.changed_files {
+                    for c in st.clients.values() {
+                        if let Some(si) = st.sidx(&c.session)
+                            && let Some(cwd) = st
+                                .panes
+                                .get(&st.active_pane(si))
+                                .and_then(|p| p.cwd.clone())
+                        {
+                            directories.push(cwd);
+                        }
+                    }
+                }
+                directories.sort();
+                directories.dedup();
+                if st.chrome.refresh(directories) {
+                    st.dirty = true;
+                }
+            }
             if !st.dirty && !tick {
                 continue;
             }
@@ -2080,6 +2164,7 @@ pub fn run() -> Result<()> {
             for id in viewed {
                 if let Some(p) = st.panes.get_mut(&id) {
                     p.attention = false;
+                    p.done_since = None;
                 }
             }
             let mut clients = std::mem::take(&mut st.clients);

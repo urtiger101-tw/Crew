@@ -61,6 +61,13 @@ pub fn attention_items(st: &State) -> Vec<(usize, Status)> {
         .iter()
         .flat_map(|s| s.windows.iter())
         .flat_map(|w| w.panes())
+        .filter(|pid| {
+            !st.aurora()
+                || st
+                    .panes
+                    .get(pid)
+                    .is_none_or(|p| crate::persist::restore_state(p).is_none())
+        })
         .map(|pid| (pid, pane_status(st, pid)))
         .collect()
 }

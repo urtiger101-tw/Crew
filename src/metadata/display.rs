@@ -1,7 +1,6 @@
 //! One display projection for API snapshots and TUI rows; no semantic state changes.
 use super::{Key, presentation};
-use crate::api::agent;
-use crate::i18n::{Lang, tr};
+use crate::i18n::Lang;
 use crate::server::State;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -212,6 +211,12 @@ pub struct PaneDisplay {
     pub terminal_title: Option<String>,
     pub agent: Option<String>,
     pub state_label: String,
+    /// Canonical status plus the common visual word, glyph, color role and emphasis.
+    pub semantic: crate::semantic::Presentation,
+    /// Stable agent identity used for pastel assignment; display titles do not affect it.
+    pub identity: Option<String>,
+    /// Theme-configured accent as #rrggbb, palette index or reset; no ANSI escape codes.
+    pub identity_accent: Option<String>,
     pub sidebar: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub sidebar_spans: Vec<DisplaySpan>,
@@ -306,17 +311,9 @@ pub fn pane(st: &State, pid: usize, lang: Lang) -> Option<PaneDisplay> {
         kind,
         &w.name,
     );
-    let status = agent::status(p, &st.cfg);
-    let default_state = tr(
-        lang,
-        match status {
-            crate::api::Status::Working => "render.state.working",
-            crate::api::Status::Blocked => "render.state.blocked",
-            crate::api::Status::Done => "render.state.done",
-            crate::api::Status::Idle => "render.state.idle",
-            crate::api::Status::Unknown => "render.state.unknown",
-        },
-    );
+    let semantic = crate::semantic::pane(p, &st.cfg);
+    let status = semantic.status;
+    let default_state = semantic.word(lang);
     let default_state = if default_state.starts_with("render.") {
         status.as_str()
     } else {
@@ -354,11 +351,25 @@ pub fn pane(st: &State, pid: usize, lang: Lang) -> Option<PaneDisplay> {
             .map(|span| span.text.as_str())
             .collect()
     };
+    let identity = crate::semantic::identity(p);
+    let identity_accent = identity.and_then(|name| {
+        use crossterm::style::Color;
+        let theme = crate::theme::Theme::resolve(&st.cfg.theme, &Default::default());
+        match theme.agent_accent(name) {
+            Color::Rgb { r, g, b } => Some(format!("#{r:02x}{g:02x}{b:02x}")),
+            Color::AnsiValue(index) => Some(index.to_string()),
+            Color::Reset => Some("reset".into()),
+            _ => None,
+        }
+    });
     Some(PaneDisplay {
         title: with_fallback(&st.cfg.pane_template, &values, title),
         terminal_title: terminal_title.map(str::to_owned),
         agent: effective_agent.map(str::to_string),
         state_label: state_label.to_string(),
+        semantic,
+        identity: identity.map(str::to_owned),
+        identity_accent,
         sidebar,
         sidebar_spans,
         kind_source: if explicit.is_some() {
@@ -403,6 +414,117 @@ pub fn workspace(st: &State, si: usize) -> WorkspaceDisplay {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn additive_state_and_identity_metadata_preserve_canonical_authority() {
+        use crate::api::{AgentInfo, Status};
+        use crate::semantic::DisplayState;
+        use std::sync::{Arc, Mutex};
+        use std::time::Duration;
+
+        // This is an in-memory server with one real shell, no listener or shared endpoint.
+        struct ShellFixture(crate::server::Shared);
+        impl Drop for ShellFixture {
+            fn drop(&mut self) {
+                let mut st = crate::api::lock(&self.0);
+                if !st.sessions.is_empty() {
+                    st.kill_session(0);
+                }
+            }
+        }
+        let mut st = crate::server::test_state();
+        st.cfg.shell = Some(
+            if cfg!(windows) {
+                "cmd.exe /Q"
+            } else {
+                "/bin/sh"
+            }
+            .into(),
+        );
+        st.cfg.theme.preset = "aurora".into();
+        st.cfg.pane_template = "Dynamic display title".into();
+        let shared = Arc::new(Mutex::new(st));
+        let _shell = ShellFixture(shared.clone());
+        let mut st = crate::api::lock(&shared);
+        st.new_session(&shared, Some("semantic-fixture".into()), 80, 24, None)
+            .unwrap();
+        let pid = st.active_pane(0);
+        let p = st.panes.get_mut(&pid).unwrap();
+        p.agent = Some(AgentInfo {
+            instance: 1,
+            source: "test".into(),
+            agent: "fixture".into(),
+            state: Status::Idle,
+            message: None,
+            seq: Some(1),
+            name: Some("codex".into()),
+            resume: Vec::new(),
+        });
+        p.attention = true;
+        p.last_output = Instant::now() - Duration::from_secs(10);
+        let display = pane(&st, pid, Lang::En).unwrap();
+        assert_eq!(display.title, "Dynamic display title");
+        assert_eq!(display.identity.as_deref(), Some("codex"));
+        assert_eq!(display.identity_accent.as_deref(), Some("#f2a7c3"));
+        assert_eq!(display.semantic.status, Status::Done);
+        assert_eq!(display.semantic.state, DisplayState::Idle);
+        assert_eq!(
+            display.state_label, "idle",
+            "display follows visual decay while canonical status is retained"
+        );
+        let json = crate::api::pane_json(&st, pid).unwrap();
+        assert_eq!(json["status"], "done");
+        assert_eq!(json["display"]["semantic"]["state"], "idle");
+        assert_eq!(json["display"]["semantic"]["word"], "idle");
+        assert_eq!(json["display"]["semantic"]["color_role"], "muted");
+
+        st.panes
+            .get_mut(&pid)
+            .unwrap()
+            .agent
+            .as_mut()
+            .unwrap()
+            .state = Status::Blocked;
+        let display = pane(&st, pid, Lang::ZhTw).unwrap();
+        assert_eq!(display.semantic.word(Lang::ZhTw), "待回應");
+        assert!(display.semantic.bold);
+        st.panes.get_mut(&pid).unwrap().host_lost = Some(crate::server::host::HostLost {
+            since: Instant::now(),
+            survivors: vec![],
+        });
+        let display = pane(&st, pid, Lang::En).unwrap();
+        assert_eq!(display.semantic.state, DisplayState::Error);
+        assert_eq!(display.semantic.status, Status::Blocked);
+        let p = st.panes.get_mut(&pid).unwrap();
+        p.host_lost = None;
+        p.agent.as_mut().unwrap().source = crate::api::RESTORE_SOURCE.into();
+        assert_eq!(
+            pane(&st, pid, Lang::En).unwrap().semantic.state,
+            DisplayState::Restored
+        );
+        st.panes.get_mut(&pid).unwrap().resume_requested = true;
+        assert_eq!(
+            pane(&st, pid, Lang::En).unwrap().semantic.state,
+            DisplayState::ResumeRequested
+        );
+        st.panes.get_mut(&pid).unwrap().agent.as_mut().unwrap().name = None;
+        assert_eq!(
+            pane(&st, pid, Lang::En).unwrap().identity.as_deref(),
+            Some("fixture")
+        );
+        let p = st.panes.get_mut(&pid).unwrap();
+        p.agent = None;
+        p.detected_agent = Some(crate::agent_detection::Detection {
+            agent: "terra".into(),
+            process_id: 123,
+            executable: "terra".into(),
+            evidence: "test",
+        });
+        assert_eq!(
+            pane(&st, pid, Lang::En).unwrap().identity.as_deref(),
+            Some("terra")
+        );
+    }
 
     #[test]
     fn terminal_hints_require_an_agent_and_ignore_host_shell_defaults() {

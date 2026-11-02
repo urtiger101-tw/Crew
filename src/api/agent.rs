@@ -318,6 +318,13 @@ fn report_agent(shared: &Shared, pid: usize, mut r: Report) -> Result<Value, Api
         let turned_blocked = r.state == Status::Blocked
             && !p.agent.as_ref().is_some_and(|a| a.state == Status::Blocked);
         let agent = merge_info(p.agent.as_ref(), r)?;
+        if agent.state == Status::Idle && p.attention {
+            if p.agent.as_ref().is_none_or(|old| old.state != Status::Idle) {
+                p.done_since = Some(Instant::now());
+            }
+        } else {
+            p.done_since = None;
+        }
         let event = json!({"instance": agent.instance, "source": agent.source, "agent": agent.agent, "state": agent.state.as_str()});
         p.agent = Some(agent);
         st.events.record("agent.status", Some(pid), event);
@@ -357,6 +364,7 @@ fn release_agent(
         .map(|a| json!({"instance": a.instance, "source": a.source, "agent": a.agent}))
         .unwrap_or_default();
     p.agent = None;
+    p.done_since = None;
     st.events.record("agent.released", Some(pid), event);
     st.relayout_pane(pid);
     Ok(json!({"released": true}))

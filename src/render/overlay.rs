@@ -396,14 +396,7 @@ fn pane_text(window: usize, pane: usize, who: &str) -> String {
 
 /// State word for a status (`working`, `執行中`); shared with the sidebar and pane titles.
 pub(super) fn status_word(lang: Lang, s: Status) -> &'static str {
-    let key = match s {
-        Status::Working => "render.state.working",
-        Status::Blocked => "render.state.blocked",
-        Status::Done => "render.state.done",
-        Status::Idle => "render.state.idle",
-        Status::Unknown => "render.state.unknown",
-    };
-    tr(lang, key)
+    crate::semantic::status_word(lang, s)
 }
 
 /// What `x` on a chooser row kills, and the y/n question that names it.

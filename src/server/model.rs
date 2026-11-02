@@ -51,6 +51,8 @@ pub struct Pane {
     pub child: Box<dyn Child + Send + Sync>,
     pub rect: Rect,
     pub last_output: Instant,
+    /// Start of an explicitly reported completion; visual decay does not change API status.
+    pub done_since: Option<Instant>,
     pub attention: bool,
     /// when the pane was spawned; startup output does not count as unseen work
     pub started: Instant,
@@ -60,6 +62,8 @@ pub struct Pane {
     /// A saved agent command was submitted in this daemon lifetime; repeated resume
     /// actions must not submit it again while waiting for a live agent report.
     pub resume_requested: bool,
+    /// A bare shell recreated from a saved layout, not yet used for new input.
+    pub restored_shell: bool,
     /// Inferred process identity; never substitutes for a reported lifecycle authority.
     pub detected_agent: Option<crate::agent_detection::Detection>,
     /// user label (`pane rename`)

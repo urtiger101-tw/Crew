@@ -1,6 +1,36 @@
 use super::{TitleMode, contain_vt, wants_title};
 
 #[test]
+fn aurora_runtime_theme_updates_only_default_bindings() {
+    use crate::commands::Cmd;
+    let mut st = super::test_state();
+    st.exec_global(Cmd::Set("theme_preset".into(), "aurora".into()))
+        .unwrap();
+    assert_eq!(
+        st.bindings.get("n").map(String::as_str),
+        Some("next-attention")
+    );
+    assert_eq!(
+        st.bindings.get("N").map(String::as_str),
+        Some("next-window")
+    );
+    st.exec_global(Cmd::Set("theme".into(), "studio".into()))
+        .unwrap();
+    assert_eq!(
+        st.bindings.get("n").map(String::as_str),
+        Some("next-window")
+    );
+    assert!(!st.bindings.contains_key("N"));
+    st.bindings.insert("n".into(), "display custom".into());
+    st.exec_global(Cmd::Set("theme".into(), "aurora".into()))
+        .unwrap();
+    assert_eq!(
+        st.bindings.get("n").map(String::as_str),
+        Some("display custom")
+    );
+}
+
+#[test]
 fn ordinary_input_and_key_release_do_not_prepare_plugin_paths() {
     use crossterm::event::{
         Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent,

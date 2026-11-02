@@ -33,6 +33,13 @@ pub struct Config {
     /// Show herdr-like sidebar with pane/agent status
     pub sidebar: bool,
     pub sidebar_width: u16,
+    /// Optional left workspace tree; separate from the legacy right agents sidebar.
+    pub workspace_tree: bool,
+    /// Lower the contrast of inactive Aurora pane chrome, never child output.
+    pub dim_inactive: bool,
+    /// Optional read-only changed-files panel in Aurora.
+    pub changed_files: bool,
+    pub changed_files_width: u16,
     /// Seconds after last output during which a pane is considered "busy"
     pub busy_secs: f32,
     /// Name windows after the foreground process (unless renamed manually)
@@ -67,6 +74,8 @@ pub struct Config {
     pub lang: String,
     /// Show the function-key toolbar and divider (needs at least 5 rows)
     pub toolbar: bool,
+    #[serde(skip)]
+    pub toolbar_explicit: bool,
     /// F2..F12 trigger toolbar buttons directly; F1 always toggles the toolbar
     pub toolbar_fkeys: bool,
     /// Shift+Up/Down and Shift+PageUp/PageDown scroll the active pane's earlier output
@@ -85,6 +94,10 @@ impl Default for Config {
             mouse: true,
             sidebar: false,
             sidebar_width: 28,
+            workspace_tree: false,
+            dim_inactive: false,
+            changed_files: false,
+            changed_files_width: 28,
             busy_secs: 1.5,
             automatic_rename: true,
             osc52: true,
@@ -103,6 +116,7 @@ impl Default for Config {
             theme: crate::theme::ThemeCfg::default(),
             lang: "auto".into(),
             toolbar: true,
+            toolbar_explicit: false,
             toolbar_fkeys: false,
             scroll_keys: true,
             toolbar_buttons: Vec::new(),
@@ -183,7 +197,13 @@ impl Config {
 
     pub fn load_from(p: &std::path::Path) -> Result<Config, String> {
         let s = std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?;
-        let config: Config = toml::from_str(&s).map_err(|e| format!("config error: {e}"))?;
+        let value: toml::Value = toml::from_str(&s).map_err(|e| format!("config error: {e}"))?;
+        let toolbar_explicit = value.get("toolbar").is_some();
+        let mut config: Config = value.try_into().map_err(|e| format!("config error: {e}"))?;
+        config.toolbar_explicit = toolbar_explicit;
+        if !toolbar_explicit && config.theme.preset == "aurora" {
+            config.toolbar = false;
+        }
         for template in [
             &config.pane_template,
             &config.sidebar_pane_template,
@@ -223,6 +243,11 @@ impl Config {
             for (k, c) in DEFAULT_BINDINGS {
                 m.insert(k.to_string(), c.to_string());
             }
+            if self.theme.preset == "aurora" {
+                m.insert("n".into(), "next-attention".into());
+                m.insert("N".into(), "next-window".into());
+                m.insert("b".into(), "toggle-workspace-tree".into());
+            }
         }
         for u in &self.unbind {
             if let Ok(k) = normalize_key(u) {
@@ -255,7 +280,11 @@ impl Config {
             "pane-utf8" => self.pane_utf8 = parse_bool(val)?,
             "mouse" => self.mouse = parse_bool(val)?,
             "sidebar" => self.sidebar = parse_bool(val)?,
+            "workspace-tree" => self.workspace_tree = parse_bool(val)?,
             "sidebar-width" => self.sidebar_width = num(val)?.clamp(10.0, 100.0) as u16,
+            "dim-inactive" => self.dim_inactive = parse_bool(val)?,
+            "changed-files" => self.changed_files = parse_bool(val)?,
+            "changed-files-width" => self.changed_files_width = num(val)?.clamp(16.0, 60.0) as u16,
             "agent-detection" => self.agent_detection = parse_bool(val)?,
             "pane-template" | "sidebar-pane-template" | "sidebar-workspace-template" => {
                 crate::metadata::display::validate_template(val)?;
@@ -279,7 +308,10 @@ impl Config {
                 },
             },
             "confirm-close" => self.confirm_close = parse_bool(val)?,
-            "toolbar" => self.toolbar = parse_bool(val)?,
+            "toolbar" => {
+                self.toolbar = parse_bool(val)?;
+                self.toolbar_explicit = true;
+            }
             "toolbar-fkeys" => self.toolbar_fkeys = parse_bool(val)?,
             "scroll-keys" => self.scroll_keys = parse_bool(val)?,
             "pane-titles" => match val {
@@ -287,12 +319,15 @@ impl Config {
                 _ => return Err(format!("pane-titles: expected off|auto|always, got {val}")),
             },
             "theme" | "theme-preset" => match val {
-                "studio" | "terminal" | "dark" | "light" | "mono" => {
-                    self.theme.preset = val.to_string()
+                "studio" | "aurora" | "terminal" | "dark" | "light" | "mono" => {
+                    self.theme.preset = val.to_string();
+                    if !self.toolbar_explicit {
+                        self.toolbar = val != "aurora";
+                    }
                 }
                 _ => {
                     return Err(format!(
-                        "theme: expected studio|terminal|dark|light|mono, got {val}"
+                        "theme: expected studio|aurora|terminal|dark|light|mono, got {val}"
                     ));
                 }
             },
@@ -332,6 +367,23 @@ mod tests {
         let result = Config::load_from(&path);
         std::fs::remove_file(path).unwrap();
         result
+    }
+
+    #[test]
+    fn aurora_toolbar_default_preserves_explicit_choice() {
+        assert!(!load_text("[theme]\npreset = 'aurora'\n").unwrap().toolbar);
+        assert!(
+            load_text("toolbar = true\n[theme]\npreset = 'aurora'\n")
+                .unwrap()
+                .toolbar
+        );
+        let mut config = Config::default();
+        config.set("theme_preset", "aurora").unwrap();
+        assert!(!config.toolbar);
+        config.set("toolbar", "on").unwrap();
+        config.set("theme", "studio").unwrap();
+        config.set("theme", "aurora").unwrap();
+        assert!(config.toolbar);
     }
 
     #[test]

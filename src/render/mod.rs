@@ -2,6 +2,7 @@
 //!
 //! `render_client` computes the shared [`Ctx`] and the grid, then calls the section
 //! drawers in paint order: panes, borders, toolbar, sidebar, status bar, overlays.
+pub(crate) mod aurora;
 mod overlay;
 mod panes;
 mod sidebar;
@@ -14,6 +15,14 @@ pub use overlay::{
     Entry, Filter, chooser_entries, kill_target_lang, pack_chooser, unpack_chooser, visible_entries,
 };
 pub use status::{status_hit_at, status_regions};
+
+pub(crate) fn tab_hit_at(st: &State, c: &Client, s: &Session, col: u16) -> Option<usize> {
+    if st.aurora() && s.rows >= 4 {
+        aurora::tab_at(st, c, s, col)
+    } else {
+        status_hit_at(st, c, s, col)
+    }
+}
 
 use crate::layout::Rect;
 use crate::server::{Client, Session, State};
@@ -179,6 +188,7 @@ fn restore_label(pane: &crate::server::Pane, lang: crate::i18n::Lang) -> Option<
     let key = match crate::persist::restore_state(pane)? {
         "not-running" => "render.restore.not_running",
         "resume-requested" => "render.restore.requested",
+        "restored-shell" => "render.restore.shell",
         _ => return None,
     };
     Some(crate::i18n::tr(lang, key))
@@ -261,6 +271,9 @@ pub fn render_client(st: &State, c: &mut Client) -> Option<String> {
     let mut cursor_pos = panes::draw_panes(&mut g, &cx, &mut covered);
     panes::draw_borders(&mut g, &cx, &covered);
     toolbar::draw_toolbar(&mut g, &cx);
+    if st.aurora() {
+        aurora::draw_chrome(&mut g, &cx);
+    }
     sidebar::draw_sidebar(&mut g, &cx);
     cursor_pos = status::draw_status(&mut g, &cx).or(cursor_pos);
     if overlay::draw_overlays(&mut g, &cx) {

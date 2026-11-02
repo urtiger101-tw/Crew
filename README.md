@@ -607,9 +607,71 @@ command = "split-window -v"
 
 ### 主題 Theme
 
+#### Aurora（開發中 opt-in）
+
+Aurora 沿用 v0.6.0 版面，將近黑底色、膠囊分頁與 agent 狀態晶片放在既有底列。
+左側工作區樹與檔案面板預設關閉；右側 agent 欄沿用原本預設，不新增常駐列或欄。
+只有 session 品牌標籤使用六色漸層；agent 名稱的顏色依穩定名稱雜湊決定，
+可在 `[theme.agent_accents]` 覆寫。分頁可拖曳排序，窗格標題可拖曳交換位置。
+窄視窗會縮成數字分頁，保留目前分頁。點擊狀態晶片可直接聚焦 agent；
+`prefix n` 跳至下一個需要注意的 agent，`prefix N` 切換下一個視窗。
+自訂按鍵優先。`prefix b` 切換左側工作區樹，`prefix a` 切換原本的右側 agent 欄，
+`F1` 顯示／隱藏工具列。
+
+```toml
+sidebar = false
+workspace_tree = false
+toolbar = false
+pane_titles = "always"
+dim_inactive = true
+changed_files = false       # 可選的唯讀 git status 面板
+changed_files_width = 28
+[theme]
+preset = "aurora"
+ascii_glyphs = "auto"
+[theme.agent_accents]
+claude = "mint"
+codex = "pink"
+```
+
+Aurora only styles Crew chrome: child output, including default and explicit colors,
+remains untouched. It supports truecolor, 256/16-color fallback, `NO_COLOR`,
+`TERM=dumb` and ASCII glyphs. Body text meets 4.5:1 contrast and muted text 3:1
+against the preset chrome surfaces. Studio remains the default.
+
+| 語意 Semantic state | Unicode / ASCII | Aurora 顏色 Color |
+|---|---|---|
+| working 工作中 | ◐ / `@` | sky `#8ab4f8` |
+| needs input 待回應（blocked） | ● / `!` | peach `#f5c08a`，粗體 bold |
+| idle 閒置 | ○ / `-` | muted |
+| just done 剛完成 | ✓ / `+` | mint `#8fd9a8` |
+| host lost 主程序中斷 | ! / `!` | pink `#f2a7c3`，粗體 bold |
+| unknown 未知 | ? / `?` | muted |
+
+狀態同時保留文字與不同符號。完成色在完成回報五秒後（無回報時依最後輸出）轉為閒置色，不改變
+API 的 canonical status、未讀注意狀態或等待條件。`agent list` 的
+`display.semantic` 提供同一份語意；`display.identity_accent` 提供穩定身份色。
+底部 `[N]` 表示 inbox 尚未 done 的訊息數（包括已 read 的項目）。
+`! doctor` 可點開版本或顏色環境提示。可選的 changed-files 面板在背景讀取 Git，
+約每兩秒更新；錯誤明確顯示，不把讀取失敗當成乾淨工作樹。面板明確標示
+「窗格起始目錄」與路徑；目前不追蹤 shell 內的 `cd`，內容只適用於該路徑。
+Aurora 設定省略 `toolbar` 時預設隱藏；明確設定或用 F1 選擇後會保留選擇。
+
+還原的空白 shell 標為「已還原 shell」，不列入活躍 agent 晶片；聚焦後用
+`prefix x` 關閉（沿用關閉確認），或開始輸入以清除標記。真實 agent 回報也會接管標記。
+
+`crew pane submit pN "text" [--settle-ms 2000]` 使用既有貼上行為，等待
+0–10000 ms 後只送一次 Enter。回覆 `submitted` 僅代表已辨識的單行輸入框
+在畫面上清空，不保證 agent 已接受或完成任務；無法辨識、吞鍵或 pane 已關閉時
+回覆 `unconfirmed`，並附 `stage`／`evidence`。不會自動重送 Enter。
+
+`set` 另支援 `theme aurora`、`dim-inactive on|off`、`changed-files on|off`、
+`changed-files-width N`。這些選項僅影響 Crew 介面。
+
 | preset | 說明 Description |
 |---|---|
 | `studio`（預設 default） | 深灰色介面、柔和工具列與細邊框 Charcoal chrome, quiet toolbar and thin separators |
+| `aurora` | 近黑色介面、粉彩身份色、工作區樹與 agent 狀態晶片 Near-black chrome with pastel identities and attention chips |
 | `terminal` | ANSI 16 色，跟隨終端機配色 ANSI-16 colors that follow your terminal theme |
 | `dark` | 真彩色深色配色 Truecolor, for dark backgrounds |
 | `light` | 真彩色淺色配色 Truecolor, for light backgrounds |

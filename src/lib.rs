@@ -38,6 +38,7 @@ mod process_path;
 mod proto;
 mod remote;
 mod render;
+mod semantic;
 mod server;
 mod theme;
 mod workspace;

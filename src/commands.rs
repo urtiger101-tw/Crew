@@ -70,6 +70,7 @@ pub enum Cmd {
     /// Window switcher: the chooser with window rows only, on the previously used window.
     ChooseWindow,
     ToggleSidebar,
+    ToggleTree,
     SourceFile(Option<String>),
     Set(String, String),
     BindKey(String, String),
@@ -132,6 +133,7 @@ impl Cmd {
             Cmd::ChooseTree => "choose-tree",
             Cmd::ChooseWindow => "choose-window",
             Cmd::ToggleSidebar => "toggle-sidebar",
+            Cmd::ToggleTree => "toggle-workspace-tree",
             Cmd::SourceFile(_) => "source-file",
             Cmd::Set(..) => "set-option",
             Cmd::BindKey(..) => "bind-key",
@@ -470,6 +472,7 @@ pub fn parse(line: &str) -> Result<Cmd, String> {
         "choose-tree" | "choose-session" => Cmd::ChooseTree,
         "choose-window" => Cmd::ChooseWindow,
         "toggle-sidebar" | "sidebar" => Cmd::ToggleSidebar,
+        "toggle-workspace-tree" => Cmd::ToggleTree,
         "source-file" | "source" => Cmd::SourceFile(rest()),
         "set-option" | "set" | "set-window-option" | "setw" => {
             let p = positional(args, &["-t"]);

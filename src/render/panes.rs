@@ -242,6 +242,10 @@ fn draw_titles(g: &mut Grid, cx: &Ctx, covered: &mut [bool]) {
         let Some(p) = cx.st.panes.get(&pid) else {
             continue;
         };
+        if theme.aurora {
+            super::aurora::draw_title(g, cx, pid, r);
+            continue;
+        }
         let state = crate::api::agent::status(p, &cx.st.cfg);
         let (glyph, _, _) = theme.status(state);
         let word = status_word(cx.lang, state);
@@ -251,7 +255,9 @@ fn draw_titles(g: &mut Grid, cx: &Ctx, covered: &mut [bool]) {
             .unwrap_or_else(|| display.as_ref().map_or(word, |d| d.state_label.as_str()));
         let name = display.as_ref().map_or(name, |d| d.title.as_str());
         let left = title_left(theme, glyph, name, word);
-        let left = if super::restore_label(p, cx.lang).is_some() {
+        let left = if crate::persist::restore_state(p) == Some("restored-shell") {
+            format!("{left}{} x", cx.st.cfg.prefix_name())
+        } else if super::restore_label(p, cx.lang).is_some() {
             let argv = p
                 .agent
                 .as_ref()
@@ -445,7 +451,11 @@ fn outline(cx: &Ctx, pid: usize) -> Option<Rect> {
 pub(super) fn draw_borders(g: &mut Grid, cx: &Ctx, covered: &[bool]) {
     let (w, h) = (cx.w as i32, cx.h as i32);
     let win = &cx.s.windows[cx.s.active];
-    let focus = outline(cx, win.active);
+    let focus = if cx.st.aurora() {
+        None
+    } else {
+        outline(cx, win.active)
+    };
     let cov = |x: i32, y: i32| {
         x >= 0 && y >= 0 && x < w && y < h && covered[y as usize * w as usize + x as usize]
     };
