@@ -4,13 +4,16 @@
 
 A cross-platform terminal multiplexer written in Rust, inspired by tmux and herdr. Primary targets: **Windows** and **Linux**; also works on **macOS**.
 
-## Crew 0.5.1 Windows preview
+## Crew 0.6.0
 
-[下載 Windows preview](https://github.com/urtiger101-tw/Crew/releases/tag/v0.5.1)：
-修復 PowerShell 啟動命令與本機 Inno 建置，新增單行 sidebar 樣式片段。
-此預發行版附 portable ZIP 與 unsigned installer；完整 installer lifecycle
-仍受 Windows App Control 阻擋，不能當作已完成安裝／升降級／解除安裝驗收。
-詳細範圍見 [0.5.1 發行說明](docs/releases/v0.5.1.md)。
+[下載 Windows 版本](https://github.com/urtiger101-tw/Crew/releases/tag/v0.6.0)：
+新增明確代理續接、工具列分隔線與 F1 切換、daemon 診斷、Windows 圖片貼上、
+agentcmd 外掛與持久化代理收件匣。`crew` 是唯一的執行檔名稱。
+本次採本機乾淨建置，hosted CI 未執行，CI／Release workflows 維持停用。
+Claude Code 輸入區中文缺字／重疊（U1）列為已知問題，IME 即時組字未驗證；
+U4 submit 與 U5 狀態語意整合延後。附 portable ZIP 與 unsigned installer；
+完整安裝生命週期仍受既有 Windows App Control 阻擋，不能宣稱已完成驗收。
+詳細範圍見 [0.6.0 發行說明](docs/releases/v0.6.0.md)。
 
 ## Crew 0.5.0：任務呈現、跨工作區分頁與多機協作
 

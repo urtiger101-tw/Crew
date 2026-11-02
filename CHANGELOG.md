@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 — Agent recovery and terminal UX (2026-11-02)
+
+- Add the studio theme, native Windows clipboard image paste, UTF-8 pane console
+  setup and working Ctrl-C delivery to native child programs.
+- Add per-command agentcmd PATH plugins, terminal-title and Codex progress display,
+  a durable peer/message inbox and bounded worker/receiver integration helpers.
+- Avoid stale nesting markers after a daemon restart, preserve wide terminal cells,
+  and add Shift-key scrollback navigation and window MRU switching.
+- Publish native Windows assets from a local clean build. Hosted CI is NOT_RUN;
+  CI/Release workflows stay disabled. U4 submit and U5 lifecycle vocabulary remain
+  deferred. Installer compilation does not certify its blocked full lifecycle.
 
 - Keep restored agent panes visibly pending with their saved argv. Resume explicitly
   with `crew pane resume pN` or `prefix R`; repeated requests do not send the command
