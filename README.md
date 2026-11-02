@@ -30,6 +30,8 @@ A cross-platform terminal multiplexer written in Rust, inspired by tmux and herd
   agent，透過互動選單進入真正的 SSH 終端。詳見 [SSH federation](docs/ssh-federation.md)。
 - **外掛市場與動作**：內建離線目錄、選用 GitHub 搜尋、檢視／安裝／更新、
   本地開發連結、啟停、動作執行與日誌。詳見 [外掛](docs/plugins.md)。
+  [agentcmd 逐指令模組](docs/plugins.md#agentcmd-utilities)
+  可個別啟用工具，僅影響新窗格。
 - **自動 agent 種類偵測**：依實際程序提供種類提示，明確 hook 回報仍優先，
   種類提示不推進 agent wait。詳見 [程序偵測](docs/agent-detection.md)。
 

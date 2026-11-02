@@ -51,6 +51,109 @@ registered. Actions never run just because a plugin is installed or enabled.
 Plugins are ordinary programs with the invoking user's permissions. Crew does
 not sandbox their code. Only install sources you intend to trust.
 
+## agentcmd utilities
+
+The installer targets [agentcmd at commit
+`617a90c73554ccb5a6c6eebc631e26c78948927a`](https://github.com/stevenke1981/linux-bash-command/tree/617a90c73554ccb5a6c6eebc631e26c78948927a).
+At that revision, the installer creates 46 separate plugin modules, one per
+utility. A newly installed module starts disabled and can be enabled
+independently: for example, `agentcmd.wc` supplies `wc`, and the utility `[` uses
+the plugin ID `agentcmd.bracket`. A fresh installation does not load these
+utilities into a pane.
+
+### Install and enable one utility
+
+Git, tar and Cargo are required. The installer fetches the pinned source by default, presents
+the source and build for review, and builds one shared agentcmd binary after
+approval. It makes a separate executable directory for each module; the shared
+binary directory itself is never added to a pane's PATH. For a noninteractive
+installation, `--yes` supplies approval. Review the source and build before
+using it.
+
+```sh
+crew plugin agentcmd install
+crew plugin enable agentcmd.wc
+crew plugin list --json
+```
+
+For a local source, `--source PATH` must point to a Git repository containing
+the exact pinned commit. The installer exports that commit rather than building
+uncommitted checkout changes. Use `--offline` with `--source` to make Cargo
+work offline; the required dependencies must already be available locally.
+Without `--offline`, Cargo may download dependencies even with a local source.
+
+```sh
+crew plugin agentcmd install --source /path/to/agentcmd-repository --offline
+```
+
+To reinstall or refresh the managed modules, rerun
+`crew plugin agentcmd install`, with the same source options if needed. Generic `crew plugin update`
+skips these managed local entries. Reinstallation preserves the enabled state
+of unchanged managed modules; check `crew plugin list --json` rather than
+assuming that every module is disabled afterward.
+
+Enabling a module adds its executable directory only to newly spawned panes,
+including workspace-created, tab-created and split panes. Running panes keep
+their original environment. An enabled, compatible, unchanged plugin's
+validated directories are prepended in plugin-ID order to the pane's base PATH,
+including any workspace PATH override. The base PATH is preserved, so existing
+system commands remain available; an enabled module can take precedence over
+an executable of the same name. A shell profile that changes PATH after startup
+can move another executable ahead of the module. PowerShell aliases and shell built-ins may
+still win command resolution: `[` is a built-in in many POSIX shells, `cat`
+is commonly a PowerShell alias, and Windows may already provide `sort.exe`.
+Check the resolved command and its path instead of assuming those names are
+absent.
+
+### Verify and disable
+
+`crew plugin list --json` reports each module's `enabled`, `available`,
+`diagnostic`, `resolved_path_dirs` and `effective_path_dirs`. A resolved path
+alone does not mean the module is enabled; `effective_path_dirs` describes the
+current directories eligible for new panes. To see what a particular pane
+received when it was created, inspect `plugin_path_dirs` and
+`plugin_path_diagnostics` in its `pane get` JSON. For an existing workspace,
+replace the IDs below with the ID from `pane list` and the new ID returned by
+`pane split`:
+
+```sh
+crew pane list
+crew pane split PANE_ID --direction right --no-focus
+crew pane get NEW_PANE_ID
+```
+
+In the new pane, compare the resolved `wc` path with that pane's injected
+directories and run a small check. In a POSIX shell:
+
+```sh
+command -v wc
+command -v sort
+command -v cat
+printf 'one two\n' | wc -w
+```
+
+In PowerShell:
+
+```powershell
+Get-Command wc, sort.exe, cat -All | Format-Table CommandType, Name, Source
+'one two' | wc -w
+```
+
+Both examples should count two words. When only `agentcmd.wc` is enabled,
+`sort` and `cat` must not resolve from agentcmd module directories; a shell
+alias or system executable with either name may still exist.
+
+```sh
+crew plugin disable agentcmd.wc
+crew plugin list --json
+crew pane split PANE_ID --direction right --no-focus
+crew pane get NEW_PANE_ID
+```
+
+After disabling, compare the newly created pane's directories with the earlier
+pane's directories. The new pane should not include the `agentcmd.wc` module
+directory; the earlier pane keeps its original environment.
+
 ## Author an action plugin
 
 ```toml
@@ -69,9 +172,25 @@ command = ["{crew}", "api", "snapshot"]
 
 Required metadata is validated, including minimum Crew version, portable IDs,
 explicit platform support, unique action IDs and bounded argv lists. Unknown
-fields are rejected. This version supports `[[build]]` and `[[actions]]`; it
-does not silently accept unsupported startup hooks, event hooks, plugin panes
-or URL handlers.
+fields are rejected. `[[build]]`, `[[actions]]` and the `[[path_dirs]]`
+capability below are supported. A plugin must declare
+at least one action or PATH directory. It does not silently accept unsupported
+startup hooks, event hooks, plugin panes or URL handlers.
+
+To expose executables to new panes, a manifest can also declare:
+
+```toml
+[[path_dirs]]
+path = "bin"
+platforms = ["windows"]
+```
+
+`path` is a portable relative directory under the approved plugin root;
+`platforms` is optional and otherwise inherits the plugin's platforms. The
+directory must exist, and absolute paths, traversal and symlink escapes are
+rejected. Only enabled, compatible plugins with unchanged, valid manifests
+contribute directories. Inspect `crew plugin list --json` for effective paths
+and diagnostics.
 
 ```sh
 crew plugin link ./my-plugin --yes
