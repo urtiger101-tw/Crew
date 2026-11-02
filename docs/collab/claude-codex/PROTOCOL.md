@@ -1,18 +1,25 @@
 # CRL — Crew Relay Lingo
 
-Claude Code 與 Codex CLI（窗格 ID 會隨工作階段改變，以 `crew pane list` 的 `detected_agent` 為準；目前 Claude `p1`、Codex `p2`） 透過 Crew 窗格互相溝通所用的精簡語言。
-此語言給 agent 用，不求人類可讀；人類版本見 `TRANSCRIPT.md` 與 `SUMMARY.md`。
+Claude Code and Codex CLI use this compact language to talk to each other through Crew panes (窗格). Pane IDs change with each session (工作階段); treat `detected_agent` from `crew pane list` as the source of truth (currently Claude `p1`, Codex `p2`).
+This language is for agents and is not meant to be human-readable. For the human version, see `TRANSCRIPT.md` and `SUMMARY.md`.
 
 ## 傳輸 Transport
 
-1. 每則訊息是一個檔案：`log/NN-<from>.crl`，`NN` 為兩位數流水號，奇數 Claude、偶數 Codex。
-2. 發送方寫好檔案後，經 Crew 通知對方：
-   - Claude → Codex：`crew pane run p3 "<短指令>"`（輸入到 Codex 提示列並按 Enter）。
-   - Codex → Claude：在自己的窗格輸出單獨一行 `EOT-NN`；Claude 以
-     `crew pane wait-output <codex> --match EOT-NN` 等待。
-   - Codex 亦可主動喚醒 Claude（v3）：`crew pane run <claude> "<短指令>"`，例如提案、派工或提問需要即時回覆時。
-     Claude 正在工作時，這段文字會排入其下一輪輸入，不會遺失。
-3. 訊息檔是唯一真實來源；窗格文字只是通知。
+1. Each message is one file: `log/NN-<from>.crl`, where `NN` is a two-digit sequence number; odd numbers are Claude, even numbers are Codex.
+2. After the sender writes the file, it notifies the other side through Crew:
+   - Claude → Codex: `crew pane run p3 "<短指令>"` (types the short command "<短指令>" into the Codex prompt line and presses Enter).
+   - Codex → Claude: Codex prints a line containing only `EOT-NN` in its own pane; Claude waits for it with
+     `crew pane wait-output <codex> --match EOT-NN`.
+   - Codex may also wake Claude proactively (v3): `crew pane run <claude> "<短指令>"` (the same short command "<短指令>"), for example when a proposal, an assignment, or a question needs an immediate reply.
+     While Claude is busy, this text is queued into its next input and is not lost.
+3. The message file is the only source of truth; pane text is only a notification.
+4. **WAKE-PEER (v4)**: this rule applies to both sides. After you write a log that contains `END`/`DONE` and needs the peer to take it over, you must wake the peer's pane:
+   - Find the peer's pane with `crew pane list`, matching `detected_agent`. Do not hard-code the pane ID.
+   - Run `crew pane send-text <id> "請讀 log N"` (Read log N).
+   - Wait 2 seconds, then run `crew pane send-keys <id> Enter`.
+   - Run `crew pane read <id>` to confirm that the peer has started processing, or that the message is queued.
+   - If the peer is busy, the message is queued; it must still be sent.
+   - An ACK-only reply needs no wake-back.
 
 ## 語法 Syntax
 
@@ -25,52 +32,54 @@ END                          # 回合結束
 
 ## 運算子 Operators（v0）
 
-| OP | 意義 | 常用鍵 |
+| OP | Meaning | Common keys |
 |---|---|---|
-| `OBS` | 觀察到的事實 | `ev=`（證據：`f:path:line`、`cmd:...`） |
-| `PRO` | 提案 | `id=Pn` `area=cli\|ui\|api\|agent\|doc\|inst` `pri=1..3`（1 最高）`cost=S\|M\|L` |
-| `VOT` | 對提案投票 | `Pn` `+`／`-`／`~`（贊成／反對／保留）`why=` |
-| `AMD` | 修改提案 | `Pn` 加上要改的鍵 |
-| `ASK` / `ANS` | 提問／回答 | `q=Qn` |
-| `LEX` | 為本語言新增或修改詞彙 | `w=新詞` `m=意義` |
-| `ASG` | 派工（v3 起**雙向**：任一方都可派給對方） | `who=` `id=Pn` |
-| `OWN` | 檔案所有權清單；同一檔案同時只歸一方 | `<who> :: 檔案…` |
-| `RULE` | 硬限制 | — |
-| `DONE` | 完成條件與回報格式 | — |
-| `REV` | 獨立審查結果；作者不得自審 | `id=Pn` `PASS\|FAIL` |
-| `FIN` | 提議結案；列出共識的提案 id | `ids=P1,P3` |
-| `END` | 回合結束 | — |
+| `OBS` | Observed fact | `ev=` (evidence (證據): `f:path:line`, `cmd:...`) |
+| `PRO` | Proposal | `id=Pn` `area=cli\|ui\|api\|agent\|doc\|inst` `pri=1..3` (1 is highest) `cost=S\|M\|L` |
+| `VOT` | Vote on a proposal | `Pn` `+` / `-` / `~` (for / against / reserve) `why=` |
+| `AMD` | Amend a proposal | `Pn` plus the keys to change |
+| `ASK` / `ANS` | Question / answer | `q=Qn` |
+| `LEX` | Add or change a term in this language | `w=<new term>` `m=<meaning>` |
+| `ASG` | Assignment (派工); two-way since v3: either side may assign work to the other | `who=` `id=Pn` |
+| `OWN` | File ownership list; one file belongs to one side at a time | `<who> :: files…` |
+| `RULE` | Hard constraint | — |
+| `DONE` | Completion criteria and report format | — |
+| `REV` | Independent review result; an author must not review their own change | `id=Pn` `PASS\|FAIL` |
+| `FIN` | Propose closing; lists the agreed proposal IDs | `ids=P1,P3` |
+| `END` | End of turn | — |
 
-鍵值中的空白改用 `_`。雙方都同意 `FIN` 的同一組 `ids` 時，討論結束。
+Use `_` in place of spaces in values. The discussion ends when both sides agree to the same `ids` in `FIN`.
 
 ## 協作角色 Roles（v3 新增）
 
-- 雙方是**對等夥伴**：任一方都可 `PRO` 新工作、`VOT`／`AMD` 對方提案、以 `ASG` 派工給對方，或對收到的 `ASG` 回 `AMD`／`VOT -` 並說明理由。
-- 派工前先確認 `OWN` 不重疊；需要對方檔案時用 `ASK`，不可逕自修改。
-- 人類（主人）的決定優先於雙方共識。git commit／push 仍只由 Claude 整合執行（人類另有指示除外）；實作方不得自審，整合前由另一方 `REV`。
-- 一方等待時應主動 `PRO` 可並行的工作，而非閒置。
+- Both sides are **peers**: either side may `PRO` new work, `VOT` or `AMD` the other side's proposals, assign work to the other side with `ASG`, or reply to a received `ASG` with `AMD` or `VOT -` and a reason.
+- Before assigning work, confirm that the `OWN` lists do not overlap. If you need the other side's file, use `ASK`; do not modify it yourself.
+- The decision of the owner (主人) takes precedence over the peers' consensus. git commit / push is still executed only by Claude during integration (unless the owner instructs otherwise). An implementer must not review their own work; the other side runs `REV` before integration.
+- While waiting, proactively `PRO` work that can run in parallel instead of sitting idle.
 
 ## 實務教訓 Lessons（v1 新增）
 
-- 完成標記不可原樣寫進通知文字：通知會回顯在對方窗格，`wait-output --match` 會先比對到回顯。改為描述標記（「E,O,T 以 -NN 連接」），並以錨定 regex `^\s*EOT-NN\s*$` 等待。
-- 等到標記後仍須確認訊息檔存在且以 `END` 結尾；標記只是通知。
-- 標記行可能被 TUI 加上項目符號（如 `• EOT-06`），錨定 regex 要允許前導符號：`^\W*EOT-NN\s*$`（v2）。
-- 送進 agent TUI 時，文字與 Enter 分開送（`send-text` → 確認文字已出現 → `send-keys Enter`）。
+- Do not write the completion marker verbatim in notification text: notifications echo back in the other pane, and `wait-output --match` would match the echo first. Describe the marker instead (for example, "E, O, T joined with -NN" (「E,O,T 以 -NN 連接」)), and wait with the anchored regex `^\s*EOT-NN\s*$`.
+- After the marker is seen, still confirm that the message file exists and ends with `END`; the marker is only a notification.
+- The TUI may add a bullet in front of the marker line (for example `• EOT-06`), so the anchored regex must allow a leading symbol: `^\W*EOT-NN\s*$` (v2).
+- When sending into an agent TUI, send the text and the Enter key separately: `send-text` → confirm the text has appeared → `send-keys Enter`.
 
 ## 詞彙增修 Lexicon log
 
-`LEX` 被對方 `VOT +` 後即生效，並追加至下表。
+`LEX` takes effect once the other side gives `VOT +`, and is appended to the table below.
 
-| 版本 | 詞 | 意義 | 提出者 | 訊息 |
+| Version | Term | Meaning | Proposed by | Message |
 |---|---|---|---|---|
-| v1 | `IMP` | 已在工作樹實作並附證據鍵；**不代表**測試或實機驗收通過 | Claude | §03（Codex §04 附議） |
-| v1 | `NR` | 未執行／未驗證；凡缺執行證據的主張必須標註，並指出缺哪一項檢查 | Claude | §03（Codex §04 附議並補充） |
+| v1 | `IMP` | Implemented in the working tree with evidence keys attached; **does not mean** that tests or the live acceptance check (驗收) passed | Claude | §03 (Codex §04 concurs) |
+| v1 | `NR` | Not run / not verified; any claim without execution evidence must be marked, and must name which check is missing | Claude | §03 (Codex §04 concurs and adds to it) |
 
-## 變更歷史
+## Change history
 
-| 版本 | 日期 | 內容 | 影響範圍 |
+| Version | Date | Content | Scope |
 |------|------|------|----------|
-| v3 | 2026-11-02 | 雙向派工（ASG/OWN/RULE/DONE/REV 入詞彙）、Codex 可主動喚醒 Claude、對等角色規則 | 本檔 |
-| v2 | 2026-11-02 | 標記行允許 TUI 項目符號（EOT-anchor） | 本檔 |
-| v1 | 2026-11-02 | 新增 IMP、NR 詞彙與傳輸實務教訓 | 本檔 |
-| v0 | 2026-11-02 | 初版，由 Claude 起草 | 本檔 |
+| v4 | 2026-11-02 | Added the WAKE-PEER rule to Transport: after a handoff log that needs the peer, find the peer's pane by `detected_agent` and wake it (send-text → wait 2 s → send-keys Enter → pane read) | This file |
+| — | 2026-11-02 | Translated to English; Chinese kept as glossary for keywords and literal prompts | This file |
+| v3 | 2026-11-02 | Two-way assignment (ASG/OWN/RULE/DONE/REV added to the vocabulary), Codex may proactively wake Claude, peer role rules | This file |
+| v2 | 2026-11-02 | Marker lines may carry a TUI bullet (EOT-anchor) | This file |
+| v1 | 2026-11-02 | Added the IMP and NR vocabulary and transport lessons learned | This file |
+| v0 | 2026-11-02 | Initial version, drafted by Claude | This file |

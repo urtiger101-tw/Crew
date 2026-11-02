@@ -1,7 +1,7 @@
-# Crew 專案協作偏好
+# Crew project collaboration preferences
 
-- 本專案的實作、除錯及需要協作的工作，預設派遣 **GPT-6.1 Sol xhigh** 與 **GPT-6.1 Terra xhigh** 協助主代理。
-- 工具設定分別使用 `model: "gpt-6.1-sol"`、`model: "gpt-6.1-terra"`，兩者皆設定 `reasoning_effort: "xhigh"`。若指定模型不可用，先明確回報，不默默替換模型或推理等級。
-- 依任務分配必要、獨立且有明確檔案所有權的工作；主代理負責整合、修正與最終驗證。避免重複實作、重複審查及覆蓋其他代理的修改。
-- 作者不得審查自己的修改；需要獨立審查時，由未撰寫該部分的代理執行。
-- 沿用目前任務的測試、提交、推送與重啟授權邊界。上述協作偏好本身不授權重啟服務或修改全域設定。
+- For implementation, debugging, and other work in this project that needs collaboration, dispatch **GPT-6.1 Sol xhigh** and **GPT-6.1 Terra xhigh** by default to assist the lead agent (主代理).
+- Tool settings use `model: "gpt-6.1-sol"` and `model: "gpt-6.1-terra"` respectively. Both set `reasoning_effort: "xhigh"`. If a specified model is unavailable, report (回報) it explicitly first. Do not silently substitute the model or the reasoning level.
+- Assign only work that is necessary, independent, and has clear file ownership (所有權). The lead agent handles integration, fixes, and final verification. Avoid duplicate implementation, duplicate review (審查), and overwriting the changes of other agents.
+- An author must not review their own change (作者不得自審). When an independent review (獨立審查) is needed, have an agent that did not write that part perform it.
+- Keep to the current task's authorization (授權) boundaries for testing, commit (提交), push (推送), and restart (重啟). The collaboration preferences above do not, by themselves, authorize restarting services or changing global settings.

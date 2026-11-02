@@ -1,21 +1,21 @@
-# Codex 進度顯示同步
+# Codex progress display sync
 
-`crew integration codex-progress` 是明確指定來源的本機相容橋接。它讀取所選 Codex rollout JSONL 的 assistant commentary，透過現有 presentation metadata 在 Crew 的 working 標籤顯示最近步驟。它不送鍵盤輸入、不呼叫模型，也不修改 agent lifecycle、完成條件或收件身份。
+`crew integration codex-progress` is a local compatibility bridge with an explicitly specified source. It reads the assistant commentary from the selected Codex rollout JSONL and, through the existing presentation metadata, shows the latest steps on Crew's working label. It does not send keyboard input, does not call a model, and does not change the agent lifecycle, completion conditions, or recipient identity.
 
 ```powershell
 crew integration codex-progress --session-file C:\path\to\rollout.jsonl --pane p4 --source codex.progress.own-session --title "Review collaboration task"
 ```
 
-- 必須指定 `--session-file`、`--pane` 與每個 watcher 唯一的 `--source`；不搜尋或猜測其他 session。
-- 目的窗格須已偵測到 Codex，或由擁有者明確回報為 codex。啟動時記錄 daemon epoch、偵測程序 PID 與已回報 instance；每次輪詢重新確認，變更後停止。
-- `--once` 只讀一次完整資料並回傳更新數，適合隔離驗收；一般模式每 500 ms 檢查一次。
-- 起始只回讀最多 1 MiB；單行上限 256 KiB。未寫完的 JSON 行會等待換行，超長或不相容記錄會跳過。
-- 僅使用 `response_item/message` 中 `role=assistant` 且 `phase=commentary` 的 `output_text`；不發布 user prompt、分析、工具參數或工具結果，也不重複採用 `event_msg/agent_message`。
-- 發布後的 commentary 會成為 `state_label`，所有連線到該 Crew 的 attached clients 與 federation 查詢者都能看到；它不是只對同步器或目前窗格使用者私有的文字。
-- 摘要清除控制字元與雙向文字控制符，最多 72 字元；不根據耗時、spinner 或輸出量推估百分比。
-- `task_started`、`task_complete`、`turn_aborted` 與 assistant final_answer 只清除本來源的顯示，並不回報 Crew 工作完成。
-- 每次真實 commentary 更新的 presentation 有 60 秒 TTL；沒有新資料便過期回到原顯示。`--title` 也屬於同一份短期 presentation；未指定時不覆蓋名稱。
+- You must specify `--session-file`, `--pane`, and a `--source` that is unique to each watcher; do not search for or guess other sessions.
+- The target pane (窗格) must already have Codex detected, or be explicitly reported as codex by its owner. At startup, record the daemon epoch, the detected process PID, and the reported instance; re-check them on every poll, and stop when any of them changes.
+- `--once` reads the full data once, returns the number of updates, and suits an isolated acceptance check (驗收). Normal mode checks every 500 ms.
+- At startup, read back at most 1 MiB; each line is capped at 256 KiB. A JSON line that is not yet complete waits for its newline; over-long or incompatible records are skipped.
+- Use only `output_text` from `response_item/message` where `role=assistant` and `phase=commentary`. Do not publish the user prompt, analysis, tool arguments, or tool results, and do not also adopt `event_msg/agent_message` as a duplicate source.
+- Published commentary becomes the `state_label`. Every attached client connected to that Crew and every federation querier can see it; it is not text private to the synchronizer or to the current pane's user.
+- The summary strips control characters and bidirectional text controls, and is at most 72 characters. It does not estimate a percentage from elapsed time, the spinner, or output volume.
+- `task_started`, `task_complete`, `turn_aborted`, and assistant final_answer only clear this source's display; they do not report Crew work as complete.
+- Each real commentary update's presentation has a 60-second TTL; without new data it expires and returns to the original display. `--title` belongs to the same short-lived presentation; if it is not specified, the name is not overwritten.
 
-此 JSONL 格式依本機 Codex 0.166 系列實際記錄支援，並非穩定的跨版本 API。程序對照與 metadata 提交是兩次本機請求，並非原子身份 guard；本工具會在後續檢查停止，agent kind/source guard 與 TTL 限制殘留。更嚴格的 app-server event adapter、明確啟動綁定和原子 instance guard 留待協作計畫的契約階段。
+This JSONL format is supported based on actual records from the local Codex 0.166 series; it is not a stable cross-version API. The process check and the metadata submission are two separate local requests and are not an atomic identity guard. This tool stops at later checks, and the agent kind/source guard and the TTL bound the residual risk. A stricter app-server event adapter, an explicit startup binding, and an atomic instance guard are deferred to the contract phase of the collaboration plan.
 
-隔離驗收可先在獨立 socket 建立 fixture pane，使用 `integration report codex start --source fixture --pane pN` 建立明確 producer，再以只含測試 commentary 的 JSONL 執行 `--once`；查閱 pane 的 `display.state_label` 與 `display.presentation`，並確認 `agent.instance/state` 未被同步器改寫。真實使用應選擇當前 Codex 實際對應的 rollout；不能把 fixture 驗收當成來源自動識別或雙 agent 完成證據。
+For isolated acceptance, first create a fixture pane on a separate socket, use `integration report codex start --source fixture --pane pN` to create an explicit producer, then run `--once` with a JSONL file containing only test commentary. Check the pane's `display.state_label` and `display.presentation`, and confirm that `agent.instance/state` was not rewritten by the synchronizer. For real use, choose the rollout that matches the Codex instance actually running. A fixture acceptance check must not be treated as automatic source identification, or as evidence that two agents completed the work.

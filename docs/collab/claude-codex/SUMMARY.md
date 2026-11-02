@@ -1,41 +1,42 @@
-# 讓 Crew 更好用：Claude × Codex 討論結論
+# Making Crew easier to use: Claude × Codex discussion conclusions
 
-> 給人看的版本。逐則對話見 `TRANSCRIPT.md`，原始訊息見 `log/`，兩個 agent 自創的溝通語言見 `PROTOCOL.md`。
+> The version written for people. For the message-by-message conversation see `TRANSCRIPT.md`; for the raw messages see `log/`; for the communication language the two agents created see `PROTOCOL.md`.
 >
-> 參與者：Claude Code（Crew 窗格 p1）與 Codex CLI v0.166.0（窗格 p3），在同一個 Crew 視窗左右並排，共交換 8 則訊息。
+> Participants: Claude Code (Crew pane (窗格) p1) and Codex CLI v0.166.0 (pane p3), placed side by side in the same Crew window. They exchanged 8 messages in total.
 
-## 本次已修好並提交
+## Fixed and committed this round
 
-| # | 你遇到的問題 | 原因 | 修正 | 驗證 |
+| # | Problem you hit | Cause | Fix | Verification |
 |---|---|---|---|---|
-| P8 | 看不到 Codex 有反應 | `pane run` 貼上文字後只等 30ms 就按 Enter，Codex 把它當成貼上內容裡的換行，指令卡在輸入框沒送出 | 窗格裡是 agent（已回報或已偵測到）時改等 150ms，與 `agent prompt` 相同 | 單元測試通過；Codex 審查無問題；實際送進 Codex 尚未驗證，因為執行中的伺服器還是舊版 |
-| P9 | Crew 裡沒有顏色 | 每個窗格都繼承了伺服器環境裡的 `NO_COLOR=1`，也沒有設定 `COLORTERM` | 新窗格設定 `COLORTERM=truecolor`，並移除繼承來的 `NO_COLOR`；仍可用 `--env NO_COLOR=1` 讓個別窗格不上色 | 在另開的獨立伺服器實測通過；Codex 審查無問題 |
-| P10 | 想在窗格裡往回看先前的輸出 | 原本要先按前綴鍵進入複製模式，或使用滑鼠滾輪 | 不必按前綴鍵：`Shift+↑／↓` 逐行、`Shift+PgUp／PgDn` 整頁；捲回底部自動結束；全螢幕程式（vim 等）照常收到按鍵；可用 `set scroll-keys off` 關閉 | Codex 審查時抓到一個漏洞（捲動中切換到全螢幕程式時，按鍵會被吃掉），已修正並補測試；尚未在實際終端機手動按鍵驗收 |
+| P8 | Cannot see Codex respond | After `pane run` pasted the text, it waited only 30 ms before pressing Enter. Codex treated that Enter as a newline inside the pasted content, so the command stayed in the input box unsent | When the pane holds an agent (reported or detected), wait 150 ms instead, the same as `agent prompt` | Unit tests pass; Codex review found no issues; not yet verified by actually sending into Codex, because the running server is still the old version |
+| P9 | No colors in Crew | Every pane inherited `NO_COLOR=1` from the server environment, and `COLORTERM` was not set | New panes set `COLORTERM=truecolor` and remove the inherited `NO_COLOR`; `--env NO_COLOR=1` still lets individual panes opt out of color | Live-tested on a separately started server and passed; Codex review found no issues |
+| P10 | Want to scroll back through earlier output in a pane | Previously you had to press the prefix key to enter copy mode first, or use the mouse wheel | No prefix key needed: `Shift+↑／↓` moves line by line, `Shift+PgUp／PgDn` moves page by page. Scrolling back to the bottom exits automatically. Full-screen programs (such as vim) still receive keys as usual. `set scroll-keys off` disables it | Codex review caught a bug (keys were swallowed when switching to a full-screen program during scrolling); fixed and covered by a test. Not yet acceptance-tested by pressing keys manually in a real terminal |
 
-不加 Shift 的 `↑／↓` 刻意保留給 shell 叫出指令歷史，所以不拿來捲動。
+The `↑／↓` keys without Shift are deliberately kept for the shell to recall command history, so they are not used for scrolling.
 
-**要讓這些修正生效，需要重啟 Crew 伺服器。** 重啟會關閉目前所有窗格，包括這個 Claude 與 Codex。可先用 `crew kill-server` 關閉，重新編譯 release 版後再開啟。
+**To make these fixes take effect, the Crew server must be restarted.** A restart closes all current panes, including this Claude and Codex. You can first shut it down with `crew kill-server`, rebuild the release version, and then start it again.
 
-## 雙方同意的後續建議（尚未實作，依優先順序）
+## Follow-up suggestions both sides agreed on (not implemented yet, by priority)
 
-1. **P1 安裝與診斷**：`crew doctor` 回報實際執行的是哪個執行檔、客戶端與伺服器版本、socket、hook 狀態；另提供明確的「加入 PATH」動作，並提醒已開啟的 shell 不會自動更新。
-2. **P2 開窗格時直接指定指令**：`new-window`、`split-window`、`pane split` 都能加 `--command`，行為與 `tab create --command` 相同，並回傳新窗格 ID。
-3. **P5 agent 信箱**（Codex 認為對 agent 最有價值）：`crew msg send|wait|read`，具備寄件者、收件者、訊息 ID、回覆 ID、從檔案讀入內文、讀取游標與逾時；不再靠把字打進對方 TUI、擷取畫面來溝通。同時讓 `agent prompt` 也能用於只靠程序偵測認出的 agent，目前會回 `agent_not_found`。
-4. **P7 輸出檢查點**：`wait-output --after <檢查點>`，避免舊輸出或回顯的文字讓等待提早成立。
-5. **P3 搬移窗格**：`join-pane`／`break-pane`，把窗格連同執行中的程式一起搬到別的視窗，ID、程序、工作目錄都不變。
-6. **P4 一鍵並排兩個 agent**：`crew pair <指令A> <指令B> [--layout h|v]`，先做好 P2 後再做。
+1. **P1 Installation and diagnostics**: `crew doctor` reports which executable is actually running, the client and server versions, the socket, and the hook status. It also provides an explicit "加入 PATH" (add to PATH) action, and reminds the user that already-open shells will not update automatically.
+2. **P2 Specify the command directly when opening a pane**: `new-window`, `split-window`, and `pane split` can all take `--command`, behaving the same as `tab create --command`, and return the new pane ID.
+3. **P5 Agent mailbox** (Codex considers this the most valuable for agents): `crew msg send|wait|read`, with sender, recipient, message ID, reply ID, reading the body from a file, a read cursor, and timeouts. It removes the need to communicate by typing text into the other side's TUI or capturing the screen. Also let `agent prompt` work with agents recognized only by process detection; currently it returns `agent_not_found`.
+4. **P7 Output checkpoint**: `wait-output --after <checkpoint>`, so that old output or echoed text cannot make a wait succeed early.
+5. **P3 Move panes**: `join-pane` / `break-pane` move a pane, together with the program running in it, to another window. The ID, process, and working directory all stay the same.
+6. **P4 Place two agents side by side with one command**: `crew pair <command-A> <command-B> [--layout h|v]`; do this after P2 is done.
 
-已撤回：P6（`--workspace` 接受 session 名稱）。Codex 查證後發現程式碼原本就支援。
+Withdrawn: P6 (`--workspace` accepts a session name). After Codex verified it, the code was found to already support this.
 
-## 兩個 agent 學到的事
+## What the two agents learned
 
-- 完成標記不能原樣寫進通知：通知文字會回顯在對方窗格，提早滿足等待條件。
-- TUI 會在標記前加上項目符號（`• EOT-06`），等待的 regex 要容許這個前綴。Claude 一度以為 Codex「停住」，其實 Codex 早已完成。
-- 「已實作」（`IMP`）不等於「已驗收」，沒有實際執行證據的說法一律標 `NR`（未驗證）。這兩個詞是雙方協議後加進語言的。
+- Do not write the completion marker verbatim in a notification: notification text echoes in the other pane and satisfies the wait condition early.
+- The TUI prefixes the marker with a bullet (`• EOT-06`), so the wait regex must allow that prefix. Claude once thought Codex had stalled, but Codex had already finished.
+- `IMP` (implemented) does not mean the work has passed its acceptance check (驗收). Any claim without actual execution evidence must be marked `NR` (not verified). These two terms were added to the language after both sides agreed.
 
-## 變更歷史
+## Change history
 
-| 版本 | 日期 | 內容 | 影響範圍 |
+| Version | Date | Content | Scope |
 |------|------|------|----------|
-| v1 | 2026-11-02 | 定稿：P8–P10 修正結果、後續建議、經驗 | 本檔 |
-| v0 | 2026-11-02 | 初稿 | 本檔 |
+| — | 2026-11-02 | Translated to English; Chinese kept as glossary for keywords and literal prompts | This file |
+| v1 | 2026-11-02 | Final: results of fixes P8–P10, follow-up suggestions, lessons learned | This file |
+| v0 | 2026-11-02 | Initial draft | This file |
