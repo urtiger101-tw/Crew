@@ -132,6 +132,56 @@ impl Drop for RestoredServer {
 }
 
 #[test]
+fn doctor_reports_daemon_hazards_without_leaking_them_into_panes() {
+    let server = RestoredServer::new(vec![]);
+    let doctor = server.run(&["doctor", "--json"]);
+    let diagnostics = &doctor["result"];
+    assert_eq!(diagnostics["pid"], server.child.as_ref().unwrap().id());
+    assert_eq!(diagnostics["version"], env!("CARGO_PKG_VERSION"));
+    assert!(diagnostics["started_at_unix_ms"].as_u64().unwrap() > 0);
+    assert!(
+        diagnostics["environment_hazards"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["name"] == "NO_COLOR")
+    );
+    assert_eq!(
+        server.run(&["doctor", "--json"])["result"]["started_at_unix_ms"],
+        diagnostics["started_at_unix_ms"]
+    );
+    let path = server.root.join("colors.json");
+    let command = format!(
+        "@{{no_color=$env:NO_COLOR;term=$env:TERM;colorterm=$env:COLORTERM}} | ConvertTo-Json | Set-Content -Encoding UTF8 -LiteralPath '{}.tmp'; Move-Item -LiteralPath '{}.tmp' -Destination '{}'",
+        path.display(),
+        path.display(),
+        path.display()
+    );
+    server.run(&["pane", "run", "p1", &command]);
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while !path.exists() {
+        assert!(
+            Instant::now() < deadline,
+            "pane color probe did not finish: {}",
+            String::from_utf8_lossy(
+                &server
+                    .command()
+                    .args(["pane", "read", "p1"])
+                    .output()
+                    .unwrap()
+                    .stdout
+            )
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    let text = std::fs::read_to_string(path).unwrap();
+    let colors: Value = serde_json::from_str(text.trim_start_matches('\u{feff}')).unwrap();
+    assert!(colors["no_color"].is_null() || colors["no_color"] == "");
+    assert_eq!(colors["term"], "xterm-256color");
+    assert_eq!(colors["colorterm"], "truecolor");
+}
+
+#[test]
 fn restored_agent_waits_for_explicit_resume_and_repeated_requests_execute_once() {
     let argv = vec![
         "powershell.exe".into(),

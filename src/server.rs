@@ -23,6 +23,7 @@ pub(crate) mod plugin_paths;
 pub use model::*;
 
 pub struct State {
+    pub diagnostics: serde_json::Value,
     pub events: crate::events::Journal,
     pub metadata: crate::metadata::Store,
     /// Canonical checkouts reserved by an in-flight removal; pane creation shares this lock.
@@ -107,6 +108,7 @@ pub(crate) fn test_state() -> State {
     let (bindings, _) = cfg.bindings();
     let (notify, _) = mpsc::channel();
     State {
+        diagnostics: crate::doctor::snapshot(),
         events: crate::events::Journal::default(),
         metadata: crate::metadata::Store::default(),
         removing_worktrees: Default::default(),
@@ -1855,6 +1857,7 @@ pub fn run() -> Result<()> {
     let cfg = Config::load();
     let (bindings, _) = cfg.bindings();
     let shared: Shared = Arc::new(Mutex::new(State {
+        diagnostics: crate::doctor::snapshot(),
         events: crate::events::Journal::default(),
         metadata: crate::metadata::Store::default(),
         removing_worktrees: Default::default(),

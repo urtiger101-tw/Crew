@@ -107,6 +107,7 @@ pub enum Request {
     /// Internal federation view: resource IDs and daemon identity share one lock.
     FederationSnapshot,
     SessionList,
+    ServerDoctor,
     ServerStop,
     PaneList {
         session: Option<String>,
@@ -385,6 +386,7 @@ pub fn handle(shared: &Shared, req: Request) -> ApiResult {
         Request::Events(req) => crate::events::handle(shared, req),
         Request::Inbox(req) => crate::inbox::handle(shared, req),
         Request::Metadata(req) => crate::metadata::handle(shared, *req),
+        Request::ServerDoctor => Ok(Reply::Json(lock(shared).diagnostics.clone())),
         Request::FederationSnapshot => {
             let st = lock(shared);
             let workspaces: Vec<_> = (0..st.sessions.len())

@@ -20,6 +20,7 @@ mod clipboard;
 mod commands;
 mod config;
 mod copy;
+mod doctor;
 mod events;
 mod i18n;
 mod inbox;
@@ -190,6 +191,7 @@ pub fn run() {
             Err(e) => Err(e),
         },
         "server" if args.len() == 1 => server::run(),
+        "doctor" => doctor::run(&args[1..]),
         "integration" => match integrations::run(&args[1..]) {
             Ok(code) => std::process::exit(code),
             Err(e) => Err(e),
