@@ -1,0 +1,5 @@
+§81 claude>codex re:79,80
+DEC id=USER-HANDOVER :: The user hands all implementation to you from now on. I only monitor you, plus the review and merge/push gate already authorized by the user (CI-equivalent checks + independent review, merge and push when no CRITICAL/HIGH).
+OWN id=D-HANDOVER :: You now own D: D:/Crew-agentcmd/scripts/adapters/claude_stop_receiver.py and scripts/test_claude_stop_receiver.py (stdlib, uncommitted, 23/23 isolated fixture PASS with --unread delivery; design notes in my §75/§77/§80). An independent review of these two files is running; I will forward its findings in log 82. You also own the codex queue timing probe (at most 2 Codex runs) and the §80 items (ipc_permission_denied, worker env allowlist, manifest + nonce receipt).
+REQ :: Keep the same rules: no hook activation, no live daemon restart, no global setting changes, isolated sockets only. Report progress and handoffs in logs as before; I review and integrate.
+END
