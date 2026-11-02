@@ -15,6 +15,150 @@ const REVISION: &str = "617a90c73554ccb5a6c6eebc631e26c78948927a";
 const UPSTREAM_URL: &str = "https://github.com/stevenke1981/linux-bash-command.git";
 const MARKER: &str = "agentcmd-install.json";
 
+struct InstallStage {
+    root: PathBuf,
+    installs: PathBuf,
+    created_dirs: Vec<PathBuf>,
+    registered: bool,
+}
+
+impl InstallStage {
+    fn new(home: &Path) -> Result<Self> {
+        let root = store::stage(home)?;
+        let installs = home.join("installs").canonicalize()?;
+        ensure!(
+            root.parent() == Some(installs.as_path()),
+            "invalid installation stage"
+        );
+        Ok(Self {
+            root,
+            installs,
+            created_dirs: Vec::new(),
+            registered: false,
+        })
+    }
+
+    fn user_dirs(&mut self, home: &Path, id: &str) -> Result<()> {
+        for parent in ["config", "state"] {
+            let parent = home.join(parent);
+            fs::create_dir_all(&parent)?;
+            let path = parent.join(format!("p-{id}"));
+            match fs::create_dir(&path) {
+                Ok(()) => self.created_dirs.push(path),
+                Err(error)
+                    if error.kind() == std::io::ErrorKind::AlreadyExists && path.is_dir() => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Drop for InstallStage {
+    fn drop(&mut self) {
+        if self.registered {
+            return;
+        }
+        for path in self.created_dirs.iter().rev() {
+            if let Err(error) = fs::remove_dir(path)
+                && error.kind() != std::io::ErrorKind::NotFound
+            {
+                eprintln!(
+                    "could not remove new plugin directory {}: {error}",
+                    path.display()
+                );
+            }
+        }
+        if self.root.parent() == Some(self.installs.as_path())
+            && self.root.canonicalize().ok().as_deref() == Some(self.root.as_path())
+            && let Err(error) = fs::remove_dir_all(&self.root)
+        {
+            eprintln!(
+                "could not remove failed agentcmd stage {}: {error}",
+                self.root.display()
+            );
+        }
+    }
+}
+
+/// Remove only named temporary artifacts contained directly in a verified stage.
+fn remove_build_artifacts(stage: &Path) -> Result<()> {
+    for name in [
+        "source",
+        "source.tar",
+        "source.git",
+        "target",
+        "gitconfig",
+        "empty-template",
+    ] {
+        let path = stage.join(name);
+        let metadata = match fs::symlink_metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error.into()),
+        };
+        ensure!(
+            !metadata.file_type().is_symlink(),
+            "refusing symlinked build artifact: {}",
+            path.display()
+        );
+        let resolved = path.canonicalize()?;
+        ensure!(
+            resolved.parent() == Some(stage),
+            "build artifact escapes installation stage"
+        );
+        if metadata.is_dir() {
+            fs::remove_dir_all(&resolved)?;
+        } else {
+            fs::remove_file(&resolved)?;
+        }
+    }
+    Ok(())
+}
+
+fn clean_old_build_artifacts(home: &Path, current: &Path) -> Vec<String> {
+    let installs = home.join("installs");
+    let Ok(root) = installs.canonicalize() else {
+        return Vec::new();
+    };
+    let entries = match fs::read_dir(&root) {
+        Ok(entries) => entries,
+        Err(error) => return vec![format!("cannot inspect old agentcmd stages: {error}")],
+    };
+    let mut warnings = Vec::new();
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(error) => {
+                warnings.push(format!("cannot inspect old agentcmd stage: {error}"));
+                continue;
+            }
+        };
+        let path = entry.path();
+        let Ok(stage) = path.canonicalize() else {
+            continue;
+        };
+        if stage == current || stage.parent() != Some(root.as_path()) {
+            continue;
+        }
+        let Ok(raw) = store::read_limited(&stage.join(MARKER), 64 * 1024) else {
+            continue;
+        };
+        let Ok(marker) = serde_json::from_str::<Value>(&raw) else {
+            continue;
+        };
+        if marker["kind"] == "crew-managed-agentcmd"
+            && let Err(error) = remove_build_artifacts(&stage)
+        {
+            warnings.push(format!(
+                "cannot clean old stage {}: {error:#}",
+                stage.display()
+            ));
+        }
+    }
+    warnings
+}
+
 #[derive(Debug, Serialize)]
 struct Utility {
     name: String,
@@ -128,7 +272,6 @@ fn managed(home: &Path, id: &str, entry: &store::Entry) -> bool {
         return false;
     };
     marker["kind"] == "crew-managed-agentcmd"
-        && marker["revision"] == REVISION
         && marker["plugins"]
             .as_array()
             .is_some_and(|items| items.iter().any(|item| item == id))
@@ -170,19 +313,20 @@ fn preflight(
 
 fn register_modules(
     home: &Path,
-    stage: &Path,
+    stage: &mut InstallStage,
     binary: &Path,
     version: &str,
     utilities: &[Utility],
     registry: &mut store::Registry,
 ) -> Result<Vec<Value>> {
     let enabled = preflight(home, registry, utilities)?;
-    let shared = stage.join("shared");
+    let root_stage = stage.root.clone();
+    let shared = root_stage.join("shared");
     fs::create_dir_all(&shared)?;
     let shared_binary = shared.join(executable_name("agentcmd"));
     fs::copy(binary, &shared_binary).context("cannot store the shared agentcmd binary")?;
     store::atomic_json(
-        &stage.join(MARKER),
+        &root_stage.join(MARKER),
         &json!({
             "kind":"crew-managed-agentcmd", "revision":REVISION,
             "plugins":utilities.iter().map(|utility| &utility.id).collect::<Vec<_>>()
@@ -191,7 +335,7 @@ fn register_modules(
     let mut entries = Vec::new();
     let mut result = Vec::new();
     for utility in utilities {
-        let root = stage.join("modules").join(&utility.id);
+        let root = root_stage.join("modules").join(&utility.id);
         let bin = root.join("bin");
         fs::create_dir_all(&bin)?;
         let target = bin.join(executable_name(&utility.name));
@@ -220,7 +364,7 @@ fn register_modules(
         let raw = toml::to_string(&plugin)?;
         manifest::Manifest::parse(&raw)?;
         fs::write(root.join("crew-plugin.toml"), &raw)?;
-        store::user_dirs(home, &utility.id)?;
+        stage.user_dirs(home, &utility.id)?;
         let is_enabled = enabled.get(&utility.id).copied().unwrap_or(false);
         entries.push((
             utility.id.clone(),
@@ -239,8 +383,14 @@ fn register_modules(
         plugins: registry.plugins.clone(),
     };
     next.plugins.extend(entries);
+    let license = root_stage.join("source").join("LICENSE");
+    if license.is_file() {
+        fs::copy(license, root_stage.join("LICENSE"))?;
+    }
+    remove_build_artifacts(&root_stage)?;
     store::write(home, &next)?;
     *registry = next;
+    stage.registered = true;
     Ok(result)
 }
 
@@ -259,6 +409,7 @@ fn git(root: &Path, config: &Path, args: &[OsString]) -> Result<String> {
         .env("GIT_TERMINAL_PROMPT", "0")
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .env("GIT_CONFIG_GLOBAL", child_path(config)?)
+        .env("GIT_NO_REPLACE_OBJECTS", "1")
         .arg("-C")
         .arg(child_path(root)?)
         .args([
@@ -312,15 +463,16 @@ pub fn install(home: &Path, source: Option<&Path>, offline: bool, yes: bool) -> 
     }
     let _lock = store::lock(home)?;
     let mut registry = store::read(home)?;
-    let stage = store::stage(home)?;
-    let config = stage.join("gitconfig");
+    let mut stage = InstallStage::new(home)?;
+    let stage_path = stage.root.clone();
+    let config = stage_path.join("gitconfig");
     fs::write(&config, "")?;
-    let template = stage.join("empty-template");
+    let template = stage_path.join("empty-template");
     fs::create_dir(&template)?;
     let repository = if let Some(path) = &local_source {
         path.clone()
     } else {
-        let repository = stage.join("source.git");
+        let repository = stage_path.join("source.git");
         fs::create_dir(&repository)?;
         git(
             &repository,
@@ -360,7 +512,13 @@ pub fn install(home: &Path, source: Option<&Path>, offline: bool, yes: bool) -> 
         commit == REVISION,
         "agentcmd source revision mismatch: expected {REVISION}, got {commit}"
     );
-    let archive = stage.join("source.tar");
+    let object_type = git(
+        &repository,
+        &config,
+        &["cat-file".into(), "-t".into(), REVISION.into()],
+    )?;
+    ensure!(object_type == "commit", "agentcmd revision is not a commit");
+    let archive = stage_path.join("source.tar");
     git(
         &repository,
         &config,
@@ -372,9 +530,15 @@ pub fn install(home: &Path, source: Option<&Path>, offline: bool, yes: bool) -> 
             REVISION.into(),
         ],
     )?;
-    let checkout = stage.join("source");
+    let checkout = stage_path.join("source");
     fs::create_dir(&checkout)?;
-    let mut extract = Command::new("tar");
+    #[cfg(windows)]
+    let tar = PathBuf::from(std::env::var_os("SystemRoot").context("SystemRoot is not set")?)
+        .join("System32")
+        .join("tar.exe");
+    #[cfg(not(windows))]
+    let tar = PathBuf::from("tar");
+    let mut extract = Command::new(tar);
     extract
         .arg("-xf")
         .arg(child_path(&archive)?)
@@ -407,11 +571,12 @@ pub fn install(home: &Path, source: Option<&Path>, offline: bool, yes: bool) -> 
         1024 * 1024,
     )?)?;
     let enabled = preflight(home, &registry, &utilities)?;
-    let target = stage.join("target");
+    let target = stage_path.join("target");
     let mut build_arguments = vec![
         "cargo".to_owned(),
         "build".to_owned(),
         "--locked".to_owned(),
+        "--release".to_owned(),
         "--bin".to_owned(),
         "agentcmd".to_owned(),
         "--target-dir".to_owned(),
@@ -448,9 +613,10 @@ pub fn install(home: &Path, source: Option<&Path>, offline: bool, yes: bool) -> 
     let mut build = Command::new("cargo");
     build
         .current_dir(child_path(&checkout)?)
-        .args(["build", "--locked", "--bin", "agentcmd"])
+        .args(["build", "--locked", "--release", "--bin", "agentcmd"])
         .arg("--target-dir")
-        .arg(child_path(&target)?);
+        .arg(child_path(&target)?)
+        .env_remove("CARGO_BUILD_TARGET");
     if offline {
         build.arg("--offline");
     }
@@ -477,7 +643,7 @@ pub fn install(home: &Path, source: Option<&Path>, offline: bool, yes: bool) -> 
         "agentcmd cargo build failed; evidence: {}",
         log.display()
     );
-    let binary = target.join("debug").join(executable_name("agentcmd"));
+    let binary = target.join("release").join(executable_name("agentcmd"));
     let mut list_command = Command::new(child_path(&binary)?);
     list_command.arg("--list");
     let listed = process::capture(list_command, Duration::from_secs(30), 64 * 1024)
@@ -488,11 +654,19 @@ pub fn install(home: &Path, source: Option<&Path>, offline: bool, yes: bool) -> 
         serde_json::to_string(&listed)?
     );
     validate_list(&utilities, &listed.stdout)?;
-    let modules = register_modules(home, &stage, &binary, version, &utilities, &mut registry)?;
+    let modules = register_modules(
+        home,
+        &mut stage,
+        &binary,
+        version,
+        &utilities,
+        &mut registry,
+    )?;
+    let cleanup_warnings = clean_old_build_artifacts(home, &stage_path);
     Ok(
         json!({"revision":REVISION,"source":UPSTREAM_URL,"local_repository":local_source,"offline":offline,
-        "shared_binary":stage.join("shared").join(executable_name("agentcmd")),"build_log":log,
-        "modules":modules,"reinstall":"crew plugin agentcmd install","generic_plugin_update":"skipped_local_link"}),
+        "shared_binary":stage_path.join("shared").join(executable_name("agentcmd")),"build_log":log,
+        "modules":modules,"cleanup_warnings":cleanup_warnings,"reinstall":"crew plugin agentcmd install","generic_plugin_update":"skipped_local_link"}),
     )
 }
 
@@ -525,9 +699,9 @@ mod tests {
             Self(root)
         }
 
-        fn stage(&self) -> (PathBuf, PathBuf) {
-            let stage = store::stage(&self.0).unwrap();
-            let binary = stage.join("fixture-agentcmd");
+        fn stage(&self) -> (InstallStage, PathBuf) {
+            let stage = InstallStage::new(&self.0).unwrap();
+            let binary = stage.root.join("fixture-agentcmd");
             fs::write(&binary, b"agentcmd binary").unwrap();
             (stage, binary)
         }
@@ -598,11 +772,11 @@ mod tests {
     fn registers_isolated_disabled_modules_and_preserves_managed_state() {
         let fixture = Fixture::new();
         let utilities = parse_registry(UPSTREAM).unwrap();
-        let (stage, binary) = fixture.stage();
+        let (mut stage, binary) = fixture.stage();
         let mut registry = store::Registry::default();
         register_modules(
             &fixture.0,
-            &stage,
+            &mut stage,
             &binary,
             "0.1.0",
             &utilities,
@@ -620,7 +794,7 @@ mod tests {
                 fs::read(entry.root.join("bin").join(executable_name(&utility.name))).unwrap(),
                 b"agentcmd binary"
             );
-            assert!(!entry.root.starts_with(stage.join("shared")));
+            assert!(!entry.root.starts_with(stage.root.join("shared")));
             if let Some(conflict) = &utility.conflict {
                 assert!(parsed.description.contains(conflict));
             }
@@ -628,10 +802,13 @@ mod tests {
         registry.plugins.get_mut("agentcmd.wc").unwrap().enabled = true;
         store::write(&fixture.0, &registry).unwrap();
         registry = store::read(&fixture.0).unwrap();
-        let (next_stage, next_binary) = fixture.stage();
+        fs::create_dir_all(stage.root.join("source")).unwrap();
+        fs::create_dir_all(stage.root.join("target")).unwrap();
+        let old_root = stage.root.clone();
+        let (mut next_stage, next_binary) = fixture.stage();
         register_modules(
             &fixture.0,
-            &next_stage,
+            &mut next_stage,
             &next_binary,
             "0.1.0",
             &utilities,
@@ -640,13 +817,97 @@ mod tests {
         .unwrap();
         assert!(registry.plugins["agentcmd.wc"].enabled);
         assert!(!registry.plugins["agentcmd.sort"].enabled);
+        assert!(clean_old_build_artifacts(&fixture.0, &next_stage.root).is_empty());
+        assert!(!old_root.join("source").exists());
+        assert!(!old_root.join("target").exists());
+        assert!(old_root.join("shared").is_dir());
+        assert!(old_root.join("modules/agentcmd.wc/bin").is_dir());
+    }
+
+    #[test]
+    fn failed_stage_cleans_new_directories_but_preserves_existing_user_data() {
+        let fixture = Fixture::new();
+        let existing = fixture.0.join("config/p-agentcmd.wc");
+        fs::create_dir_all(&existing).unwrap();
+        fs::write(existing.join("keep"), "user data").unwrap();
+        let stage_path;
+        {
+            let (mut stage, _) = fixture.stage();
+            stage_path = stage.root.clone();
+            stage.user_dirs(&fixture.0, "agentcmd.wc").unwrap();
+            stage.user_dirs(&fixture.0, "agentcmd.grep").unwrap();
+            assert!(fixture.0.join("state/p-agentcmd.wc").is_dir());
+        }
+        assert!(!stage_path.exists());
+        assert_eq!(
+            fs::read_to_string(existing.join("keep")).unwrap(),
+            "user data"
+        );
+        assert!(!fixture.0.join("state/p-agentcmd.wc").exists());
+        assert!(!fixture.0.join("config/p-agentcmd.grep").exists());
+        assert!(!fixture.0.join("state/p-agentcmd.grep").exists());
+    }
+
+    #[test]
+    fn registration_failure_removes_partial_stage_and_new_user_dirs() {
+        let fixture = Fixture::new();
+        let blocked = fixture.0.join("state/p-agentcmd.basename");
+        fs::create_dir_all(blocked.parent().unwrap()).unwrap();
+        fs::write(&blocked, "existing file").unwrap();
+        let utilities = parse_registry(UPSTREAM).unwrap();
+        let (mut stage, binary) = fixture.stage();
+        let stage_path = stage.root.clone();
+        let mut registry = store::Registry::default();
+        assert!(
+            register_modules(
+                &fixture.0,
+                &mut stage,
+                &binary,
+                "0.1.0",
+                &utilities,
+                &mut registry,
+            )
+            .is_err()
+        );
+        drop(stage);
+        assert!(!stage_path.exists());
+        assert!(!fixture.0.join("config/p-agentcmd.bracket").exists());
+        assert!(!fixture.0.join("state/p-agentcmd.bracket").exists());
+        assert!(!fixture.0.join("config/p-agentcmd.basename").exists());
+        assert_eq!(fs::read_to_string(blocked).unwrap(), "existing file");
+        assert!(registry.plugins.is_empty());
+        assert!(!fixture.0.join("registry.json").exists());
+    }
+
+    #[test]
+    fn older_managed_revision_preserves_enabled_state() {
+        let fixture = Fixture::new();
+        let utilities = parse_registry(UPSTREAM).unwrap();
+        let (mut stage, binary) = fixture.stage();
+        let mut registry = store::Registry::default();
+        register_modules(
+            &fixture.0,
+            &mut stage,
+            &binary,
+            "0.1.0",
+            &utilities,
+            &mut registry,
+        )
+        .unwrap();
+        let marker = stage.root.join(MARKER);
+        let mut value: Value = serde_json::from_slice(&fs::read(&marker).unwrap()).unwrap();
+        value["revision"] = json!("an-older-revision");
+        store::atomic_json(&marker, &value).unwrap();
+        registry.plugins.get_mut("agentcmd.wc").unwrap().enabled = true;
+        let enabled = preflight(&fixture.0, &registry, &utilities).unwrap();
+        assert_eq!(enabled.get("agentcmd.wc"), Some(&true));
     }
 
     #[test]
     fn unrelated_id_collision_does_not_overwrite_or_register_anything() {
         let fixture = Fixture::new();
         let utilities = parse_registry(UPSTREAM).unwrap();
-        let (stage, binary) = fixture.stage();
+        let (mut stage, binary) = fixture.stage();
         let root = fixture.0.join("unrelated");
         fs::create_dir_all(root.join("bin")).unwrap();
         let raw = format!(
@@ -670,7 +931,7 @@ mod tests {
         registry = store::read(&fixture.0).unwrap();
         let error = register_modules(
             &fixture.0,
-            &stage,
+            &mut stage,
             &binary,
             "0.1.0",
             &utilities,

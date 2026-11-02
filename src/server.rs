@@ -434,25 +434,7 @@ impl State {
             cmd.env(key, value);
         }
         let mut plugin_paths = plugin_paths::current();
-        if !plugin_paths.dirs.is_empty() {
-            let base = cmd.get_env("PATH").map(std::env::split_paths);
-            let joined = std::env::join_paths(
-                plugin_paths
-                    .dirs
-                    .iter()
-                    .cloned()
-                    .chain(base.into_iter().flatten()),
-            );
-            match joined {
-                Ok(path) => cmd.env("PATH", path),
-                Err(error) => {
-                    plugin_paths.dirs.clear();
-                    plugin_paths.diagnostics.push(format!(
-                        "cannot prepend plugin directories to PATH: {error}"
-                    ));
-                }
-            }
-        }
+        plugin_paths::apply(&mut cmd, &mut plugin_paths);
         for diagnostic in &plugin_paths.diagnostics {
             crate::log!("pane {id}: {diagnostic}");
         }
@@ -1529,6 +1511,88 @@ fn workspace_attach_name(st: &State, id: usize, epoch: Option<&str>) -> Result<S
         .ok_or_else(|| anyhow!("can't find workspace: w{id}"))
 }
 
+fn event_may_spawn(st: &State, cid: usize, event: &crossterm::event::Event) -> bool {
+    use crossterm::event::{Event, KeyEventKind, MouseButton, MouseEventKind};
+
+    let Some(client) = st.clients.get(&cid) else {
+        return false;
+    };
+    let Some(si) = st.client_si(cid) else {
+        return false;
+    };
+    if client.popup.is_some() || client.chooser.is_some() {
+        return false;
+    }
+    match event {
+        Event::Key(key) if key.kind != KeyEventKind::Release => {
+            if let Some(prompt) = &client.prompt {
+                return match prompt.kind {
+                    PromptKind::Command => key.code == KeyCode::Enter,
+                    PromptKind::Confirm => {
+                        matches!(key.code, KeyCode::Char('y' | 'Y'))
+                            && !key
+                                .modifiers
+                                .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+                    }
+                    _ => false,
+                };
+            }
+            if client.prefix {
+                if st.cfg.is_prefix(key) {
+                    return false;
+                }
+                let line = commands::key_name(key)
+                    .and_then(|name| st.bindings.get(&name).cloned())
+                    .or_else(|| st.toolbar_fkey_line(si, key));
+                return line.is_some_and(|line| {
+                    matches!(
+                        commands::parse(&line),
+                        Ok(Cmd::SplitWindow { .. } | Cmd::NewWindow { .. })
+                    )
+                });
+            }
+            st.cfg.toolbar_fkeys && st.toolbar_fkey_line(si, key).is_some()
+        }
+        Event::Mouse(mouse)
+            if st.cfg.mouse
+                && client.prompt.is_none()
+                && matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) =>
+        {
+            let session = &st.sessions[si];
+            if crate::render::toolbar_hit_at(st, client, session, mouse.column, mouse.row).is_some()
+            {
+                return true;
+            }
+            if session.rows.checked_sub(1) == Some(mouse.row) {
+                let regions = crate::render::status_regions(st, client, session);
+                let inside = |span: Option<(u16, u16)>| {
+                    span.is_some_and(|(start, end)| mouse.column >= start && mouse.column < end)
+                };
+                return inside(regions.session) || inside(regions.counts);
+            }
+            false
+        }
+        _ => false,
+    }
+}
+
+fn handle_client_event(shared: &Shared, cid: usize, event: crossterm::event::Event) -> bool {
+    let mut plugin_paths = None;
+    loop {
+        let mut st = crate::api::lock(shared);
+        if !st.clients.contains_key(&cid) {
+            return false;
+        }
+        if plugin_paths.is_none() && event_may_spawn(&st, cid, &event) {
+            drop(st);
+            plugin_paths = Some(plugin_paths::prepare());
+            continue;
+        }
+        st.handle_event(shared, cid, event);
+        return true;
+    }
+}
+
 fn handle_conn(shared: Shared, cid: usize, stream: interprocess::local_socket::Stream) {
     let (mut r, mut w) = stream.split();
     let Ok(ClientMsg::Hello(cmd)) = read_msg::<ClientMsg>(&mut r) else {
@@ -1744,40 +1808,11 @@ fn handle_conn(shared: Shared, cid: usize, stream: interprocess::local_socket::S
             st.mark_dirty();
             drop(st);
             drop(_plugin_paths);
-            'events: while let Ok(msg) = read_msg::<ClientMsg>(&mut r) {
-                if let ClientMsg::Event(ev) = msg {
-                    let mut plugin_paths = None;
-                    loop {
-                        let mut st = crate::api::lock(&shared);
-                        let Some(client) = st.clients.get(&cid) else {
-                            break 'events;
-                        };
-                        let may_run_command = match &ev {
-                            crossterm::event::Event::Key(key) => {
-                                client.prefix
-                                    || matches!(key.code, KeyCode::F(_))
-                                    || (client.prompt.is_some()
-                                        && matches!(
-                                            key.code,
-                                            KeyCode::Enter | KeyCode::Char('y' | 'Y')
-                                        ))
-                            }
-                            crossterm::event::Event::Mouse(mouse) => matches!(
-                                mouse.kind,
-                                crossterm::event::MouseEventKind::Down(
-                                    crossterm::event::MouseButton::Left
-                                )
-                            ),
-                            _ => false,
-                        };
-                        if may_run_command && plugin_paths.is_none() {
-                            drop(st);
-                            plugin_paths = Some(plugin_paths::prepare());
-                            continue;
-                        }
-                        st.handle_event(&shared, cid, ev);
-                        break;
-                    }
+            while let Ok(msg) = read_msg::<ClientMsg>(&mut r) {
+                if let ClientMsg::Event(ev) = msg
+                    && !handle_client_event(&shared, cid, ev)
+                {
+                    break;
                 }
             }
             crate::api::lock(&shared).clients.remove(&cid);

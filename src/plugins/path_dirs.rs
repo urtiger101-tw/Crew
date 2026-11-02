@@ -109,14 +109,19 @@ mod tests {
         ] {
             let root = dir.join(id);
             fs::create_dir_all(root.join("bin")).unwrap();
-            let mut raw = format!(
-                "id='{id}'\nname='Test'\nversion='1.0.0'\nmin_crew_version='{}'\nplatforms=['linux','macos','windows']\n[[path_dirs]]\npath='bin'\n",
+            let supported = if id == "c.incompatible" {
+                if cfg!(windows) {
+                    "'linux'"
+                } else {
+                    "'windows'"
+                }
+            } else {
+                "'linux','macos','windows'"
+            };
+            let raw = format!(
+                "id='{id}'\nname='Test'\nversion='1.0.0'\nmin_crew_version='{}'\nplatforms=[{supported}]\n[[path_dirs]]\npath='bin'\n",
                 env!("CARGO_PKG_VERSION")
             );
-            if id == "c.incompatible" {
-                let other_platform = if cfg!(windows) { "linux" } else { "windows" };
-                raw.push_str(&format!("platforms=['{other_platform}']\n"));
-            }
             fs::write(root.join("crew-plugin.toml"), &raw).unwrap();
             registry.plugins.insert(
                 id.into(),
@@ -138,6 +143,12 @@ mod tests {
         });
         assert_eq!(paths.dirs, expected);
         let entries = super::super::entries(&home).unwrap();
+        let incompatible = entries
+            .iter()
+            .find(|entry| entry["id"] == "c.incompatible")
+            .unwrap();
+        assert_eq!(incompatible["platform_compatible"], false);
+        assert_eq!(incompatible["effective_path_dirs"], serde_json::json!([]));
         let disabled = entries
             .iter()
             .find(|entry| entry["id"] == "b.disabled")

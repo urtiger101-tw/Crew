@@ -1,6 +1,54 @@
 use super::{TitleMode, contain_vt, wants_title};
 
 #[test]
+fn ordinary_input_and_key_release_do_not_prepare_plugin_paths() {
+    use crossterm::event::{
+        Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent,
+        MouseEventKind,
+    };
+    let mut state = super::test_state();
+    state.sessions.push(super::test_session("t", 120, 30, 7));
+    state.clients.insert(1, super::test_client("t"));
+    let shared = std::sync::Arc::new(std::sync::Mutex::new(state));
+    let before = super::plugin_paths::prepare_count();
+    assert!(super::handle_client_event(
+        &shared,
+        1,
+        Event::Key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE))
+    ));
+    assert!(super::handle_client_event(
+        &shared,
+        1,
+        Event::Mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: 10,
+            row: 10,
+            modifiers: KeyModifiers::NONE,
+        })
+    ));
+    {
+        let mut state = shared.lock().unwrap();
+        state.clients.get_mut(&1).unwrap().prefix = true;
+    }
+    assert!(super::handle_client_event(
+        &shared,
+        1,
+        Event::Key(KeyEvent::new_with_kind(
+            KeyCode::Char('c'),
+            KeyModifiers::NONE,
+            KeyEventKind::Release,
+        ))
+    ));
+    assert_eq!(super::plugin_paths::prepare_count(), before);
+    let state = shared.lock().unwrap();
+    assert!(super::event_may_spawn(
+        &state,
+        1,
+        &Event::Key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE))
+    ));
+}
+
+#[test]
 fn epoch_attachment_rejects_reused_ids_and_preserves_same_daemon_ids() {
     let mut st = super::test_state();
     let epoch = st.events.epoch().to_owned();

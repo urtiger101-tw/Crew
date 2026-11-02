@@ -80,7 +80,7 @@ impl State {
     /// Command line of the toolbar button for a plain F1..F12 (kill commands wrapped in
     /// `confirm-before`); `None` for any other key, a missing button, or no toolbar drawn on
     /// session `si` (off, or too few rows).
-    fn toolbar_fkey_line(&self, si: usize, k: &KeyEvent) -> Option<String> {
+    pub(crate) fn toolbar_fkey_line(&self, si: usize, k: &KeyEvent) -> Option<String> {
         if !self.sessions.get(si).is_some_and(|s| self.toolbar_shown(s)) {
             return None;
         }

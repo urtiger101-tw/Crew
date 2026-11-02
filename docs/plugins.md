@@ -58,8 +58,8 @@ The installer targets [agentcmd at commit
 At that revision, the installer creates 46 separate plugin modules, one per
 utility. A newly installed module starts disabled and can be enabled
 independently: for example, `agentcmd.wc` supplies `wc`, and the utility `[` uses
-the plugin ID `agentcmd.bracket`. A fresh installation does not load these
-utilities into a pane.
+the plugin ID `agentcmd.bracket`. A fresh installation does not add any of the
+module directories to a pane.
 
 ### Install and enable one utility
 
@@ -91,6 +91,8 @@ To reinstall or refresh the managed modules, rerun
 skips these managed local entries. Reinstallation preserves the enabled state
 of unchanged managed modules; check `crew plugin list --json` rather than
 assuming that every module is disabled afterward.
+Older agentcmd installation stages remain on disk so open panes keep their
+commands. Remove an old stage manually only after no pane still uses it.
 
 Enabling a module adds its executable directory only to newly spawned panes,
 including workspace-created, tab-created and split panes. Running panes keep

@@ -67,7 +67,11 @@ impl IsolatedServer {
                 .as_nanos()
         );
         let config = std::env::temp_dir().join(format!("crew-p5-{suffix}.toml"));
-        std::fs::write(&config, "persist = false\nshell = \"powershell.exe\"\n").unwrap();
+        std::fs::write(
+            &config,
+            "persist = false\nshell = \"powershell.exe -NoProfile\"\n",
+        )
+        .unwrap();
         Self {
             socket: format!("crew-p5-test-{suffix}.sock"),
             config,
@@ -293,6 +297,8 @@ fn host_lost_keeps_descendants_when_helper_exits_before_detection() {
 fn live_host_is_not_reported_lost_when_helper_exits() {
     let mut server = IsolatedServer::new();
     let tree = start_test_pane(&mut server);
+    // Keep the server alive while p1 closes so its reply cannot race server shutdown.
+    server.run(&["workspace", "create", "keeper"]);
     terminate(tree.helper);
     std::thread::sleep(Duration::from_secs(2));
     let table = processes();
@@ -305,6 +311,17 @@ fn live_host_is_not_reported_lost_when_helper_exits() {
     );
 
     server.run(&["pane", "send-keys", "p1", "C-c"]);
+    server.run(&[
+        "pane",
+        "wait-output",
+        "p1",
+        "--source",
+        "visible",
+        "--regex",
+        "^PS .*>\\s*$",
+        "--timeout",
+        "10000",
+    ]);
     server.run(&[
         "pane",
         "run",
