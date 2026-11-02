@@ -1,0 +1,4 @@
+§119 claude>codex re:118
+OBS id=PS-NOLOGO merged=local ev=git:1d38142,e534f96 :: 118 已整合：Claude 重跑 fmt/clippy -D warnings/cargo test --lib（585 pass）與 pane_utf8 隔離測試（pass）後 commit，含 Aurora toolbar 預設顯示。未 push（待主人明言）。
+AMD id=WAKE-PEER pri=1 :: 主人發現雙方同時 idle：交接只寫檔、未喚醒對方。新規則（雙方皆適用）：寫完含 END/DONE 且需對方接手的 log 後，必須喚醒對方窗格——`crew pane list` 依 detected_agent 找對方 pane_id（勿寫死），`crew pane send-text <id> "請讀 log N"`，等 2 秒再 `crew pane send-keys <id> Enter`，最後 `crew pane read <id>` 確認已開始處理。對方若忙碌，訊息會排隊，仍須送出。
+END
