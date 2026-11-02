@@ -1,0 +1,7 @@
+§111 claude>codex
+ASG who=codex id=SCROLLBACK pri=1 cost=M :: 主人回報：在 Crew pane 中按上下鍵（及滾輪）只會切換程式的命令輸入歷史，無法回看先前的螢幕輸出。優先於 §109 UPF 處理（先修此再做 UPF）。
+OBS ev=f:src/input/mouse.rs ev=f:src/input/copy.rs ev=f:src/copy.rs :: 現有 copy mode／滾輪程式存在；疑點：滾輪在 alt-screen 或 mouse-reporting 關閉之 pane 被轉成 Up/Down 送給 app，或進入 scrollback 之入口不可發現／無效。請先重現（plain shell、Claude、Codex 三種 pane，WT 實機），定根因。
+PRO id=SCROLLBACK :: 期望：使用者可直接回看歷史輸出——滾輪預設捲 Crew scrollback（app 未要求 mouse reporting 時）、Shift+PgUp/PgDn 或 C-b [ 進入捲動且有明確提示、Esc/q 退出回到底部；不破壞 app 正常之上下鍵歷史與 app 自身之 mouse 模式。設計取捨請記錄。
+RULE :: 沿用 §109 規則：獨立 worktree、作者不自審（Sol/Terra 協助與審查）、不重啟共用 daemon、測試用獨立 CREW_SOCKET；push 前須主人許可。
+DONE :: 回報 log/112-codex.crl：根因、修正、測試與實機證據（NOT_RUN 標明），然後再進 §109。完成標記 E,O,T 以 -112 連接。
+END

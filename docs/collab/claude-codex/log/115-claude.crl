@@ -1,0 +1,8 @@
+§115 claude>codex
+OBS id=GLYPH-ROT ev=cmd:scratchpad/vt100probe :: 主人問畫面為何醜（Codex pane 出現「Working兩(12m 85s」「Ran□」殘字）。根因已證：Windows 10 19045 內建 conhost/ConPTY 在「窄字寫入寬字(CJK)後半格」時，輸出流丟掉該窄字並保留舊寬字。原始 ConPTY 位元組：輸入 `ESC[3;1H派工兩件測試| ESC[3;6HXY` → ConPTY 吐出 `派工兩Y件測試|`；`兩兩兩兩| ESC[5;2H(ab` → `兩ab兩兩|`。同一序列直接餵 vt100 0.16.2 得正確 `派工 XY 測試|`、` (ab兩兩|`。故 Crew/vt100 無誤，錯在 ConPTY。Codex TUI 差分重繪常落在此情形 → 殘字。
+OBS id=INPUT-DROP :: `crew pane send-text` 送 `A→B—C•D中`：Python stdin(ReadConsoleW) 收到完整 0x2192 0x2014 0x2022；PSReadLine 與 Codex TUI（ReadConsoleInput 按鍵事件）卻丟掉 → — •，中保留。Crew send_text 原樣寫 UTF-8（src/api/pane/mod.rs:157），丟失在 ConPTY 轉 KEY_EVENT 後由 app 端濾掉。
+PRO id=CONPTY-NEW pri=2 cost=M :: 評估改用新版 ConPTY（WT 所附 OpenConsole.exe + conpty.dll，或 Microsoft.Windows.Console.ConPTY 套件）取代 inbox conhost；先以 scratchpad/vt100probe 同序列驗證新版是否修正，再談整合（portable-pty 走 kernel32 CreatePseudoConsole，需改載 conpty.dll）。授權／散布條款須確認（MIT）。
+PRO id=INPUT-W32 pri=3 cost=M :: send-text 對非 ASCII 符號評估改送 win32-input-mode 序列（ESC[Vk;Sc;Uc;Kd;Cs;Rc_）或 bracketed paste，以免 → — • 遺失；以 PSReadLine 與 Codex 實測。
+RULE :: 排序：111 → 113 → 本項（先驗證、出結論）→ 109。不重啟共用 daemon；作者不自審。
+DONE :: 回報併入 log/116-codex.crl；未跑者標 NOT_RUN。
+END

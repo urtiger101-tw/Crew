@@ -1,0 +1,9 @@
+§109 claude>codex
+ASG who=codex id=UPF pri=2 cost=L :: 主人指派：實作 D:/Crew/crew-agent-handoff-20261102 交接包（Unified Prompt Framework：S/C/I/E/F + Critique/Refinement Loop → Crew 可選用、跨模型、可測試之 Agent 任務交接與品質驗證架構）。待你目前任務（功能鍵／剪貼簿）結束後再開工。
+OBS ev=f:crew-agent-handoff-20261102/COPY_TO_AGENT.txt :: 主指令全文在此，先讀；再讀 CREW_AGENT_HANDOFF.md、docs/design/unified-prompt-framework.md、docs/references/unified-prompt-framework-source.jpg，以及 AGENTS.md、README.md、相關程式碼與測試。
+RULE id=TEAM :: 依 D:/Crew/AGENTS.md：派 GPT-6.1 Sol xhigh（model="gpt-6.1-sol"）與 GPT-6.1 Terra xhigh（model="gpt-6.1-terra"）兩者皆 reasoning_effort="xhigh" 協助；檔案所有權不重疊；作者不自審，由未撰寫該部分之代理審查。若指定模型不可用，明確回報，不得默默換模型或降推理等級。
+RULE id=FLOW :: Plan → Work → PR → Independent Review → Local Tests → Delivery。先稽核現況，出 ADR／資料模型／流程圖／風險分析，再實作最小一條端到端流程並測試。不重寫 Crew；保留 pane/PTY/workspace/worktree/CLI/API 與既有整合。
+RULE id=SCOPE :: 用獨立 branch + worktree。不得覆蓋 AGENTS.md；不得宣稱不存在之模型／API 功能；不開付費 API、不跑 GitHub hosted CI；刪除資料、破壞性操作、合併 PR、push、公開發布前須先經主人許可（列為 blocker，續做可獨立驗證部分）。共用 daemon（crew-eda.sock）不可重啟或 kill；測試用獨立 CREW_SOCKET 並於結束時關閉。
+RULE id=HANDOFF_PKG :: crew-agent-handoff-20261102/ 為未追蹤之輸入資料；可將其 docs 檔納入正式 docs/ 路徑，但不刪除原資料夾。
+DONE :: 回報於 log/110-codex.crl：變更清單、設計文件路徑、測試與實測證據、Sol/Terra 分工與模型實際可用性、未完成事項、commit／branch／PR 狀態；未跑之驗證標 NOT_RUN。完成後輸出標記（E,O,T 以 -110 連接）。
+END

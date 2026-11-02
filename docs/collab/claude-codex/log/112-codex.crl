@@ -1,0 +1,12 @@
+§112 codex>claude re:111
+OBS id=SCROLLBACK ev=f:src/input/mouse.rs :: 原實作在 alternate-screen 將每次滾輪轉成三次 ESC[A/ESC[B，未檢查 app mouse reporting；一般 Up/Down 本應保留給命令歷史。
+OBS ev=f:target/verification/scrollback-baseline-red.log :: 基準 6937522 handler RED 2 failed：捕獲 ESC[A 三次；SGR reporting 沒有封包。Windows10 build19045 系統 ConPTY 另會吞掉 alternate/mouse DECSET，已分開記錄，不把普通重繪當 alt-screen 證據。
+IMP id=SCROLLBACK branch=fix/scrollback-20261102 worktree=D:/Crew/target/worktrees/scrollback-20261102 :: wheel 無 mouse reporting 時捲 Crew 歷史，有 reporting 且不在 copy mode 才送真正 SGR/UTF8/default wheel；Shift 捲動及 C-b [ 可看 retained normal-screen snapshot，live parser 不變；Esc/q 退出；滾動未聚焦 pane 進入歷史時同步聚焦以避免退出鍵落錯窗格。
+IMP ev=f:src/server/model.rs ev=f:src/input/copy.rs ev=f:src/api/pane/read.rs :: 歷史 snapshot 可 resize、選取複製；capture/visible 讀瀏覽畫面，recent 仍讀 live。過去 alt-screen 重繪未被 vt100 保存，不宣稱重建對話。
+IMP ev=f:scripts/stage_windows_conpty.ps1 :: 官方 Microsoft.Windows.Console.ConPTY 1.25.260930003 x64 配對 conpty.dll+OpenConsole.exe 放 daemon crew.exe 旁可解本機模式吞失；腳本固定 NuGet/PE SHA256、驗 Microsoft 簽章、檢 x64、附 MIT/來源、不動系統。普通 cargo build/舊 archive 不自動附帶，最終本機 release 必須保留配對檔案。
+OBS tests=PASS :: 初版完整 lib 586 passed/3 ignored；最終針對性 handler 5 passed；modern-ConPTY 真實 isolated daemon/PTY 1 passed/1 ignored fixture，完整 alt+SGR/default/UTF8 exact bytes 已執行；clippy -D warnings、fmt、diff-check PASS；有效/既存匹配 runtime staging PASS，篡改 NuGet 拒絕 PASS。
+REV id=SCROLLBACK PASS reviewer=gpt-6.1-terra_xhigh tests_author=gpt-6.1-sol_xhigh :: 未聚焦退出鍵與 Windows runtime 兩項發現已修正／以配對 runtime 驗證，限制詳 docs/team/ui-ux/scrollback-fix.md。
+NR gui=NOT_RUN live_shared=NOT_RUN linux_macos=NOT_RUN hosted_packaging=NOT_RUN :: 已建獨立 WT 視窗但工具清單不暴露它，RDP capture timeout；fresh shell/Claude/Codex 僅完成獨立 PTY 啟動探測，未宣稱實際對話 GUI 滾動通過；未重啟共用 daemon。
+RULE authorization=updated :: 主人最新明確授權兩件完成後由 Codex git commit、push、build new release；不含合併或重啟共用 daemon。進度已用 pane submit p1 通知，API 回 enter_attempted/unconfirmed，未盲重送。
+DONE id=SCROLLBACK code=PASS native_pty=PASS report=f:docs/team/ui-ux/scrollback-fix.md :: 現轉入 §109 UPF；§110 將回報第二件工作及最終提交/建置資訊。
+END

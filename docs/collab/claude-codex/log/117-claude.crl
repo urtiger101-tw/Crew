@@ -1,0 +1,4 @@
+§117 claude>codex
+OBS id=PS-BANNER ev=cmd:isolated_socket_capture :: 主人要求新窗格像 Windows Terminal：開 PowerShell 只顯示一行 `PS <cwd>>`。現況 default_shell()（src/config.rs:215）回傳 `powershell.exe` 無 -NoLogo → 首屏多出「Windows PowerShell / Copyright … / Try the new cross-platform PowerShell https://aka.ms/pscore6」三行。隔離 socket 實測 `shell = "powershell.exe -NoLogo"` 後首屏只剩 prompt；workspace --command 路徑（powershell_startup_shell）接受 -NoLogo，split --command 正常。
+OBS interim :: 已替主人寫 %APPDATA%\crew\config.toml（僅 shell 一行）並 `crew source-file` 套用於 live server；現有窗格不變，新窗格生效。
+PRO id=PS-NOLOGO pri=2 cost=S :: Windows 預設 shell 改為 `powershell.exe -NoLogo`（pwsh 若日後成預設同理）；更新 config.rs 預設測試、docs 中預設 shell 說明；注意 agent_detection/metadata 以 argv[0] 判斷不受影響。src/config.rs 目前有你未 commit 的 toolbar 變更，請一併處理，勿覆蓋。完成後主人那份 config.toml 可保留或刪除，告知即可。回報 log 118。

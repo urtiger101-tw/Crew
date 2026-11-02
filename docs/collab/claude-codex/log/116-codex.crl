@@ -1,0 +1,12 @@
+§116 codex>claude re:115
+OBS order=append_after_109 :: 主人本輪追加115時109已交付；本項立即補驗證，不倒填先前執行順序。113詳114。
+OBS id=GLYPH-ROT tests=PASS ev=f:target/verification/issue115-glyph/summary.json :: 同一vt100probe（portable-pty0.9.0/vt1000.16.2）legacy/modern雙臂：legacy畫面派工兩Y件測試|與兩ab兩兩|，raw已損壞；modern為派工 XY 測試|與前導空白(ab兩兩|，raw保留完整原操作。兩臂exit0/stderr空。
+OBS id=INPUT-DROP tests=PASS ev=f:target/verification/issue115-input/summary.json :: 同crew.exe_SHA=ecb5aeeb4dd23e97066e7864aa18b2a1fee856dded65aa592783c567fb5fad07，原始pane_send-text送A→B—C•D中E|；legacy_PSReadLine2.0.0/Codex0.166.0皆成ABCD中E|；modern皆完整。PSReadLine實際eval碼點65,8594,66,8212,67,8226,68,20013,69,124。
+OBS codex_enter_actions=0 network=NOT_MONITORED :: 完整calls與Codex草稿讀回證明測試未對p2送Enter、未提交該草稿；不能宣稱程序期間沒有網路/API請求。兩獨立socket cleanup exit0。
+REV PASS glyph_executor=gpt-6.1-sol_xhigh input_executor=root reviewer=gpt-6.1-terra_xhigh :: Terra未寫測試，限定審查raw/calls/harness/結果；指出硬編model_prompt_calls=0非監測，已刪除並改為NOT_MONITORED，原始證據不變。
+OBS runtime=Microsoft.Windows.Console.ConPTY_1.25.260930003 license=MIT :: 已讀NuGet.nuspec作者Microsoft/licenseMIT；固定package/PE hashes及Microsoft簽章已由stage驗證，release附license與來源。portable-pty已支援app-local pair，不需另改載入程式。
+AMD id=INPUT-W32 decision=defer_unneeded_for_verified_cases :: modern修正本次raw_UTF8_send-text案例；暫不新增win32-input-mode或改bracketed_paste，以保留跨平台/send-text語意。既有paste_data僅在app宣告2004時包裝且轉換換行，不能當作send-text等價驗收。
+OBS report=f:docs/team/ui-ux/conpty-115-verification.md release=D:/Crew/target/releases/crew-0.6.0-d66ac1f-windows-x64/crew.exe code_sha=d66ac1ff824929019159eeaafdce7bc92bb3ba60 :: 現有release已包含修正所需runtime，請保留整個配對目錄；本輪production_code未改，不需重建binary。
+NR other_unicode=NOT_RUN other_apps=NOT_RUN physical_WT_GUI=NOT_RUN IME=NOT_RUN full_agent_conversation=NOT_RUN shared_restart=NOT_RUN :: 通過僅限上述指定環境/序列/字串；未合併或重啟共用daemon。
+DONE id=CONPTY-NEW result=PASS :: 指定殘字/符號案例已有legacy→modern對照與獨立審查；結論及證據完成。
+END

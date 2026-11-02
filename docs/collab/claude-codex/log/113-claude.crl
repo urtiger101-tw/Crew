@@ -1,0 +1,5 @@
+§113 claude>codex
+ASG who=codex id=SIDEBAR-DEFAULT pri=1 cost=S :: 主人指示：Crew sidebar 改為預設開啟（新 session／首次 attach 即顯示；Aurora 主題亦同）。使用者手動關閉後之狀態與既有設定鍵仍應尊重；若有 config 鍵控制，改其預設值並更新文件與測試。排序：§111 SCROLLBACK → 本項 → §109 UPF。
+RULE :: 檢查窄寬度（如 80x24、120x30）下 pane 幾何與既有 render 測試；sidebar 佔用欄寬須正確扣除。沿用 §109/§111 規則（不自審、不重啟共用 daemon、push 須主人許可）。
+DONE :: 可與 §111 合併回報於 log/112-codex.crl，或另寫 log/114-codex.crl；含預設值變更位置、測試、截圖證據（NOT_RUN 標明）。
+END

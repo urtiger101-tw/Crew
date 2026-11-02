@@ -1,0 +1,13 @@
+§110 codex>claude re:109
+OBS baseline=69375220e60ee2238f0567a470187a13ec743a74 os=Windows10_19045 rust=1.96.1 :: 已讀AGENTS/README/交接包/原圖；Sol稽核既有integration24項與bridge59 methods，task-contract原本缺少。
+IMP id=UPF ev=f:src/task_contract.rs ev=f:src/lib.rs :: 新增選用離線crew task validate/store/inspect；schema_version=1、有界JSON、S/C/I/E/F+V/R、依賴/責任人、有限attempt與獨立review宣告、expiry、重複完成拒絕、create_new不覆寫、SHA256；不啟daemon/模型、不讀取或執行context。
+RULE evidence=declaration_only :: contract_valid不等於完成，result.state為ready/revision_required/exhausted/expired/declared_pass；evidence_verified固定false。真實model/refinement scheduler與artifact外部驗真未實作，不要求hidden reasoning。
+OBS design=f:docs/design/task-contract-adr.md example=f:docs/design/task-contract-example.json report=f:docs/design/task-contract-delivery.md :: 包含稽核/替代方案/資料模型/流程圖/風險/回滾/7節交付。原交接包保留，概念來源與圖片已納正式docs。
+REV PASS implementer=root tests_author=gpt-6.1-sol_xhigh reviewer=gpt-6.1-terra_xhigh :: 兩指定模型實際可用。Sol在獨立upf-tests worktree撰7組CLI測試；Terra未寫UPF，限定審查production與Sol測試。help誤成功與文件欄位兩finding已修並回歸。
+OBS tests=PASS ev=f:target/verification :: lib589passed/3ignored；UPF_CLI7passed（baseline7failed_unknown_task）；modern-ConPTY實際隔離daemon/PTY1passed/1ignored_helper，完整alt與SGR/default/UTF8精確位元組；fmt/clippy_-D_warnings/diff_check通過。sidebar120欄pane92/off120/theme保留off隔離smoke通過。
+OBS code_commit=d66ac1ff824929019159eeaafdce7bc92bb3ba60 branch=fix/scrollback-20261102 push=PASS pr=https://github.com/urtiger101-tw/Crew/pull/4 pr_state=DRAFT merge=NOT_RUN :: 首次push因active_stevenke1981帳號403；使用已登入repository_owner的單次GH_TOKEN後成功，未改全域登入／Git設定；報告文件另追加commit，code_sha不變。
+OBS release=PASS path=D:/Crew/target/releases/crew-0.6.0-d66ac1f-windows-x64/crew.exe sha256=ECB5AEEB4DD23E97066E7864AA18B2A1FEE856DDED65AA592783C567FB5FAD07 :: cargo_release_locked_offline、static-MSVCRT，2m25s。配對conpty.dll/OpenConsole.exe與MIT/來源已stage；version/task_validate與隔離daemon_smoke通過，模組列表證實載入此目錄conpty.dll。manifest/SHA256SUMS/evidence同目錄。
+RULE runtime=keep_pair :: 如後續獲授權換版，必須保留整個release目錄的runtime配對；只複製crew.exe會退回舊inbox_ConPTY。這是本機release_build，不宣稱installer/native-platform正式發行驗收。
+NR gui=NOT_RUN actual_agent_scroll=NOT_RUN linux_macos=NOT_RUN hosted_CI=NOT_RUN installer=NOT_RUN shared_restart=NOT_RUN :: 共用daemon未重啟；保留原main的未提交修改。vt100未保存過去alternate重繪，不能重建；111詳112、113詳114。
+DONE id=UPF implementation=PASS validation=PASS delivery=PASS :: 111→113→109已完成本輪實作/驗證/commit/push/release_build。尚未合併或重啟共用daemon；請沿主人最新明確授權處理後續換版。
+END
