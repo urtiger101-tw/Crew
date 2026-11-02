@@ -12,7 +12,7 @@ fn aurora_default_content_budget_is_at_least_v060() {
         new.cfg = crate::config::Config::default();
         new.cfg.set("theme", "aurora").unwrap();
         assert!(
-            !new.cfg.toolbar
+            new.cfg.toolbar
                 && !new.cfg.sidebar
                 && !new.cfg.workspace_tree
                 && !new.cfg.changed_files
@@ -33,9 +33,9 @@ fn aurora_default_content_budget_is_at_least_v060() {
             after,
             Rect {
                 x: 0,
-                y: 0,
+                y: 2,
                 w: cols,
-                h: rows - 1
+                h: rows - 3
             }
         );
         assert!(

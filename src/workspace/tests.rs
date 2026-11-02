@@ -25,6 +25,13 @@ fn powershell_startup_preserves_argv_and_literal_command() {
         ]
     );
     assert_eq!(&argv[4..], &["-NoExit", "-Command", command]);
+    let argv = powershell_startup_shell("powershell.exe -NoLogo", Some(command))
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        argv,
+        args(&["powershell.exe", "-NoLogo", "-NoExit", "-Command", command])
+    );
     let argv = powershell_startup_shell("powershell.exe -NoExit -NoProfile", Some(command))
         .unwrap()
         .unwrap();

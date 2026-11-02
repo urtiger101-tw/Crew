@@ -235,6 +235,29 @@ fn isolated_server_default_and_startup_commands_use_utf8() {
     ]);
     let list: serde_json::Value = serde_json::from_str(&server.run(&["pane", "list"])).unwrap();
     let initial = list["result"]["panes"][0]["pane_id"].as_str().unwrap();
+    server.run(&[
+        "pane",
+        "run",
+        initial,
+        "Write-Output ('P3_' + 'SHELL_READY')",
+    ]);
+    server.run(&[
+        "pane",
+        "wait-output",
+        initial,
+        "--match",
+        "P3_SHELL_READY",
+        "--timeout",
+        "15000",
+    ]);
+    let first_screen = server.run(&["pane", "read", initial, "--source", "recent"]);
+    eprintln!("default shell first screen: {first_screen}");
+    for banner in ["Windows PowerShell", "Copyright", "https://aka.ms/pscore6"] {
+        assert!(
+            !first_screen.contains(banner),
+            "unexpected banner: {first_screen}"
+        );
+    }
     server.run(&["pane", "run", initial, &script]);
     let created: serde_json::Value =
         serde_json::from_str(&server.run(&["tab", "create", "p3-startup", "--command", &script]))

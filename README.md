@@ -498,7 +498,7 @@ crew agent read reviewer --source recent --lines 80
 
 ```toml
 prefix = "C-a"          # 前綴鍵 prefix key
-shell = "pwsh -NoLogo"  # 預設 shell（Windows 預設 powershell.exe，Unix 為 $SHELL）
+shell = "pwsh -NoLogo"  # 自訂 shell（Windows 預設 powershell.exe -NoLogo，Unix 為 $SHELL）
 pane_utf8 = true        # Windows 新窗格使用 UTF-8；false 沿用原本的編碼 / UTF-8 in new Windows panes
 scrollback = 10000      # 回溯行數 scrollback lines
 mouse = true            # 滑鼠支援 mouse support
@@ -621,7 +621,7 @@ Aurora 沿用 v0.6.0 版面，將近黑底色、膠囊分頁與 agent 狀態晶�
 ```toml
 sidebar = false
 workspace_tree = false
-toolbar = false
+toolbar = true
 pane_titles = "always"
 dim_inactive = true
 changed_files = false       # 可選的唯讀 git status 面板
@@ -655,7 +655,7 @@ API 的 canonical status、未讀注意狀態或等待條件。`agent list` 的
 `! doctor` 可點開版本或顏色環境提示。可選的 changed-files 面板在背景讀取 Git，
 約每兩秒更新；錯誤明確顯示，不把讀取失敗當成乾淨工作樹。面板明確標示
 「窗格起始目錄」與路徑；目前不追蹤 shell 內的 `cd`，內容只適用於該路徑。
-Aurora 設定省略 `toolbar` 時預設隱藏；明確設定或用 F1 選擇後會保留選擇。
+Aurora 設定省略 `toolbar` 時預設顯示功能列；切換主題會保留工具列的顯示狀態，F1 可隱藏或恢復。
 
 還原的空白 shell 標為「已還原 shell」，不列入活躍 agent 晶片；聚焦後用
 `prefix x` 關閉（沿用關閉確認），或開始輸入以清除標記。真實 agent 回報也會接管標記。
