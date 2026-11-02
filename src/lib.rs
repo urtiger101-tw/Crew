@@ -40,6 +40,7 @@ mod remote;
 mod render;
 mod semantic;
 mod server;
+mod task_contract;
 mod theme;
 mod workspace;
 mod worktree;
@@ -58,6 +59,9 @@ fn help_args(args: &[String]) -> Option<Vec<String>> {
     let sub = args.first()?.as_str();
     if sub.starts_with("__") {
         return None;
+    }
+    if sub == "task" {
+        return None; // offline contract commands own their argument boundaries.
     }
     // API option scanners own their value boundaries and the help sentinel.
     if api::cli::API_COMMANDS.contains(&sub) && sub != "api" {
@@ -193,6 +197,7 @@ pub fn run() {
         },
         "server" if args.len() == 1 => server::run(),
         "doctor" => doctor::run(&args[1..]),
+        "task" => std::process::exit(task_contract::run(&args[1..])),
         "integration" => match integrations::run(&args[1..]) {
             Ok(code) => std::process::exit(code),
             Err(e) => Err(e),

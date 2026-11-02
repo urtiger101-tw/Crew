@@ -72,7 +72,8 @@ impl State {
         }
         let pid = self.active_pane(si);
         // `scroll-keys`: Shift+Up/Down (line) and Shift+PageUp/PageDown (page) browse the
-        // pane's earlier output; on the alternate screen the key still reaches the app.
+        // pane's saved output, including the retained normal-screen history while an
+        // alternate-screen application is running. Plain arrows still reach the app.
         if self.cfg.scroll_keys {
             let page = self.panes.get(&pid).map_or(1, |p| p.rect.h.max(1));
             if let Some(delta) = scroll_key_delta(&k, page)

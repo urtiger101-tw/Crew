@@ -208,6 +208,16 @@ pub const ENTRIES: &[Entry] = &[
         "[複製 {pos}/{max}{sel}]",
     ),
     ("render.copy.sel", " sel", " 選取"),
+    (
+        "render.scroll.label",
+        "[scroll {pos} · Esc/q live]",
+        "[捲動 {pos} · Esc/q 回底部]",
+    ),
+    (
+        "render.scroll.saved_main",
+        "[saved main {pos} · Esc/q live]",
+        "[主畫面歷史 {pos} · Esc/q 回底部]",
+    ),
     // scroll markers on the chooser and key popup top border
     ("render.scroll.up", "▲ more", "▲ 更多"),
     ("render.scroll.down", "▼ more", "▼ 更多"),

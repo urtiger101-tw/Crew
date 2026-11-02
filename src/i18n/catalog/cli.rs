@@ -31,6 +31,9 @@ AUTOMATION (herdr-style, JSON output; see `crew pane --help`):
   crew agent list|get|read|prompt|wait|rename|focus|send-keys
   crew session list   crew api snapshot   crew server [stop]
 
+OFFLINE TASK CONTRACTS (no daemon):
+  crew task validate FILE | inspect FILE | store FILE --output FILE
+
 Config: $CREW_CONFIG or <config_dir>/crew/config.toml"#,
         r#"crew - 跨平台終端多工器
 
@@ -54,6 +57,9 @@ Config: $CREW_CONFIG or <config_dir>/crew/config.toml"#,
   crew pane list|get|split|read|send-text|send-keys|run|submit|wait-output|...
   crew agent list|get|read|prompt|wait|rename|focus|send-keys
   crew session list   crew api snapshot   crew server [stop]
+
+離線任務契約（不需 daemon）：
+  crew task validate FILE | inspect FILE | store FILE --output FILE
 
 設定檔 Config：$CREW_CONFIG，或 <config_dir>/crew/config.toml"#,
     ),

@@ -74,8 +74,6 @@ pub struct Config {
     pub lang: String,
     /// Show the function-key toolbar and divider (needs at least 5 rows)
     pub toolbar: bool,
-    #[serde(skip)]
-    pub toolbar_explicit: bool,
     /// F2..F12 trigger toolbar buttons directly; F1 always toggles the toolbar
     pub toolbar_fkeys: bool,
     /// Shift+Up/Down and Shift+PageUp/PageDown scroll the active pane's earlier output
@@ -92,7 +90,7 @@ impl Default for Config {
             pane_utf8: true,
             scrollback: 10000,
             mouse: true,
-            sidebar: false,
+            sidebar: true,
             sidebar_width: 28,
             workspace_tree: false,
             dim_inactive: false,
@@ -116,7 +114,6 @@ impl Default for Config {
             theme: crate::theme::ThemeCfg::default(),
             lang: "auto".into(),
             toolbar: true,
-            toolbar_explicit: false,
             toolbar_fkeys: false,
             scroll_keys: true,
             toolbar_buttons: Vec::new(),
@@ -197,13 +194,7 @@ impl Config {
 
     pub fn load_from(p: &std::path::Path) -> Result<Config, String> {
         let s = std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?;
-        let value: toml::Value = toml::from_str(&s).map_err(|e| format!("config error: {e}"))?;
-        let toolbar_explicit = value.get("toolbar").is_some();
-        let mut config: Config = value.try_into().map_err(|e| format!("config error: {e}"))?;
-        config.toolbar_explicit = toolbar_explicit;
-        if !toolbar_explicit && config.theme.preset == "aurora" {
-            config.toolbar = false;
-        }
+        let config: Config = toml::from_str(&s).map_err(|e| format!("config error: {e}"))?;
         for template in [
             &config.pane_template,
             &config.sidebar_pane_template,
@@ -310,7 +301,6 @@ impl Config {
             "confirm-close" => self.confirm_close = parse_bool(val)?,
             "toolbar" => {
                 self.toolbar = parse_bool(val)?;
-                self.toolbar_explicit = true;
             }
             "toolbar-fkeys" => self.toolbar_fkeys = parse_bool(val)?,
             "scroll-keys" => self.scroll_keys = parse_bool(val)?,
@@ -321,9 +311,6 @@ impl Config {
             "theme" | "theme-preset" => match val {
                 "studio" | "aurora" | "terminal" | "dark" | "light" | "mono" => {
                     self.theme.preset = val.to_string();
-                    if !self.toolbar_explicit {
-                        self.toolbar = val != "aurora";
-                    }
                 }
                 _ => {
                     return Err(format!(
@@ -371,7 +358,7 @@ mod tests {
 
     #[test]
     fn aurora_toolbar_default_preserves_explicit_choice() {
-        assert!(!load_text("[theme]\npreset = 'aurora'\n").unwrap().toolbar);
+        assert!(load_text("[theme]\npreset = 'aurora'\n").unwrap().toolbar);
         assert!(
             load_text("toolbar = true\n[theme]\npreset = 'aurora'\n")
                 .unwrap()
@@ -379,11 +366,36 @@ mod tests {
         );
         let mut config = Config::default();
         config.set("theme_preset", "aurora").unwrap();
+        assert!(config.toolbar);
+        config.set("toolbar", "off").unwrap();
+        config.set("theme", "studio").unwrap();
+        config.set("theme", "aurora").unwrap();
         assert!(!config.toolbar);
+        assert!(
+            !load_text("toolbar = false\n[theme]\npreset = 'aurora'\n")
+                .unwrap()
+                .toolbar
+        );
         config.set("toolbar", "on").unwrap();
         config.set("theme", "studio").unwrap();
         config.set("theme", "aurora").unwrap();
         assert!(config.toolbar);
+    }
+
+    #[test]
+    fn sidebar_defaults_on_and_respects_explicit_off_across_themes() {
+        assert!(Config::default().sidebar);
+        assert!(load_text("").unwrap().sidebar);
+        assert!(load_text("[theme]\npreset = 'aurora'\n").unwrap().sidebar);
+        let mut config = load_text("sidebar = false\n[theme]\npreset = 'aurora'\n").unwrap();
+        assert!(!config.sidebar);
+        config.set("theme", "studio").unwrap();
+        assert!(!config.sidebar);
+        config.set("sidebar", "on").unwrap();
+        assert!(config.sidebar);
+        config.set("sidebar", "off").unwrap();
+        config.set("theme", "aurora").unwrap();
+        assert!(!config.sidebar);
     }
 
     #[test]

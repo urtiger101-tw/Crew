@@ -2,7 +2,7 @@ use super::*;
 use crate::server::{test_client, test_session, test_state};
 
 #[test]
-fn aurora_default_content_budget_is_at_least_v060() {
+fn aurora_and_studio_defaults_reserve_sidebar_and_toolbar_geometry() {
     use crate::layout::{Dir, Node};
     for (cols, rows) in [(120, 30), (80, 24)] {
         let mut old = test_state();
@@ -12,12 +12,10 @@ fn aurora_default_content_budget_is_at_least_v060() {
         new.cfg = crate::config::Config::default();
         new.cfg.set("theme", "aurora").unwrap();
         assert!(
-            !new.cfg.toolbar
-                && !new.cfg.sidebar
-                && !new.cfg.workspace_tree
-                && !new.cfg.changed_files
+            new.cfg.toolbar && new.cfg.sidebar && !new.cfg.workspace_tree && !new.cfg.changed_files
         );
         let mut session = test_session("budget", cols, rows, 1);
+        session.sidebar = new.cfg.sidebar;
         let before = old.pane_area(&session);
         let after = new.pane_area(&session);
         assert_eq!(
@@ -25,7 +23,7 @@ fn aurora_default_content_budget_is_at_least_v060() {
             Rect {
                 x: 0,
                 y: 2,
-                w: cols,
+                w: cols - 28,
                 h: rows - 3
             }
         );
@@ -33,15 +31,22 @@ fn aurora_default_content_budget_is_at_least_v060() {
             after,
             Rect {
                 x: 0,
-                y: 0,
-                w: cols,
-                h: rows - 1
+                y: 2,
+                w: cols - 28,
+                h: rows - 3
             }
         );
         assert!(
             u32::from(after.w) * u32::from(after.h) >= u32::from(before.w) * u32::from(before.h)
         );
         assert_eq!(new.tab_row(&session), rows - 1);
+        session.sidebar = false;
+        assert_eq!(new.pane_area(&session).w, cols);
+        session.sidebar = true;
+        session.cols = 48;
+        assert_eq!(new.sidebar_width(&session), 0);
+        assert_eq!(new.pane_area(&session).w, 48);
+        session.cols = cols;
         new.cfg.workspace_tree = true;
         session.rows = 3;
         assert_eq!(new.tree_width(&session), 0);

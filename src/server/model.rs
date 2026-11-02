@@ -46,6 +46,9 @@ pub type PaneParser = vt100::Parser<PaneCallbacks>;
 
 pub struct Pane {
     pub parser: PaneParser,
+    /// Frozen normal-screen history while browsing from an alternate-screen app.
+    /// The live parser continues receiving output and retaining the app's terminal modes.
+    pub history_view: Option<PaneParser>,
     pub master: Box<dyn MasterPty + Send>,
     pub writer: Box<dyn Write + Send>,
     pub child: Box<dyn Child + Send + Sync>,
@@ -84,12 +87,45 @@ pub struct Pane {
 }
 
 impl Pane {
+    pub(crate) fn view(&self) -> &PaneParser {
+        self.history_view.as_ref().unwrap_or(&self.parser)
+    }
+
+    pub(crate) fn view_mut(&mut self) -> &mut PaneParser {
+        self.history_view.as_mut().unwrap_or(&mut self.parser)
+    }
+
+    pub(crate) fn prepare_history_view(&mut self) {
+        if self.history_view.is_none()
+            && self.parser.screen().alternate_screen()
+            && self.copy.as_ref().is_none_or(|c| c.anchor.is_none())
+        {
+            let mut view = PaneParser::new_with_callbacks(
+                self.rect.h.max(2),
+                self.rect.w.max(2),
+                0,
+                PaneCallbacks::default(),
+            );
+            *view.screen_mut() = self.parser.screen().clone();
+            // Switch only the clone to its retained normal grid. DEC 47 avoids
+            // clearing either grid or restoring the live application's cursor.
+            view.process(b"\x1b[?47l");
+            self.history_view = Some(view);
+        }
+    }
+
+    pub(crate) fn leave_copy(&mut self) {
+        self.copy = None;
+        self.history_view = None;
+        self.parser.screen_mut().set_scrollback(0);
+    }
+
     /// Run a vt100 operation on this pane, containing its panics (see [`contain_vt`]).
     pub fn vt<R>(&mut self, scrollback: usize, f: impl FnOnce(&mut PaneParser) -> R) -> Option<R> {
         let (rows, cols) = (self.rect.h, self.rect.w);
         let r = contain_vt(&mut self.parser, rows, cols, scrollback, f);
         if r.is_none() {
-            self.copy = None;
+            self.leave_copy();
         }
         r
     }
