@@ -85,16 +85,22 @@ The corresponding `set auto-focus`, `set auto-focus-scope`,
 runtime. Config files also accept the hyphenated spellings. No owner config is
 changed automatically. `prefix F` toggles off/on; `prefix a` invokes manual
 next-attention, `prefix ;` / `last-pane` returns to the previous pane, including
-across sessions. `prefix b` retains the sidebar binding in both themes. Custom
-bindings override these defaults.
+across sessions. Studio uses `prefix b` for the sidebar; Aurora retains
+`prefix b` for the workspace tree and uses `prefix B` for the sidebar. The former
+`prefix a` sidebar binding now selects attention. Custom bindings override defaults.
 
 Only transitions into the existing effective Blocked or Done state enqueue work.
+Done requires a reported or detected agent; ordinary shell/build output never
+creates an automatic focus target.
 Mode blocked accepts Blocked only; mode on accepts both. There are no new status
 heuristics. Repeated levels, enabling the mode, opting a pane back in, or attaching
 after a headless event do not replay old edges. Each queued item pins an occupant
 and generation; changes of status/occupant, closure, opt-out or scope remove stale
 items. Priority is Blocked, then same-window preference, then oldest edge. A
 queued notice reuses attention text and shows the `prefix a` manual action.
+It waits for any existing message's normal timeout (3 seconds, 5 for errors)
+instead of replacing it. Manual next-attention selects the queued AF target
+first, then falls back to the existing attention cycle.
 
 Keyboard presses/repeats, paste and mouse activity reset the client's idle guard;
 resize and key-release events do not. Copy mode, prefix mode, chooser, popup,

@@ -94,6 +94,7 @@ pub struct Candidate {
     pub session: usize,
     pub window: usize,
     pub enabled: bool,
+    pub agent: bool,
     pub changes_shared_view: bool,
 }
 
@@ -119,6 +120,7 @@ pub struct Policy {
 pub fn eligible(edge: Edge, candidate: &Candidate, viewer: &Viewer, policy: Policy) -> bool {
     edge == candidate.edge
         && candidate.enabled
+        && (edge.status != Status::Done || candidate.agent)
         && edge.pane != viewer.pane
         && match policy.mode {
             Mode::Off => false,
@@ -134,16 +136,14 @@ pub fn eligible(edge: Edge, candidate: &Candidate, viewer: &Viewer, policy: Poli
         }
 }
 
-/// Pure ranking and guard boundary. The second result is the queued toast target.
-pub fn decide(
+/// Shared queue ranking for automatic scheduling and explicit attention navigation.
+fn queued_target<'a>(
     queue: &[Edge],
-    panes: &[Candidate],
+    panes: &'a [Candidate],
     viewer: &Viewer,
-    viewers: &[Viewer],
     policy: Policy,
-    now: Instant,
-) -> (Option<usize>, Option<Edge>) {
-    let target = queue
+) -> Option<&'a Candidate> {
+    queue
         .iter()
         .filter_map(|edge| panes.iter().find(|p| eligible(*edge, p, viewer, policy)))
         .min_by_key(|p| {
@@ -152,8 +152,19 @@ pub fn decide(
                 usize::from(p.session != viewer.session || p.window != viewer.window),
                 p.edge.generation,
             )
-        });
-    let Some(target) = target else {
+        })
+}
+
+/// Pure guard boundary. The second result is the queued toast target.
+pub fn decide(
+    queue: &[Edge],
+    panes: &[Candidate],
+    viewer: &Viewer,
+    viewers: &[Viewer],
+    policy: Policy,
+    now: Instant,
+) -> (Option<usize>, Option<Edge>) {
+    let Some(target) = queued_target(queue, panes, viewer, policy) else {
         return (None, None);
     };
     let held = viewers
@@ -211,32 +222,7 @@ impl State {
             idle: Duration::from_millis(self.cfg.auto_focus_idle_ms),
             dwell: Duration::from_millis(self.cfg.auto_focus_dwell_ms),
         };
-        let panes: Vec<_> = self
-            .autofocus
-            .observed
-            .iter()
-            .filter_map(|(&id, observed)| {
-                let (si, wi) = self.locate(id)?;
-                let pane = self.panes.get(&id)?;
-                let session = &self.sessions[si];
-                let window = &session.windows[wi];
-                Some(Candidate {
-                    edge: Edge {
-                        pane: id,
-                        generation: observed.generation,
-                        status: observed.status,
-                    },
-                    session: session.id,
-                    window: window.id,
-                    enabled: !pane.auto_focus_disabled
-                        && pane.host_lost.is_none()
-                        && crate::persist::restore_state(pane).is_none(),
-                    changes_shared_view: session.active != wi
-                        || window.active != id
-                        || window.zoomed,
-                })
-            })
-            .collect();
+        let panes = self.autofocus_candidates();
         let mut client_ids: Vec<_> = self.clients.keys().copied().collect();
         client_ids.sort_unstable();
         let viewers = self.autofocus_viewers();
@@ -267,7 +253,15 @@ impl State {
                 // before considering another client on the next update.
                 break;
             } else if let Some(edge) = notice {
-                let focus = &mut self.clients.get_mut(&cid).unwrap().focus;
+                let client = self.clients.get_mut(&cid).unwrap();
+                if client
+                    .message
+                    .as_ref()
+                    .is_some_and(|m| now.saturating_duration_since(m.at) < m.ttl())
+                {
+                    continue;
+                }
+                let focus = &mut client.focus;
                 if focus.notified != Some((edge.pane, edge.generation)) {
                     focus.notified = Some((edge.pane, edge.generation));
                     let lang = self.client_lang(cid);
@@ -288,6 +282,54 @@ impl State {
                 }
             }
         }
+    }
+
+    fn autofocus_candidates(&self) -> Vec<Candidate> {
+        self.autofocus
+            .observed
+            .iter()
+            .filter_map(|(&id, observed)| {
+                let (si, wi) = self.locate(id)?;
+                let pane = self.panes.get(&id)?;
+                let session = &self.sessions[si];
+                let window = &session.windows[wi];
+                Some(Candidate {
+                    edge: Edge {
+                        pane: id,
+                        generation: observed.generation,
+                        status: observed.status,
+                    },
+                    session: session.id,
+                    window: window.id,
+                    enabled: !pane.auto_focus_disabled
+                        && pane.host_lost.is_none()
+                        && crate::persist::restore_state(pane).is_none()
+                        && crate::api::agent::status(pane, &self.cfg) == observed.status,
+                    agent: pane.agent.is_some() || pane.detected_agent.is_some(),
+                    changes_shared_view: session.active != wi
+                        || window.active != id
+                        || window.zoomed,
+                })
+            })
+            .collect()
+    }
+
+    pub(crate) fn queued_autofocus_target(&self, cid: usize) -> Option<(usize, Status)> {
+        let viewer = self.autofocus_viewers().into_iter().find(|v| v.id == cid)?;
+        let panes = self.autofocus_candidates();
+        let policy = Policy {
+            mode: self.cfg.auto_focus,
+            scope: self.cfg.auto_focus_scope,
+            idle: Duration::from_millis(self.cfg.auto_focus_idle_ms),
+            dwell: Duration::from_millis(self.cfg.auto_focus_dwell_ms),
+        };
+        queued_target(
+            &self.clients.get(&cid)?.focus.queue,
+            &panes,
+            &viewer,
+            policy,
+        )
+        .map(|p| (p.edge.pane, p.edge.status))
     }
 
     fn autofocus_viewers(&self) -> Vec<Viewer> {

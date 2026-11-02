@@ -147,8 +147,8 @@ snapshot；舊 epoch 會回 `server_restarted`。事件 `pane.output` 只提供�
 - 滑鼠：點選聚焦窗格（含側邊欄列與窗格標題列）、點狀態列切換視窗、點 session 名稱開啟選單、點計數跳到需要處理的窗格、滾輪捲動；點擊會取消等待中的前綴鍵 · Mouse: click to focus panes (including sidebar rows and pane title rows), click a window label to switch windows, click the session name to open the chooser, click the counters to jump to the next pane needing attention, wheel to scroll; any click cancels a pending prefix
 - Agent 狀態處處可見：▲ 等待你（blocked）、◆ 完成未查看（done）、● 執行中（working）、○ 閒置（idle）；顯示於狀態列計數、視窗標籤、窗格標題列、側邊欄與選單，每種狀態都有符號與文字，不只靠顏色（見下方「狀態符號」）
   Agent status everywhere: ▲ blocked, ◆ done, ● working, ○ idle — in the status-bar counts, window labels, pane title rows, the sidebar and the chooser; every state has a glyph and a word, not just a color (see Status glyphs below)
-- 側邊欄（`prefix b`）：依 session 分組列出每個窗格的狀態與 blocked 訊息，適合同時監看多個 AI agent；終端機太窄時自動隱藏
-  Sidebar (`prefix b`): panes grouped by session with their state and blocked message, handy for watching several AI agents; hidden automatically when the terminal is too narrow
+- 側邊欄（studio：`prefix b`；Aurora：`prefix B`）：依 session 分組列出每個窗格的狀態與 blocked 訊息，適合同時監看多個 AI agent；終端機太窄時自動隱藏
+  Sidebar (studio: `prefix b`; Aurora: `prefix B`): panes grouped by session with their state and blocked message, handy for watching several AI agents; hidden automatically when the terminal is too narrow
 - 需要處理的窗格：`prefix Tab` / `prefix BTab` 跳到下一個／上一個等待你或完成未查看的窗格（blocked 優先，跨 session）；背景窗格變為 blocked 時顯示提示
   Next attention: `prefix Tab` / `prefix BTab` jump to the next / previous pane that needs you (blocked first, then done, across sessions); a background pane turning blocked shows a toast
 - 窗格標題列：分割視窗中，有 agent 回報或標籤的窗格顯示狀態與窗格 ID，例如 `▲ claude · blocked`（`pane-titles`）
@@ -259,7 +259,8 @@ crew set mouse off          # 任何伺服器指令皆可從命令列執行 / ru
 | `w` | 視窗切換器（類似 Alt+Tab）：只列視窗，預設選上一個用過的視窗，`w`／`Tab` 下一個、`Shift+Tab` 上一個、`Enter` 切換；`C-b w Enter` 即在最近兩個視窗間來回 Window switcher (Alt+Tab-like): window rows only, opens on the last-used window; `w`/`Tab` next, `Shift+Tab` previous, `Enter` switches, so `C-b w Enter` toggles the last two windows |
 | `(` `)` | 上一個／下一個 session Previous / next session |
 | `a` | 手動跳到需要處理的窗格 Next attention |
-| `b` | 切換側邊欄 Toggle status sidebar |
+| `b` | studio：側邊欄；Aurora：工作區樹 Studio sidebar / Aurora workspace tree |
+| `B` | Aurora：切換側邊欄 Aurora status sidebar |
 | `F` | 自動焦點 off/on 切換 Toggle auto-focus |
 | `;` | 回到自動／attention 跳轉前的窗格 Return to previous pane (`last-pane`) |
 | `r` | 重新載入設定 Reload config |
@@ -647,7 +648,8 @@ Aurora 沿用 v0.6.0 版面，將近黑底色、膠囊分頁與 agent 狀態晶�
 可在 `[theme.agent_accents]` 覆寫。分頁可拖曳排序，窗格標題可拖曳交換位置。
 窄視窗會縮成數字分頁，保留目前分頁。點擊狀態晶片可直接聚焦 agent；
 `prefix n` 跳至下一個需要注意的 agent，`prefix N` 切換下一個視窗。
-自訂按鍵優先。`prefix b` 切換左側工作區樹，`prefix a` 切換原本的右側 agent 欄，
+自訂按鍵優先。`prefix b` 切換左側工作區樹，`prefix B` 切換原本的右側 agent 欄；
+`prefix a` 改為優先跳到 AF 排隊目標，再尋找其他需處理的窗格。
 `F1` 顯示／隱藏工具列。
 
 ```toml
@@ -715,8 +717,8 @@ Overridable tokens (names as in `src/theme.rs`): `accent` `muted` `border` `bord
 優先順序：明確指定的 `dark`、`light` 或 `mono` 優先於環境變數；`NO_COLOR` 與 `TERM=dumb` 在 `studio` 和 `terminal` 時使主題進入無色模式。
 Precedence: an explicit `dark`, `light` or `mono` wins over the environment; `NO_COLOR` and `TERM=dumb` switch `studio` and `terminal` to no color, but do not affect `dark` or `light`.
 
-`studio` 為窗格的預設文字與背景套用深色底色；程式明確指定的 ANSI／RGB 顏色不受影響。要顯示既有代理側欄，可設定 `sidebar = true` 或按 `prefix a`。
-`studio` supplies dark defaults for pane text and background; explicit ANSI/RGB application colors remain unchanged. To show the existing agent sidebar, set `sidebar = true` or press `prefix a`.
+`studio` 為窗格的預設文字與背景套用深色底色；程式明確指定的 ANSI／RGB 顏色不受影響。要顯示既有代理側欄，可設定 `sidebar = true` 或按 `prefix b`。
+`studio` supplies dark defaults for pane text and background; explicit ANSI/RGB application colors remain unchanged. To show the existing agent sidebar, set `sidebar = true` or press `prefix b`.
 
 ### 無色與 ASCII 字元 Color and ASCII glyphs
 

@@ -187,10 +187,16 @@ pub fn notify_blocked(st: &mut State, pid: usize) {
     let who = pane_who(st, pid);
     let note = agent_note(st, pid);
     let prefix = st.cfg.prefix_name();
+    let now = Instant::now();
     let cids: Vec<usize> = st
         .clients
         .iter()
-        .filter(|(_, c)| c.prompt.is_none())
+        .filter(|(_, c)| {
+            c.prompt.is_none()
+                && c.message
+                    .as_ref()
+                    .is_none_or(|m| now.saturating_duration_since(m.at) >= m.ttl())
+        })
         .map(|(id, _)| *id)
         .collect();
     for cid in cids {
@@ -264,7 +270,7 @@ pub fn attach_hint(st: &mut State, cid: usize) {
     st.mark_dirty();
 }
 
-/// `C-b ? keys · C-b b agents · C-b Tab next alert`; the separator comes from the theme.
+/// `C-b ? keys · C-b b panel · C-b Tab next alert`; the separator comes from the theme.
 pub fn attach_hint_text(theme: &Theme, lang: Lang, prefix: &str) -> String {
     trf(
         lang,
@@ -371,7 +377,10 @@ impl State {
         let lang = self.client_lang(cid);
         let origin = self.active_pane(si);
         let items = attention_items(self);
-        let Some((pid, status)) = pick_attention(&items, Some(origin), backward) else {
+        let target = self
+            .queued_autofocus_target(cid)
+            .or_else(|| pick_attention(&items, Some(origin), backward));
+        let Some((pid, status)) = target else {
             self.message(cid, tr(lang, "messages.no_attention"));
             return;
         };

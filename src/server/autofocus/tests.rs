@@ -29,6 +29,7 @@ fn pane(id: usize, status: Status, generation: u64) -> Candidate {
         session: 1,
         window: 1,
         enabled: true,
+        agent: true,
         changes_shared_view: true,
     }
 }
@@ -105,6 +106,18 @@ fn priority_modes_scope_stale_occupants_optout_and_focused_targets() {
     let newer = pane(5, Status::Blocked, 4);
     let panes = [done, distant, newer, local];
     let q = panes.map(|p| p.edge);
+    assert_eq!(
+        queued_target(&q, &panes, &v, policy()).unwrap().edge.pane,
+        4
+    );
+    let plain = Candidate {
+        agent: false,
+        ..done
+    };
+    assert_eq!(
+        decide(&[plain.edge], &[plain], &v, &[v], policy(), now).0,
+        None
+    );
     assert_eq!(decide(&q, &panes, &v, &[v], policy(), now).0, Some(4));
     assert_eq!(
         decide(
@@ -218,7 +231,17 @@ fn config_defaults_aliases_and_key_overrides_are_safe() {
         assert!(errors.is_empty());
         assert_eq!(bindings["F"], "toggle-auto-focus");
         assert_eq!(bindings["a"], "next-attention");
-        assert_eq!(bindings["b"], "toggle-sidebar");
+        assert_eq!(
+            bindings["b"],
+            if theme == "aurora" {
+                "toggle-workspace-tree"
+            } else {
+                "toggle-sidebar"
+            }
+        );
+        if theme == "aurora" {
+            assert_eq!(bindings["B"], "toggle-sidebar");
+        }
         assert_eq!(bindings[";"], "last-pane");
     }
     cfg.bind.insert("F".into(), "display custom".into());

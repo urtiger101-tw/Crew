@@ -71,8 +71,8 @@ pub const ENTRIES: &[Entry] = &[
     ),
     (
         "messages.attach_hint",
-        "{prefix} ? keys {dot} {prefix} b agents {dot} {prefix} Tab next alert",
-        "{prefix} ? 按鍵 {dot} {prefix} b 代理 {dot} {prefix} Tab 下一個提醒",
+        "{prefix} ? keys {dot} {prefix} b panel {dot} {prefix} Tab next alert",
+        "{prefix} ? 按鍵 {dot} {prefix} b 面板 {dot} {prefix} Tab 下一個提醒",
     ),
     (
         "messages.session_ended",

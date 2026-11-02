@@ -531,11 +531,11 @@ fn blocked_toast_is_translated_for_zh_tw() {
 #[test]
 fn attach_hint_separator_follows_theme() {
     let ascii = attach_hint_text(&ascii_theme(), Lang::En, "C-b");
-    assert_eq!(ascii, "C-b ? keys . C-b b agents . C-b Tab next alert");
+    assert_eq!(ascii, "C-b ? keys . C-b b panel . C-b Tab next alert");
     assert!(ascii.is_ascii(), "{ascii:?}");
     assert!(attach_hint_text(&unicode_theme(), Lang::En, "C-b").contains(" · "));
     let zh = attach_hint_text(&unicode_theme(), Lang::ZhTw, "C-b");
-    assert_eq!(zh, "C-b ? 按鍵 · C-b b 代理 · C-b Tab 下一個提醒");
+    assert_eq!(zh, "C-b ? 按鍵 · C-b b 面板 · C-b Tab 下一個提醒");
 }
 
 #[test]

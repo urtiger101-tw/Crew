@@ -329,10 +329,10 @@ fn report_agent(shared: &Shared, pid: usize, mut r: Report) -> Result<Value, Api
         p.agent = Some(agent);
         st.events.record("agent.status", Some(pid), event);
         st.relayout_pane(pid);
+        st.autofocus_update(Instant::now());
         if turned_blocked {
             crate::commands::notify_blocked(&mut st, pid);
         }
-        st.autofocus_update(Instant::now());
     }
     Ok(json!({"applied": applied, "pane": pane_obj(&st, pid)?}))
 }

@@ -14,6 +14,8 @@ fn aurora_runtime_theme_updates_only_default_bindings() {
         st.bindings.get("N").map(String::as_str),
         Some("next-window")
     );
+    assert_eq!(st.bindings["b"], "toggle-workspace-tree");
+    assert_eq!(st.bindings["B"], "toggle-sidebar");
     st.exec_global(Cmd::Set("theme".into(), "studio".into()))
         .unwrap();
     assert_eq!(
@@ -21,13 +23,17 @@ fn aurora_runtime_theme_updates_only_default_bindings() {
         Some("next-window")
     );
     assert!(!st.bindings.contains_key("N"));
+    assert_eq!(st.bindings["b"], "toggle-sidebar");
+    assert!(!st.bindings.contains_key("B"));
     st.bindings.insert("n".into(), "display custom".into());
+    st.bindings.insert("b".into(), "display custom tree".into());
     st.exec_global(Cmd::Set("theme".into(), "aurora".into()))
         .unwrap();
     assert_eq!(
         st.bindings.get("n").map(String::as_str),
         Some("display custom")
     );
+    assert_eq!(st.bindings["b"], "display custom tree");
 }
 
 #[test]

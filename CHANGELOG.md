@@ -6,7 +6,12 @@
   idle/dwell/scope guards, per-pane opt-out and stale occupant/generation checks.
   Shared-session focus changes also guard every other client whose view changes.
   Add localized indicators, queued notices, prefix F/a/; navigation and persistent
-  `pane auto-focus ID on|off`. Keep prefix b for the sidebar; auto jumps unzoom
+  `pane auto-focus ID on|off`. Done jumps require a reported or detected agent;
+  ordinary shell/build output does not steal focus. Keep recent messages until
+  their normal timeout, and let prefix a select the queued target first.
+  Prefix a replaces the former sidebar shortcut; studio keeps prefix b for the
+  sidebar. Aurora restores prefix b for the workspace tree and uses prefix B
+  for the sidebar; custom bindings still win. Auto jumps unzoom
   the target and never send keys or text.
 
 - Add five tmux layout presets, `select-layout`, `next-layout`, prefix Space and
@@ -14,10 +19,13 @@
   `pane.layout` bridge requests. Preserve pane IDs, processes, focus and history;
   multi-pane layout selection unzooms the window. Persist the selected tree and
   cycle position in backward-compatible version-1 snapshots.
+- Clear the saved layout cycle position after a manual split, pane close or
+  swap, so next-layout starts again at even-horizontal.
 - Keep pane bodies nonzero at constrained sizes by omitting only necessary split
   separators. A single-pane layout request is a complete no-op.
-- Remove Windows verbatim drive/UNC prefixes from displayed pane cwd values and
-  their JSON representation, while retaining native paths for process/file I/O.
+- JSON change: pane `cwd` now omits Windows verbatim drive/UNC prefixes
+  (`\\?\D:\...` becomes `D:\...`, `\\?\UNC\...` becomes `\\...`).
+  Display uses the same form; native paths for process/file I/O are retained.
 
 ## 0.6.0 — Agent recovery and terminal UX (2026-11-02)
 

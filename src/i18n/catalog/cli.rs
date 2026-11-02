@@ -74,7 +74,8 @@ Config: $CREW_CONFIG or <config_dir>/crew/config.toml"#,
   ,          rename window        $          rename session
   s          session chooser      ( )        prev/next session
   w          window switcher: opens on the last-used window; w/Tab next, Enter switch
-  a          next attention       b          toggle sidebar
+  a          queued/next attention  b        sidebar (Aurora: workspace tree)
+  B          Aurora sidebar
   F          auto-focus off/on    ;          return to prior pane
   r          reload config
   ?          list keys            d          detach
@@ -101,7 +102,8 @@ Custom bindings: [bind] in config.toml, or `bind-key KEY COMMAND` at the : promp
   ,          重新命名視窗          $          重新命名工作階段
   s          工作階段選單          ( )        上一個／下一個工作階段
   w          視窗切換器：預設選上一個用過的視窗；w／Tab 下一個，Enter 切換
-  a          下一個需處理的窗格    b          切換側邊欄
+  a          排隊／下一個需處理窗格  b        側邊欄（Aurora：工作區樹）
+  B          Aurora 側邊欄
   F          自動焦點關閉／開啟    ;          回到上一個窗格
   r          重新載入設定
   ?          列出按鍵              d          離開（detach）

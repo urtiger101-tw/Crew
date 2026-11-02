@@ -249,6 +249,8 @@ impl Config {
             if self.theme.preset == "aurora" {
                 m.insert("n".into(), "next-attention".into());
                 m.insert("N".into(), "next-window".into());
+                m.insert("b".into(), "toggle-workspace-tree".into());
+                m.insert("B".into(), "toggle-sidebar".into());
             }
         }
         for u in &self.unbind {

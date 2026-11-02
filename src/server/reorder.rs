@@ -19,6 +19,7 @@ impl State {
         let clients = remember_clients(self);
         let w = &mut self.sessions[si].windows[wi];
         w.layout = w.layout.swapped(first, second);
+        w.layout_preset = None;
         let tab = w.id;
         let session = self.sessions[si].name.clone();
         for c in self.clients.values_mut().filter(|c| c.session == session) {
@@ -55,16 +56,22 @@ mod tests {
             a: Box::new(Node::Leaf(1)),
             b: Box::new(Node::Leaf(2)),
         };
+        s.windows[0].layout_preset = Some(crate::layout::Preset::Tiled);
         st.sessions.push(s);
         st.sessions.push(test_session("other", 120, 30, 3));
         assert!(st.swap_panes(1, 3).is_err());
         assert!(st.swap_panes(1, 99).is_err());
         assert_eq!(st.sessions[0].windows[0].panes(), vec![1, 2]);
         assert_eq!(st.swap_panes(1, 1), Ok(false));
+        assert_eq!(
+            st.sessions[0].windows[0].layout_preset,
+            Some(crate::layout::Preset::Tiled)
+        );
         let before = st.visible_rects(&st.sessions[0], &st.sessions[0].windows[0]);
         assert_eq!(st.swap_panes(1, 2), Ok(true));
         assert_eq!(st.sessions[0].windows[0].panes(), vec![2, 1]);
         assert_eq!(st.sessions[0].windows[0].active, 1);
+        assert_eq!(st.sessions[0].windows[0].layout_preset, None);
         let after = st.visible_rects(&st.sessions[0], &st.sessions[0].windows[0]);
         assert_eq!(before[0].1, after[0].1);
         assert_eq!(before[1].1, after[1].1);

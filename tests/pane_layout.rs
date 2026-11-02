@@ -257,6 +257,25 @@ fn private_api_layout_preserves_processes_ids_focus_history_and_saved_tree() {
             .unwrap()
             .contains(&json!("pane.layout"))
     );
+    server.json(&["pane", "split", "p3", "--direction", "down"]);
+    assert!(
+        server.json(&["api", "snapshot"])["sessions"][0]["windows"][0]["layout_name"].is_null()
+    );
+    server.output(&["next-layout"]);
+    assert_eq!(
+        server.json(&["api", "snapshot"])["sessions"][0]["windows"][0]["layout_name"],
+        "even-horizontal"
+    );
+    server.json(&["pane", "close", "p5"]);
+    server.json(&[
+        "pane",
+        "layout",
+        "tiled",
+        "--session",
+        "layout-private",
+        "--window",
+        "0",
+    ]);
     // Save via this fixture's private daemon only. The snapshot preserves cycle state.
     server.json(&["server", "stop"]);
     let saved: Value =

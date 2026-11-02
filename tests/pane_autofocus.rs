@@ -37,7 +37,7 @@ impl PrivateServer {
             .to_string_lossy()
             .replace('\\', "/");
         let config = json!({"persist":true,"toolbar":false,"sidebar":false,"pane_titles":"off","mouse":false,
-            "pane_utf8":false,"agent_detection":false,"lang":"en","auto_focus":"on",
+            "pane_utf8":false,"agent_detection":false,"lang":"en","hints":false,"auto_focus":"on",
             "shell":format!("\"{python}\" -u \"{fixture}\"")});
         std::fs::write(root.join("config.toml"), toml::to_string(&config).unwrap()).unwrap();
         let leaf = || json!({"Leaf":{"cwd":root,"env":{"CREW_AF_TEST_ROOT":root},"label":"fake","agent":null,"agent_name":null,"resume":[]}});
@@ -360,6 +360,8 @@ fn fake_agent_edges_queue_toast_release_and_never_send_input() {
     server.wait_focus("p2");
     client.last_pane();
     server.wait_focus("p1");
+    // Resizing this reported agent during the split can itself produce a Done edge.
+    server.json(&["pane", "auto-focus", "p2", "off"]);
     let fresh = server.json(&["pane", "split", "p2", "--direction", "down"]);
     assert_eq!(fresh["pane"]["pane_id"], "p3");
     server.json(&[
@@ -389,7 +391,62 @@ fn fake_agent_edges_queue_toast_release_and_never_send_input() {
         server.json(&["pane", "get", "p3"])["pane"]["status"],
         "working"
     );
-    server.wait_focus("p3"); // Only the existing busy→idle tick creates this Done edge.
+    std::thread::sleep(Duration::from_millis(4200));
+    assert_eq!(
+        server.json(&["pane", "get", "p3"])["pane"]["status"],
+        "done"
+    );
+    assert_eq!(
+        server.focused(),
+        "p1",
+        "plain shell output must not auto-focus"
+    );
+    server.json(&["pane", "auto-focus", "p2", "on"]);
+    client.event(Event::Key(KeyEvent::new(
+        KeyCode::Char('b'),
+        KeyModifiers::CONTROL,
+    )));
+    client.event(Event::Key(KeyEvent::new(
+        KeyCode::Char('~'),
+        KeyModifiers::NONE,
+    )));
+    client.wait_text("is not bound", Duration::from_secs(2));
+    for (id, state) in [
+        ("p3", "working"),
+        ("p3", "blocked"),
+        ("p2", "working"),
+        ("p2", "blocked"),
+    ] {
+        server.json(&[
+            "pane",
+            "report-agent",
+            id,
+            "--source",
+            "af-fixture",
+            "--agent",
+            "fake",
+            "--state",
+            state,
+        ]);
+    }
+    while let Ok(bytes) = client.output.recv_timeout(Duration::from_millis(150)) {
+        client.screen.process(&bytes);
+    }
+    assert!(
+        client.screen.screen().contents().contains("is not bound"),
+        "recent error was overwritten: {}",
+        client.screen.screen().contents()
+    );
+    assert_eq!(server.focused(), "p1");
+    client.event(Event::Key(KeyEvent::new(
+        KeyCode::Char('b'),
+        KeyModifiers::CONTROL,
+    )));
+    client.event(Event::Key(KeyEvent::new(
+        KeyCode::Char('a'),
+        KeyModifiers::NONE,
+    )));
+    server.wait_focus("p3"); // Queued oldest p3 wins; cyclic pick_attention would choose p2.
     for id in ["p1", "p2", "p3"] {
         assert!(
             std::fs::read(server.root.join(format!("{id}.input")))

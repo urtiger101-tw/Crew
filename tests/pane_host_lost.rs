@@ -245,6 +245,8 @@ fn host_lost_keeps_surviving_grandchild_after_intermediate_shell_exits() {
         "surviving child was not retained: {pane}"
     );
 
+    // Keep the close reply separate from the daemon's final-session shutdown.
+    server.run(&["workspace", "create", "keeper"]);
     server.run(&["pane", "close", "p1"]);
     let deadline = Instant::now() + Duration::from_secs(5);
     while processes().iter().any(|p| p.pid == tree.ping) {
@@ -276,6 +278,8 @@ fn host_lost_keeps_descendants_when_helper_exits_before_detection() {
         assert!(table.iter().any(|p| p.pid == tree.ping), "ping was lost");
         wait_for_host_lost(&server, tree.ping);
 
+        // Keep the close reply separate from the daemon's final-session shutdown.
+        server.run(&["workspace", "create", "keeper"]);
         server.run(&["pane", "close", "p1"]);
         let deadline = Instant::now() + Duration::from_secs(5);
         while processes()

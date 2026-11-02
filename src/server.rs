@@ -903,6 +903,7 @@ impl State {
         )?;
         let w = &mut self.sessions[si].windows[wi];
         w.layout = preview.layout;
+        w.layout_preset = None;
         w.zoomed = false;
         if opts.focus {
             self.focus_pane(id);
@@ -1049,6 +1050,7 @@ impl State {
             }
         } else {
             w.layout.remove(pid);
+            w.layout_preset = None;
             if w.active == pid {
                 w.active = w.panes()[0];
             }
@@ -1316,7 +1318,7 @@ impl State {
                 self.cfg.set(&k, &v)?;
                 if let Some(old_defaults) = old_defaults {
                     let new_defaults = self.cfg.bindings().0;
-                    for key in ["n", "N", "b"] {
+                    for key in ["n", "N", "b", "B"] {
                         if self.bindings.get(key) == old_defaults.get(key) {
                             if let Some(value) = new_defaults.get(key) {
                                 self.bindings.insert(key.into(), value.clone());

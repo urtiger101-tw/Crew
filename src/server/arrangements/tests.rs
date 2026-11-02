@@ -56,6 +56,25 @@ fn default_layout_keys_are_unique_and_custom_bindings_win() {
 }
 
 #[test]
+fn closing_a_pane_restarts_layout_cycle() {
+    let mut st = test_state();
+    let mut session = test_session("private", 120, 30, 1);
+    session.windows[0].layout = Preset::Tiled.build(&[1, 2, 3]).unwrap();
+    session.windows[0].layout_preset = Some(Preset::Tiled);
+    st.sessions.push(session);
+    st.clients.insert(1, test_client("private"));
+    st.pane_exited(3);
+    assert_eq!(st.sessions[0].windows[0].layout_preset, None);
+    let shared = Arc::new(Mutex::new(st));
+    let mut st = shared.lock().unwrap();
+    st.exec(&shared, 1, Cmd::NextLayout).unwrap();
+    assert_eq!(
+        st.sessions[0].windows[0].layout_preset,
+        Some(Preset::EvenHorizontal)
+    );
+}
+
+#[test]
 fn layouts_resize_each_existing_pty_at_most_once_without_input_or_history_reset() {
     use portable_pty::{Child, ChildKiller, ExitStatus, MasterPty, PtySize};
     use std::io::{Read, Write};
