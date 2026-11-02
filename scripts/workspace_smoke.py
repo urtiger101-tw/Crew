@@ -7,6 +7,7 @@ Usage: python scripts/workspace_smoke.py [path-to-crew]
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -55,8 +56,15 @@ def main():
 
         def wait_for_shell(pid):
             if WIN:
-                ready = output(pid, r"PS [^\r\n]*>")
-                assert ready.get("matched") is True, f"PowerShell prompt not ready: {ready}"
+                deadline = time.monotonic() + 15
+                while time.monotonic() < deadline:
+                    ready = run("pane", "read", pid)
+                    # A split pane can wrap the cwd prompt across terminal rows.
+                    text = ready.stdout.replace("\r", "").replace("\n", "")
+                    if ready.returncode == 0 and re.search(r"PS [^>]*>", text):
+                        return
+                    time.sleep(0.05)
+                raise AssertionError(f"PowerShell prompt not ready: {ready.stdout}")
 
         def print_command(text):
             return "Write-Output '" + text + "'" if WIN else "printf '%s\\n' '" + text + "'"
@@ -67,7 +75,8 @@ def main():
         def startup_command(text, index):
             if not WIN:
                 return print_command(text)
-            quote = lambda value: "'" + str(value).replace("'", "''") + "'"
+            def quote(value):
+                return "'" + str(value).replace("'", "''") + "'"
             # A single native argv must preserve quotes, dollars, Unicode and newlines.
             return ("$startupValue = " + quote(startup_values[index]) + "\n"
                     "[IO.File]::AppendAllText(" + quote(counter) + ", $startupValue + [Environment]::NewLine)\n"

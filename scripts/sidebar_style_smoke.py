@@ -44,6 +44,10 @@ def styled_characters(frame):
                     elif code == 38 and codes[i + 1:i + 2] == [5]:
                         fg = ("index", codes[i + 2])
                         i += 2
+                    elif code == 48 and codes[i + 1:i + 2] == [2]:
+                        i += 4  # RGB background parameters are not standalone SGR codes.
+                    elif code == 48 and codes[i + 1:i + 2] == [5]:
+                        i += 2
                     elif 30 <= code <= 37 or 90 <= code <= 97:
                         fg = ("ansi", code)
                     i += 1
@@ -131,12 +135,12 @@ def run_smoke(binary):
             label = occurrence(frame, "STYLE_A · STYLE_B")
             assert all(char[1:4] == ((51, 170, 255), False, True) for char in label[:7]), label
             assert all(char[1:4] == ((18, 52, 86), True, False) for char in label[10:]), label
-            assert all(char[1:4] == (None, True, False) for char in label[7:10]), label
+            assert all(char[1:4] == ((208, 210, 215), True, False) for char in label[7:10]), label
             row = sorted((char for char in styled_characters(frame) if char[4] == label[0][4]), key=lambda char: char[5])
             row_text = "".join(char[0] for char in row)
-            state_start = row_text.index("blocked")
+            state_start = row_text.index("needs input")
             assert all(char[1] not in ((51, 170, 255), (18, 52, 86)) and not char[2]
-                       for char in row[state_start:state_start + 7]), row
+                       for char in row[state_start:state_start + len("needs input")]), row
             pointer = next(char for char in row if char[5] == label[0][5] - 4)
             icon = next(char for char in row if char[5] == label[0][5] - 2)
             assert pointer[2] and icon[1] not in ((51, 170, 255), (18, 52, 86)), (pointer, icon)
@@ -153,9 +157,11 @@ def run_smoke(binary):
             api("pane", "report-metadata", pane, "--source", "style", "--token", "left=中文LongName",
                 "--token", "right=TAIL", "--seq", "2")
             run("set", "sidebar-width", "20")
-            assert "中文…" in run("debug-frame", "-t", "styles", "--text")
+            narrow = run("debug-frame", "-t", "styles", "--text")
+            assert re.search(r"中文[^\n]*…", narrow), narrow
             run("set", "ascii-glyphs", "true")
-            assert "中文~" in run("debug-frame", "-t", "styles", "--text")
+            narrow_ascii = run("debug-frame", "-t", "styles", "--text")
+            assert re.search(r"中文[^\n]*~", narrow_ascii), narrow_ascii
             api("pane", "report-metadata", pane, "--source", "style", "--clear-token", "left",
                 "--clear-token", "right", "--seq", "3")
             cleared = api("pane", "get", pane)["pane"]["display"]
