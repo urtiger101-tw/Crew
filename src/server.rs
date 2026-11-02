@@ -1545,10 +1545,18 @@ fn event_may_spawn(st: &State, cid: usize, event: &crossterm::event::Event) -> b
                     .and_then(|name| st.bindings.get(&name).cloned())
                     .or_else(|| st.toolbar_fkey_line(si, key));
                 return line.is_some_and(|line| {
-                    matches!(
-                        commands::parse(&line),
-                        Ok(Cmd::SplitWindow { .. } | Cmd::NewWindow { .. })
-                    )
+                    let mut command = commands::parse(&line);
+                    loop {
+                        match command {
+                            Ok(Cmd::SplitWindow { .. } | Cmd::NewWindow { .. }) => break true,
+                            Ok(Cmd::ConfirmBefore { command: inner, .. })
+                                if !st.cfg.confirm_close =>
+                            {
+                                command = commands::parse(&inner);
+                            }
+                            _ => break false,
+                        }
+                    }
                 });
             }
             st.cfg.toolbar_fkeys && st.toolbar_fkey_line(si, key).is_some()
@@ -1559,18 +1567,7 @@ fn event_may_spawn(st: &State, cid: usize, event: &crossterm::event::Event) -> b
                 && matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left)) =>
         {
             let session = &st.sessions[si];
-            if crate::render::toolbar_hit_at(st, client, session, mouse.column, mouse.row).is_some()
-            {
-                return true;
-            }
-            if session.rows.checked_sub(1) == Some(mouse.row) {
-                let regions = crate::render::status_regions(st, client, session);
-                let inside = |span: Option<(u16, u16)>| {
-                    span.is_some_and(|(start, end)| mouse.column >= start && mouse.column < end)
-                };
-                return inside(regions.session) || inside(regions.counts);
-            }
-            false
+            crate::render::toolbar_hit_at(st, client, session, mouse.column, mouse.row).is_some()
         }
         _ => false,
     }

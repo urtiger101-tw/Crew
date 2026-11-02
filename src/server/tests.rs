@@ -49,6 +49,63 @@ fn ordinary_input_and_key_release_do_not_prepare_plugin_paths() {
 }
 
 #[test]
+fn confirm_binding_prepares_only_when_it_can_immediately_spawn() {
+    use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+    let mut state = super::test_state();
+    state.cfg.confirm_close = false;
+    state.sessions.push(super::test_session("t", 120, 30, 7));
+    state.clients.insert(1, super::test_client("t"));
+    state.clients.get_mut(&1).unwrap().prefix = true;
+    let event = Event::Key(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE));
+    for line in [
+        "confirm-before new-window",
+        "confirm-before split-window -h",
+        "confirm-before 'confirm-before new-window'",
+    ] {
+        state.bindings.insert("n".into(), line.into());
+        assert!(super::event_may_spawn(&state, 1, &event), "{line}");
+    }
+    state
+        .bindings
+        .insert("n".into(), "confirm-before kill-pane".into());
+    assert!(!super::event_may_spawn(&state, 1, &event));
+    state
+        .bindings
+        .insert("n".into(), "confirm-before new-window".into());
+    state.cfg.confirm_close = true;
+    assert!(!super::event_may_spawn(&state, 1, &event));
+    state.clients.get_mut(&1).unwrap().prompt = Some(super::Prompt::confirm(
+        "Create window?".into(),
+        "new-window".into(),
+    ));
+    let yes = Event::Key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+    assert!(super::event_may_spawn(&state, 1, &yes));
+}
+
+#[test]
+fn status_chip_click_does_not_prepare_plugin_paths() {
+    use crossterm::event::{Event, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+    let mut state = super::test_state();
+    state.cfg.mouse = true;
+    state.sessions.push(super::test_session("t", 120, 30, 7));
+    state.clients.insert(1, super::test_client("t"));
+    let region = crate::render::status_regions(&state, &state.clients[&1], &state.sessions[0])
+        .session
+        .expect("session chip");
+    let event = Event::Mouse(MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column: region.0,
+        row: 29,
+        modifiers: KeyModifiers::NONE,
+    });
+    let shared = std::sync::Arc::new(std::sync::Mutex::new(state));
+    let before = super::plugin_paths::prepare_count();
+    assert!(super::handle_client_event(&shared, 1, event));
+    assert_eq!(super::plugin_paths::prepare_count(), before);
+    assert!(shared.lock().unwrap().clients[&1].chooser.is_some());
+}
+
+#[test]
 fn epoch_attachment_rejects_reused_ids_and_preserves_same_daemon_ids() {
     let mut st = super::test_state();
     let epoch = st.events.epoch().to_owned();

@@ -246,6 +246,49 @@ impl Drop for Server {
 }
 
 #[test]
+fn confirm_before_bindings_prepare_paths_when_confirmation_is_disabled() {
+    let server = Server::new();
+    let config = fs::read_to_string(&server.config).unwrap();
+    fs::write(
+        &server.config,
+        format!(
+            "{config}confirm_close = false\n[bind]\nn = 'confirm-before new-window'\ns = 'confirm-before split-window -h'\nd = 'confirm-before \"confirm-before new-window\"'\n"
+        ),
+    )
+    .unwrap();
+    let (_, bin) = server.plugin("a.alpha", "crewfixturealpha");
+    server.run(&["plugin", "enable", "a.alpha"]);
+    server.run(&["workspace", "create", "confirm-binding"]);
+    let mut client = server.attach("confirm-binding");
+    use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+    for (key, tag) in [
+        ('n', "confirm-new"),
+        ('s', "confirm-split"),
+        ('d', "confirm-nested"),
+    ] {
+        let before = server.newest_pane();
+        for key in [
+            KeyEvent::new(KeyCode::Char('b'), KeyModifiers::CONTROL),
+            KeyEvent::new(KeyCode::Char(key), KeyModifiers::NONE),
+        ] {
+            send_frame(&mut client, json!({"Event": Event::Key(key)}));
+        }
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let created = loop {
+            let latest = server.newest_pane();
+            if latest != before {
+                break latest;
+            }
+            assert!(Instant::now() < deadline, "{tag} did not create a pane");
+            std::thread::sleep(Duration::from_millis(50));
+        };
+        assert_eq!(server.pane(&created)["plugin_path_dirs"], json!([bin]));
+        assert_eq!(server.path(&created, tag).first(), Some(&bin));
+        assert!(server.has_command(&created, "crewfixturealpha", &format!("{tag}-command")));
+    }
+}
+
+#[test]
 fn fresh_panes_get_enabled_paths_and_record_their_own_snapshots() {
     let server = Server::new();
     let (manifest_a, bin_a) = server.plugin("a.alpha", "crewfixturealpha");

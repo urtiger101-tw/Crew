@@ -93,6 +93,7 @@ of unchanged managed modules; check `crew plugin list --json` rather than
 assuming that every module is disabled afterward.
 Older agentcmd installation stages remain on disk so open panes keep their
 commands. Remove an old stage manually only after no pane still uses it.
+Interrupting or killing the installer can leave an unregistered stage behind.
 
 Enabling a module adds its executable directory only to newly spawned panes,
 including workspace-created, tab-created and split panes. Running panes keep

@@ -318,7 +318,7 @@ fn register_modules(
     version: &str,
     utilities: &[Utility],
     registry: &mut store::Registry,
-) -> Result<Vec<Value>> {
+) -> Result<(Vec<Value>, Vec<String>)> {
     let enabled = preflight(home, registry, utilities)?;
     let root_stage = stage.root.clone();
     let shared = root_stage.join("shared");
@@ -387,11 +387,15 @@ fn register_modules(
     if license.is_file() {
         fs::copy(license, root_stage.join("LICENSE"))?;
     }
-    remove_build_artifacts(&root_stage)?;
     store::write(home, &next)?;
     *registry = next;
     stage.registered = true;
-    Ok(result)
+    let cleanup_warnings = remove_build_artifacts(&root_stage)
+        .err()
+        .map(|error| format!("cannot clean new stage {}: {error:#}", root_stage.display()))
+        .into_iter()
+        .collect();
+    Ok((result, cleanup_warnings))
 }
 
 fn git(root: &Path, config: &Path, args: &[OsString]) -> Result<String> {
@@ -572,6 +576,28 @@ pub fn install(home: &Path, source: Option<&Path>, offline: bool, yes: bool) -> 
     )?)?;
     let enabled = preflight(home, &registry, &utilities)?;
     let target = stage_path.join("target");
+    let rustc = Command::new(std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into()))
+        .current_dir(child_path(&checkout)?)
+        .arg("-vV")
+        .output()
+        .context("rustc is required to determine the agentcmd build target")?;
+    ensure!(
+        rustc.status.success(),
+        "rustc -vV failed: {}",
+        String::from_utf8_lossy(&rustc.stderr)
+    );
+    let rustc_output = std::str::from_utf8(&rustc.stdout).context("rustc output is not UTF-8")?;
+    let host = rustc_output
+        .lines()
+        .find_map(|line| line.strip_prefix("host: "))
+        .context("rustc -vV did not report a host target")?;
+    ensure!(
+        !host.is_empty()
+            && host
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_' | b'.')),
+        "rustc reported an invalid host target"
+    );
     let mut build_arguments = vec![
         "cargo".to_owned(),
         "build".to_owned(),
@@ -579,6 +605,8 @@ pub fn install(home: &Path, source: Option<&Path>, offline: bool, yes: bool) -> 
         "--release".to_owned(),
         "--bin".to_owned(),
         "agentcmd".to_owned(),
+        "--target".to_owned(),
+        host.to_owned(),
         "--target-dir".to_owned(),
         child_path(&target)?.to_string_lossy().into_owned(),
     ];
@@ -614,6 +642,8 @@ pub fn install(home: &Path, source: Option<&Path>, offline: bool, yes: bool) -> 
     build
         .current_dir(child_path(&checkout)?)
         .args(["build", "--locked", "--release", "--bin", "agentcmd"])
+        .arg("--target")
+        .arg(host)
         .arg("--target-dir")
         .arg(child_path(&target)?)
         .env_remove("CARGO_BUILD_TARGET");
@@ -643,7 +673,10 @@ pub fn install(home: &Path, source: Option<&Path>, offline: bool, yes: bool) -> 
         "agentcmd cargo build failed; evidence: {}",
         log.display()
     );
-    let binary = target.join("release").join(executable_name("agentcmd"));
+    let binary = target
+        .join(host)
+        .join("release")
+        .join(executable_name("agentcmd"));
     let mut list_command = Command::new(child_path(&binary)?);
     list_command.arg("--list");
     let listed = process::capture(list_command, Duration::from_secs(30), 64 * 1024)
@@ -654,7 +687,7 @@ pub fn install(home: &Path, source: Option<&Path>, offline: bool, yes: bool) -> 
         serde_json::to_string(&listed)?
     );
     validate_list(&utilities, &listed.stdout)?;
-    let modules = register_modules(
+    let (modules, mut cleanup_warnings) = register_modules(
         home,
         &mut stage,
         &binary,
@@ -662,7 +695,7 @@ pub fn install(home: &Path, source: Option<&Path>, offline: bool, yes: bool) -> 
         &utilities,
         &mut registry,
     )?;
-    let cleanup_warnings = clean_old_build_artifacts(home, &stage_path);
+    cleanup_warnings.extend(clean_old_build_artifacts(home, &stage_path));
     Ok(
         json!({"revision":REVISION,"source":UPSTREAM_URL,"local_repository":local_source,"offline":offline,
         "shared_binary":stage_path.join("shared").join(executable_name("agentcmd")),"build_log":log,
@@ -822,6 +855,48 @@ mod tests {
         assert!(!old_root.join("target").exists());
         assert!(old_root.join("shared").is_dir());
         assert!(old_root.join("modules/agentcmd.wc/bin").is_dir());
+    }
+
+    #[test]
+    fn build_artifact_cleanup_failure_does_not_abort_registration() {
+        let fixture = Fixture::new();
+        let utilities = parse_registry(UPSTREAM).unwrap();
+        let (mut stage, binary) = fixture.stage();
+        let blocked = stage.root.join("source.tar");
+        #[cfg(windows)]
+        let locked = {
+            use std::os::windows::fs::OpenOptionsExt;
+            fs::write(&blocked, b"temporary archive").unwrap();
+            fs::OpenOptions::new()
+                .read(true)
+                .share_mode(0)
+                .open(&blocked)
+                .unwrap()
+        };
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("unrelated", &blocked).unwrap();
+        let mut registry = store::Registry::default();
+        let result = register_modules(
+            &fixture.0,
+            &mut stage,
+            &binary,
+            "0.1.0",
+            &utilities,
+            &mut registry,
+        );
+        let (modules, warnings) = result.expect("cleanup failure must not abort registration");
+        assert_eq!(modules.len(), 46);
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("cannot clean new stage"));
+        assert_eq!(registry.plugins.len(), 46);
+        assert_eq!(store::read(&fixture.0).unwrap().plugins.len(), 46);
+        assert!(stage.registered);
+        assert!(stage.root.join("modules/agentcmd.wc/bin").is_dir());
+        let root = stage.root.clone();
+        drop(stage);
+        assert!(root.join("modules/agentcmd.wc/bin").is_dir());
+        #[cfg(windows)]
+        drop(locked);
     }
 
     #[test]
