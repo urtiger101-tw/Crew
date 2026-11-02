@@ -74,24 +74,20 @@ fn tab_runs(st: &State, c: &Client, s: &Session, theme: &Theme) -> Vec<Run> {
     } else {
         String::new()
     };
-    // A single pastel brand pill. All other chrome uses semantic solid colors.
-    let mut offset = 0;
-    for cluster in super::display_clusters(&brand) {
-        let width = cluster.width() as u16;
-        let color = theme.palette[(usize::from(offset) * 6 / brand.width().max(1)).min(5)];
+    if !brand.is_empty() {
+        let width = brand.width() as u16;
         runs.push(run(
             x,
             y,
-            cluster,
+            brand,
             (
                 theme.c(theme.base_bg),
-                theme.c(color),
+                theme.c(theme.palette[5]),
                 if theme.mono { BOLD | INVERSE } else { BOLD },
             ),
             Some(Hit::Chooser),
         ));
         x += width;
-        offset += width;
     }
     x = x.saturating_add(1).min(end);
     let mut labels = Vec::new();
@@ -113,24 +109,20 @@ fn tab_runs(st: &State, c: &Client, s: &Session, theme: &Theme) -> Vec<Run> {
         0
     };
     for (wi, label) in labels.iter().enumerate().skip(start) {
-        let text = format!("({label})");
+        let text = format!(" {label} ");
         let width = text.width() as u16;
         if x.saturating_add(width) > end {
             break;
         }
         let active = wi == s.active;
-        let identity = st
-            .panes
-            .get(&s.windows[wi].active)
-            .and_then(crate::semantic::identity);
-        let fg = identity.map_or(theme.c(theme.bar_fg), |name| theme.agent_accent(name));
+        let fg = theme.c(if active { theme.bar_fg } else { theme.muted });
         let bg = theme.c(if active {
-            theme.raised_bg
+            theme.surface_bg
         } else {
             theme.base_bg
         });
         let attrs = if active {
-            BOLD | UNDER | if theme.mono { INVERSE } else { 0 }
+            BOLD | if theme.mono { INVERSE } else { 0 }
         } else {
             0
         };
@@ -154,26 +146,51 @@ fn footer_runs(st: &State, c: &Client, s: &Session, theme: &Theme) -> Vec<Run> {
         .saturating_add(1);
     let clock = clock_text();
     let warning = doctor_warning(st, c);
-    let right = format!("{}{} ", if warning { "! doctor  " } else { "" }, clock);
-    let right_x = s.cols.saturating_sub(right.width() as u16);
+    let clock = format!(" {clock} ");
+    let doctor = " ! doctor ";
+    let right_width = clock.width() + if warning { doctor.width() + 1 } else { 0 };
+    let right_x = s.cols.saturating_sub(right_width as u16);
     if right_x > x + 4 {
+        if warning {
+            runs.push(run(
+                right_x,
+                y,
+                doctor,
+                (theme.c(theme.base_bg), theme.c(theme.warn), BOLD),
+                Some(Hit::Doctor),
+            ));
+        }
         runs.push(run(
-            right_x,
+            s.cols.saturating_sub(clock.width() as u16),
             y,
-            right,
-            (
-                theme.c(if warning { theme.warn } else { theme.muted }),
-                bg,
-                0,
-            ),
-            warning.then_some(Hit::Doctor),
+            clock,
+            (theme.c(theme.muted), bg, 0),
+            None,
         ));
     }
-    let end = if right_x > x + 4 {
+    let mut end = if right_x > x + 4 {
         right_x.saturating_sub(1)
     } else {
         s.cols
     };
+    if st.cfg.hints {
+        let help = format!(
+            "{} {}",
+            st.cfg.prefix_name(),
+            tr(lang, "render.status.help")
+        );
+        let width = help.width() as u16;
+        if end.saturating_sub(x) >= width + 2 {
+            runs.push(run(
+                end - width,
+                y,
+                help,
+                (theme.c(theme.muted), bg, 0),
+                None,
+            ));
+            end -= width + 2;
+        }
+    }
     if let Some(message) = &c.message {
         runs.push(run(
             x,
@@ -259,7 +276,7 @@ fn footer_runs(st: &State, c: &Client, s: &Session, theme: &Theme) -> Vec<Run> {
         } else {
             theme.surface_bg
         });
-        let attrs = if presentation.bold { BOLD } else { 0 } | if active { UNDER } else { 0 };
+        let attrs = if presentation.bold { BOLD } else { 0 };
         runs.push(run(
             x,
             y,
@@ -285,19 +302,6 @@ fn footer_runs(st: &State, c: &Client, s: &Session, theme: &Theme) -> Vec<Run> {
             y,
             cut(&text, usize::from(end.saturating_sub(x)), theme.g.ellipsis),
             (theme.c(theme.warn), bg, BOLD),
-            Some(Hit::Attention),
-        ));
-    } else if agents.is_empty() {
-        let text = format!(
-            "{} n {}",
-            st.cfg.prefix_name(),
-            tr(lang, "render.aurora.attention")
-        );
-        runs.push(run(
-            x,
-            y,
-            cut(&text, usize::from(end.saturating_sub(x)), theme.g.ellipsis),
-            (theme.c(theme.muted), bg, 0),
             Some(Hit::Attention),
         ));
     }
@@ -418,25 +422,27 @@ pub(super) fn draw_title(g: &mut Grid, cx: &Ctx, pid: usize, r: Rect) {
     let p = &cx.st.panes[&pid];
     let t = &cx.theme;
     let active = pid == cx.s.windows[cx.s.active].active;
-    let identity = crate::semantic::identity(p);
-    let accent = identity.map_or(t.c(t.accent), |name| t.agent_accent(name));
+    let accent = t.c(t.palette[4]);
     let state = crate::semantic::pane(p, &cx.st.cfg);
-    let bg = t.c(if active { t.raised_bg } else { t.surface_bg });
-    let attrs = if active { UNDER | BOLD } else { 0 };
-    g.text(
-        r.x,
-        r.y,
-        r.w,
-        &" ".repeat(usize::from(r.w)),
-        accent,
-        bg,
-        attrs,
-    );
+    let bg = t.c(if active { t.raised_bg } else { t.base_bg });
+    let fg = t.c(if active { t.bar_fg } else { t.muted });
+    let attrs = if active { BOLD } else { 0 };
+    g.text(r.x, r.y, r.w, &" ".repeat(usize::from(r.w)), fg, bg, attrs);
     let display = crate::metadata::display::pane(cx.st, pid, cx.lang);
-    let name = display.as_ref().map_or_else(
-        || super::panes::title_name(p.agent.as_ref(), p.label.as_deref(), cx.lang),
-        |d| d.title.as_str(),
-    );
+    let window = &cx.s.windows[cx.s.active];
+    let shell = cx.st.shell_name();
+    let name = display.as_ref().map_or(shell.as_str(), |d| {
+        if d.title != window.name
+            || p.label.is_some()
+            || !cx.st.cfg.pane_template.is_empty()
+            || d.presentation.title.is_some()
+            || d.agent.is_some()
+        {
+            d.title.as_str()
+        } else {
+            shell.as_str()
+        }
+    });
     let id = format!(" p{pid} ");
     let budget = usize::from(r.w).saturating_sub(id.width() + 5);
     let suffix = if crate::persist::restore_state(p) == Some("restored-shell") {
@@ -444,24 +450,40 @@ pub(super) fn draw_title(g: &mut Grid, cx: &Ctx, pid: usize, r: Rect) {
     } else {
         String::new()
     };
-    let label = cut(
-        &format!("{name}  {}{suffix}", state.word(cx.lang)),
-        budget,
-        t.g.ellipsis,
-    );
-    let fg = if !active && cx.st.cfg.dim_inactive {
-        t.c(t.muted)
+    let cwd = p
+        .cwd
+        .as_deref()
+        .and_then(|cwd| std::path::Path::new(cwd).file_name())
+        .map(|name| name.to_string_lossy());
+    let mut label = format!("{name} {} {}{suffix}", t.g.dot, state.word(cx.lang));
+    if let Some(cwd) = cwd {
+        label.push_str(&format!(" {} {cwd}", t.g.dot));
+    }
+    let label = cut(&label, budget, t.g.ellipsis);
+    let pointer = if active {
+        if t.ascii { "|" } else { "▍" }
     } else {
-        accent
+        " "
     };
-    let pointer = if active { t.g.pointer } else { " " };
-    g.text(r.x, r.y, r.w, pointer, accent, bg, attrs);
     g.text(
-        r.x.saturating_add(2),
+        r.x.saturating_add(1),
         r.y,
-        r.w.saturating_sub(2),
+        r.w.saturating_sub(1),
+        pointer,
+        accent,
+        bg,
+        attrs,
+    );
+    g.text(
+        r.x.saturating_add(3),
+        r.y,
+        r.w.saturating_sub(3),
         state.glyph(t.ascii),
-        t.state_color(state.color_role),
+        if active {
+            t.state_color(state.color_role)
+        } else {
+            fg
+        },
         bg,
         attrs | if state.bold { BOLD } else { 0 },
     );

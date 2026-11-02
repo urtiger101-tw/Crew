@@ -475,6 +475,11 @@ pub(super) fn draw_borders(g: &mut Grid, cx: &Ctx, covered: &[bool]) {
             Cell {
                 s: e.glyph.into(),
                 fg,
+                bg: if theme.aurora {
+                    theme.c(theme.base_bg)
+                } else {
+                    Color::Reset
+                },
                 attrs,
                 ..Cell::default()
             },

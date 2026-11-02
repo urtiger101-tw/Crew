@@ -1,0 +1,17 @@
+# 107 claude -> codex : 主人評「畫面很醜」，請做視覺修正（仍維持 v0.6.0 版面配置）
+依 new-120x30.png 逐點指出問題，請全部修正：
+1. 截圖環境：comparison 用 conhost + 細明體類字型，筆畫歪斜、字距鬆散，本身就很醜。改用 Windows Terminal + Cascadia Mono（或 Cascadia Code）重拍；比較圖也一律以 WT 為準。
+2. 窗格標題列 "> ○ Main  idle ... p1"：
+   - 雙空格、字距不齊（"Main  idle"），請統一單空格並以 " · " 分隔。
+   - 標題顯示 session 名 Main 毫無資訊量，改顯示 pane 標題／agent 名（claude、codex、pwsh）+ 狀態，其次 cwd basename。
+   - 作用中窗格：整列 surface #1d1f23 底 + 左側 accent 色塊（▍，sky #8ab4f8）+ 文字 #c9ccd3；非作用中：底同 base #111214、文字 muted #6b7079。現在作用中只有半截底線、非作用中反而有灰帶，正好相反，請改。
+   - 底線若保留，須貫穿整個窗格寬度，或乾脆拿掉。
+   - 右端 p1/p2 改用 muted 色，並與左端各留 1 格 padding。
+3. 底部狀態列：
+   - 彩虹漸層 "Compare" pill 對比太低、看不清字：改為單色 pill（lavender #b59cf2 底 + base #111214 粗體字），左右各 1 格 padding。
+   - "(0 Main)" 括號不美觀：改為分頁 chip "0 Main"，目前分頁用 surface 底 + text 色，其他分頁 muted。
+   - 常駐的鍵位提示太擁擠：只留 "C-b ? help"，其餘移入 help。
+   - 右側 "! doctor" 以 peach 小 chip 呈現，時間用 muted。
+4. 分隔線：中間直線用 hairline #2a2c31，與標題列交接處使用 ┬／│ 連接，不要斷開。
+5. 整體：全畫面背景統一 base #111214（目前窗格內是近黑 #0c0c0c，與標題列色差明顯）——若是子程式背景造成，至少 Crew 自繪區要一致。
+驗收：WT + Cascadia 下重拍 120x30 / 200x50 新舊對照，另拍一張 Claude+Codex 實際跑著的畫面；不得縮小 pane 可用區（120x30 仍 >=120x29）。測試、獨立審查、commit、push 照舊由你負責；不重啟共用 daemon。完成後寫 108-codex.crl。

@@ -113,6 +113,40 @@ fn narrow_unicode_tabs_keep_active_visible_and_hit_cells_match() {
 }
 
 #[test]
+fn quiet_footer_has_solid_brand_chips_and_separate_doctor_target() {
+    let mut st = test_state();
+    st.cfg.set("theme", "aurora").unwrap();
+    st.cfg.hints = true;
+    st.sessions.push(test_session("Compare", 120, 30, 1));
+    st.sessions[0].windows[0].name = "Main".into();
+    let s = &st.sessions[0];
+    let mut c = test_client(&s.name);
+    c.env.version = Some([0, 0, 0]);
+    let theme = Theme::resolve(&st.cfg.theme, &c.env);
+    let runs = footer_runs(&st, &c, s, &theme);
+    let brand = runs.iter().find(|r| r.hit == Some(Hit::Chooser)).unwrap();
+    assert_eq!(brand.text, " Compare ");
+    assert_eq!(
+        brand.style,
+        (theme.c(theme.base_bg), theme.c(theme.palette[5]), BOLD)
+    );
+    let tab = runs.iter().find(|r| r.hit == Some(Hit::Tab(0, 0))).unwrap();
+    assert_eq!(tab.text, " 0 Main ");
+    assert_eq!(tab.style.1, theme.c(theme.surface_bg));
+    for cell in tab.x..tab.x + tab.text.width() as u16 {
+        assert_eq!(hit_at(&st, &c, s, cell, tab.y), Some(Hit::Tab(0, 0)));
+    }
+    let doctor = runs.iter().find(|r| r.hit == Some(Hit::Doctor)).unwrap();
+    assert_eq!(doctor.text, " ! doctor ");
+    assert_eq!(doctor.style.1, theme.c(theme.warn));
+    let clock = runs.iter().find(|r| r.text.contains(':')).unwrap();
+    assert_eq!(clock.style.0, theme.c(theme.muted));
+    assert_eq!(hit_at(&st, &c, s, clock.x, clock.y), None);
+    assert!(runs.iter().any(|r| r.text == "C-b ? help"));
+    assert!(!runs.iter().any(|r| r.text.contains("next attention")));
+}
+
+#[test]
 fn footer_focus_badge_and_restored_shell_use_live_pane_evidence() {
     use crate::api::{AgentInfo, Status};
     use std::sync::{Arc, Mutex};
@@ -141,12 +175,82 @@ fn footer_focus_badge_and_restored_shell_use_live_pane_evidence() {
     st.new_session(&shared, Some("aurora".into()), 120, 30, None)
         .unwrap();
     let pid = st.active_pane(0);
+    st.sessions[0].windows[0].name = "Main".into();
+    st.split_pane(&shared, pid, crate::layout::Dir::H, Default::default())
+        .unwrap();
+    drop(st);
+    // Let the shell startup queries drain before exercising and closing both PTYs.
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    let mut st = crate::api::lock(&shared);
+    for pane in st.panes.values_mut() {
+        pane.cwd = Some("/work/crew".into());
+    }
+    {
+        let s = &st.sessions[0];
+        let c = test_client(&s.name);
+        let theme = Theme::resolve(&st.cfg.theme, &c.env);
+        let cx = Ctx {
+            st: &st,
+            s,
+            c: &c,
+            w: s.cols,
+            h: s.rows,
+            rects: st.visible_rects(s, &s.windows[0]),
+            area: st.pane_area(s),
+            theme: theme.clone(),
+            lang: Lang::En,
+        };
+        let mut grid = Grid {
+            w: s.cols,
+            h: s.rows,
+            cells: vec![super::super::Cell::default(); usize::from(s.cols * s.rows)],
+        };
+        let mut covered = vec![false; grid.cells.len()];
+        super::super::panes::draw_panes(&mut grid, &cx, &mut covered);
+        super::super::panes::draw_borders(&mut grid, &cx, &covered);
+        let titles = st.title_rows(s, &s.windows[0]);
+        for (id, r) in &titles {
+            let active = *id == pid;
+            let cells =
+                &grid.cells[usize::from(r.y * grid.w + r.x)..usize::from(r.y * grid.w + r.x + r.w)];
+            assert!(cells.iter().all(|cell| cell.bg
+                == theme.c(if active {
+                    theme.raised_bg
+                } else {
+                    theme.base_bg
+                })));
+            assert!(cells.iter().all(|cell| cell.attrs & UNDER == 0));
+            let text: String = cells.iter().map(|cell| cell.s.as_str()).collect();
+            assert!(text.contains(&format!("{} · ", st.shell_name())));
+            assert!(text.contains(" · crew"));
+            assert!(!text.contains("Main"));
+            assert!(text.ends_with(&format!(" p{id} ")));
+            assert_eq!(cells[0].s, " ");
+            assert_eq!(cells[1].s, if active { "▍" } else { " " });
+            assert_eq!(
+                cells[5].fg,
+                theme.c(if active { theme.bar_fg } else { theme.muted })
+            );
+            assert_eq!(cells[usize::from(r.w) - 2].fg, theme.c(theme.muted));
+        }
+        let left = titles.iter().map(|(_, r)| *r).min_by_key(|r| r.x).unwrap();
+        for y in left.y..cx.area.y + cx.area.h {
+            let separator = &grid.cells[usize::from(y * grid.w + left.x + left.w)];
+            assert_eq!(separator.s, "│");
+            assert_eq!(separator.fg, theme.c(theme.border));
+            assert_eq!(separator.bg, theme.c(theme.base_bg));
+        }
+    }
     let p = st.panes.get_mut(&pid).unwrap();
     p.restored_shell = true;
     assert_eq!(crate::persist::restore_state(p), Some("restored-shell"));
     p.attention = true;
     p.last_output = std::time::Instant::now() - std::time::Duration::from_secs(10);
-    assert!(crate::commands::attention_items(&st).is_empty());
+    assert!(
+        !crate::commands::attention_items(&st)
+            .iter()
+            .any(|(id, _)| *id == pid)
+    );
     assert_eq!(
         crate::semantic::pane(&st.panes[&pid], &st.cfg).word(Lang::En),
         "restored shell"

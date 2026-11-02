@@ -616,7 +616,7 @@ impl State {
         Ok(id)
     }
 
-    fn shell_name(&self) -> String {
+    pub(crate) fn shell_name(&self) -> String {
         let s = self.cfg.default_shell();
         let first = commands::tokenize(&s)
             .into_iter()
@@ -1977,7 +1977,7 @@ fn handle_conn(shared: Shared, cid: usize, stream: interprocess::local_socket::S
                 },
             );
             let first = commands::first_attach();
-            if first && st.cfg.hints {
+            if first && st.cfg.hints && !st.aurora() {
                 commands::attach_hint(&mut st, cid);
             }
             st.mark_dirty();
