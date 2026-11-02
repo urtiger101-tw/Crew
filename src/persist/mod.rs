@@ -574,6 +574,7 @@ fn apply_leaf(st: &mut State, id: usize, leaf: &LeafSnap, names: &mut HashSet<St
         return;
     };
     p.label = leaf.label.clone();
+    p.auto_focus_disabled = leaf.auto_focus_disabled;
     let Some(kind) = leaf.agent.clone() else {
         p.restored_shell = true;
         return;

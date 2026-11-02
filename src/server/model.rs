@@ -54,6 +54,7 @@ pub struct Pane {
     /// Start of an explicitly reported completion; visual decay does not change API status.
     pub done_since: Option<Instant>,
     pub attention: bool,
+    pub auto_focus_disabled: bool,
     /// when the pane was spawned; startup output does not count as unseen work
     pub started: Instant,
     pub copy: Option<CopyState>,
@@ -285,6 +286,7 @@ pub enum Drag {
 }
 
 pub struct Client {
+    pub focus: super::autofocus::ClientFocus,
     pub session: String,
     pub sender: Box<dyn Write + Send>,
     pub prefix: bool,

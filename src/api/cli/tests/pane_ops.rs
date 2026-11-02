@@ -3,6 +3,27 @@ use super::{is_err, run, run_at};
 use crate::api::{Direction, ReadSource, Request, Target, ZoomMode};
 
 #[test]
+fn pane_auto_focus_validates_explicit_target_and_mode_and_roundtrips() {
+    for (mode, enabled) in [("on", true), ("off", false)] {
+        let request = run(&["pane", "auto-focus", "p2", mode]).unwrap();
+        assert_eq!(request, Request::PaneAutoFocus { pane: 2, enabled });
+        assert_eq!(
+            serde_json::from_value::<Request>(serde_json::to_value(&request).unwrap()).unwrap(),
+            request
+        );
+    }
+    for bad in [
+        vec!["pane", "auto-focus"],
+        vec!["pane", "auto-focus", "p2"],
+        vec!["pane", "auto-focus", "bad", "on"],
+        vec!["pane", "auto-focus", "p2", "blocked"],
+        vec!["pane", "auto-focus", "p2", "on", "extra"],
+    ] {
+        assert!(is_err(&bad), "{bad:?}");
+    }
+}
+
+#[test]
 fn pane_layout_validates_names_and_window_session_targets() {
     for layout in crate::layout::Preset::ALL {
         let request = run_at(

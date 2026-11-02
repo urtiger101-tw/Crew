@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add opt-in edge-triggered auto-focus with off/blocked/on modes, configurable
+  idle/dwell/scope guards, per-pane opt-out and stale occupant/generation checks.
+  Shared-session focus changes also guard every other client whose view changes.
+  Add localized indicators, queued notices, prefix F/a/; navigation and persistent
+  `pane auto-focus ID on|off`. Keep prefix b for the sidebar; auto jumps unzoom
+  the target and never send keys or text.
+
 - Add five tmux layout presets, `select-layout`, `next-layout`, prefix Space and
   M-1..M-5, plus JSON `pane layout NAME [--window N] [--session NAME]` and
   `pane.layout` bridge requests. Preserve pane IDs, processes, focus and history;

@@ -10,6 +10,14 @@ use serde_json::json;
 
 pub(super) fn layout_op(shared: &Shared, req: Request) -> ApiResult {
     match req {
+        Request::PaneAutoFocus { pane, enabled } => {
+            let mut st = lock(shared);
+            let pid = resolve_pane(&st, Some(pane))?;
+            st.panes.get_mut(&pid).unwrap().auto_focus_disabled = !enabled;
+            st.autofocus_update(std::time::Instant::now());
+            st.mark_dirty();
+            pane_reply(&st, pid)
+        }
         Request::PaneSwap { pane, target } => {
             let mut st = lock(shared);
             let source = resolve_pane(&st, Some(pane))?;

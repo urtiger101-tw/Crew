@@ -22,6 +22,14 @@ pub struct ToolbarButton {
 #[derive(Deserialize, Debug, Clone)]
 #[serde(default)]
 pub struct Config {
+    #[serde(alias = "auto-focus")]
+    pub auto_focus: crate::server::autofocus::Mode,
+    #[serde(alias = "auto-focus-scope")]
+    pub auto_focus_scope: crate::server::autofocus::Scope,
+    #[serde(alias = "auto-focus-idle-ms")]
+    pub auto_focus_idle_ms: u64,
+    #[serde(alias = "auto-focus-dwell-ms")]
+    pub auto_focus_dwell_ms: u64,
     /// Prefix key, e.g. "C-b", "C-a"
     pub prefix: String,
     /// Shell to launch in new panes (default: $SHELL / powershell)
@@ -85,6 +93,10 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Config {
+            auto_focus: crate::server::autofocus::Mode::Off,
+            auto_focus_scope: crate::server::autofocus::Scope::Session,
+            auto_focus_idle_ms: 2500,
+            auto_focus_dwell_ms: 4000,
             prefix: "C-b".into(),
             shell: None,
             pane_utf8: true,
@@ -237,7 +249,6 @@ impl Config {
             if self.theme.preset == "aurora" {
                 m.insert("n".into(), "next-attention".into());
                 m.insert("N".into(), "next-window".into());
-                m.insert("b".into(), "toggle-workspace-tree".into());
             }
         }
         for u in &self.unbind {
@@ -263,6 +274,32 @@ impl Config {
                 .map_err(|_| format!("expected number, got {v}"))
         };
         match key.replace('_', "-").as_str() {
+            "auto-focus" => {
+                self.auto_focus = match val {
+                    "off" => crate::server::autofocus::Mode::Off,
+                    "blocked" => crate::server::autofocus::Mode::Blocked,
+                    "on" => crate::server::autofocus::Mode::On,
+                    _ => return Err("auto-focus: expected off|blocked|on".into()),
+                }
+            }
+            "auto-focus-scope" => {
+                self.auto_focus_scope = match val {
+                    "window" => crate::server::autofocus::Scope::Window,
+                    "session" => crate::server::autofocus::Scope::Session,
+                    "all" => crate::server::autofocus::Scope::All,
+                    _ => return Err("auto-focus-scope: expected window|session|all".into()),
+                }
+            }
+            "auto-focus-idle-ms" => {
+                self.auto_focus_idle_ms = val
+                    .parse()
+                    .map_err(|_| "auto-focus-idle-ms: expected milliseconds")?
+            }
+            "auto-focus-dwell-ms" => {
+                self.auto_focus_dwell_ms = val
+                    .parse()
+                    .map_err(|_| "auto-focus-dwell-ms: expected milliseconds")?
+            }
             "prefix" => {
                 normalize_key(val)?;
                 self.prefix = val.to_string()

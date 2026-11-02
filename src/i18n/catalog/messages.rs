@@ -9,6 +9,16 @@ use super::super::Entry;
 
 pub const ENTRIES: &[Entry] = &[
     (
+        "messages.auto_focus_queued",
+        "{pane} {attention} - {prefix} a to jump",
+        "{pane} {attention}，按 {prefix} a 跳轉",
+    ),
+    (
+        "messages.no_prior_pane",
+        "no previous pane",
+        "沒有上一個窗格",
+    ),
+    (
         "messages.resume_requested",
         "saved resume command requested; waiting for an agent report",
         "已送出保存的續接指令，等待代理回報",
@@ -61,8 +71,8 @@ pub const ENTRIES: &[Entry] = &[
     ),
     (
         "messages.attach_hint",
-        "{prefix} ? keys {dot} {prefix} a agents {dot} {prefix} Tab next alert",
-        "{prefix} ? 按鍵 {dot} {prefix} a 代理 {dot} {prefix} Tab 下一個提醒",
+        "{prefix} ? keys {dot} {prefix} b agents {dot} {prefix} Tab next alert",
+        "{prefix} ? 按鍵 {dot} {prefix} b 代理 {dot} {prefix} Tab 下一個提醒",
     ),
     (
         "messages.session_ended",

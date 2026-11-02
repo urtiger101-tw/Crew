@@ -74,7 +74,9 @@ Config: $CREW_CONFIG or <config_dir>/crew/config.toml"#,
   ,          rename window        $          rename session
   s          session chooser      ( )        prev/next session
   w          window switcher: opens on the last-used window; w/Tab next, Enter switch
-  a  or b    toggle sidebar       r          reload config
+  a          next attention       b          toggle sidebar
+  F          auto-focus off/on    ;          return to prior pane
+  r          reload config
   ?          list keys            d          detach
   Ctrl-b     send prefix to the program
 Options (`set NAME VALUE` or config.toml):
@@ -99,7 +101,9 @@ Custom bindings: [bind] in config.toml, or `bind-key KEY COMMAND` at the : promp
   ,          重新命名視窗          $          重新命名工作階段
   s          工作階段選單          ( )        上一個／下一個工作階段
   w          視窗切換器：預設選上一個用過的視窗；w／Tab 下一個，Enter 切換
-  a  或 b    切換側邊欄            r          重新載入設定
+  a          下一個需處理的窗格    b          切換側邊欄
+  F          自動焦點關閉／開啟    ;          回到上一個窗格
+  r          重新載入設定
   ?          列出按鍵              d          離開（detach）
   Ctrl-b     把前綴鍵送給程式
 選項 Options（`set NAME VALUE` 或 config.toml）：
@@ -133,6 +137,7 @@ pane focus <id>
 pane focus --direction left|right|up|down [--pane ID | --current]
 pane zoom [TARGET] [--toggle | --on | --off]
 pane layout <name> [--window N] [--session NAME]
+pane auto-focus <id> on|off
 pane rename <id> <label>  |  pane rename <id> --clear
 pane close <id>
 pane read <id> [--source visible|recent] [--lines N]
@@ -177,6 +182,7 @@ pane focus <id>
 pane focus --direction left|right|up|down [--pane ID | --current]
 pane zoom [TARGET] [--toggle | --on | --off]
 pane layout <name> [--window N] [--session NAME]
+pane auto-focus <id> on|off
 pane rename <id> <label>  |  pane rename <id> --clear
 pane close <id>
 pane read <id> [--source visible|recent] [--lines N]

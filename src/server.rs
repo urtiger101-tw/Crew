@@ -17,6 +17,7 @@ use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
 mod arrangements;
+pub(crate) mod autofocus;
 pub(crate) mod chrome;
 pub(crate) mod host;
 mod model;
@@ -26,6 +27,7 @@ mod reorder;
 pub use model::*;
 
 pub struct State {
+    pub autofocus: autofocus::Tracker,
     pub chrome: chrome::Cache,
     pub diagnostics: serde_json::Value,
     pub events: crate::events::Journal,
@@ -112,6 +114,7 @@ pub(crate) fn test_state() -> State {
     let (bindings, _) = cfg.bindings();
     let (notify, _) = mpsc::channel();
     State {
+        autofocus: Default::default(),
         chrome: chrome::Cache::default(),
         diagnostics: crate::doctor::snapshot(),
         events: crate::events::Journal::default(),
@@ -162,6 +165,7 @@ pub(crate) fn test_session(name: &str, cols: u16, rows: u16, pane: usize) -> Ses
 #[cfg(test)]
 pub(crate) fn test_client(session: &str) -> Client {
     Client {
+        focus: Default::default(),
         session: session.into(),
         sender: Box::new(std::io::sink()),
         prefix: false,
@@ -536,6 +540,7 @@ impl State {
             last_output: Instant::now(),
             done_since: None,
             attention: false,
+            auto_focus_disabled: false,
             started: Instant::now(),
             copy: None,
             agent: None,
@@ -604,6 +609,7 @@ impl State {
                         }
                         st.events
                             .record("pane.output", Some(id), serde_json::json!({"bytes": n}));
+                        st.autofocus_update(Instant::now());
                         st.dirty = true;
                         let _ = st.notify.send(());
                     }
@@ -1330,6 +1336,7 @@ impl State {
                     }
                 }
                 self.relayout_all();
+                self.autofocus_update(Instant::now());
             }
             Cmd::BindKey(k, c) => {
                 self.bindings.insert(k, c);
@@ -1371,6 +1378,14 @@ impl State {
             }
             Cmd::NextAttention { backward } => {
                 commands::headless_attention(self, backward)?;
+            }
+            Cmd::ToggleAutoFocus => {
+                let next = if self.cfg.auto_focus == autofocus::Mode::Off {
+                    "on"
+                } else {
+                    "off"
+                };
+                self.exec_global(Cmd::Set("auto-focus".into(), next.into()))?;
             }
             Cmd::SelectLayout(_) | Cmd::NextLayout => {
                 let si = self.target_session(None)?;
@@ -1462,6 +1477,7 @@ impl State {
                 self.kill_session(s);
             }
             Cmd::NextAttention { backward } => self.next_attention(cid, si, backward),
+            Cmd::LastPane => self.last_pane(cid),
             Cmd::ConfirmBefore { prompt, command } => {
                 if !self.cfg.confirm_close {
                     // confirm-close off: the command runs at once, as if typed
@@ -1991,6 +2007,7 @@ fn handle_conn(shared: Shared, cid: usize, stream: interprocess::local_socket::S
             st.clients.insert(
                 cid,
                 Client {
+                    focus: Default::default(),
                     session: name,
                     sender: Box::new(w),
                     prefix: false,
@@ -2042,6 +2059,7 @@ pub fn run() -> Result<()> {
     let cfg = Config::load();
     let (bindings, _) = cfg.bindings();
     let shared: Shared = Arc::new(Mutex::new(State {
+        autofocus: Default::default(),
         chrome: chrome::Cache::default(),
         diagnostics: crate::doctor::snapshot(),
         events: crate::events::Journal::default(),
@@ -2179,6 +2197,7 @@ pub fn run() -> Result<()> {
             if !st.dirty && !tick {
                 continue;
             }
+            st.autofocus_update(Instant::now());
             st.dirty = false;
             st.track_window_mru();
             // clear attention for panes being looked at

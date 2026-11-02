@@ -63,6 +63,7 @@ pub fn handle(shared: &Shared, req: Request) -> ApiResult {
         | Request::PaneFocusDirection { .. }
         | Request::PaneZoom { .. }
         | Request::PaneLayout { .. }
+        | Request::PaneAutoFocus { .. }
         | Request::PaneRename { .. }
         | Request::PaneClose { .. } => layout::layout_op(shared, req),
         Request::PaneRead { .. }

@@ -161,6 +161,7 @@ fn layouts_resize_each_existing_pty_at_most_once_without_input_or_history_reset(
                 last_output: Instant::now(),
                 done_since: None,
                 attention: false,
+                auto_focus_disabled: false,
                 started: Instant::now(),
                 copy: Some(crate::copy::CopyState {
                     cx: 0,

@@ -16,6 +16,7 @@ fn plain_leaf(id: usize) -> LeafSnap {
 fn lookup(id: usize) -> LeafSnap {
     if id == 2 {
         LeafSnap {
+            auto_focus_disabled: false,
             cwd: Some("/work/api".into()),
             env: Default::default(),
             label: Some("api".into()),
@@ -135,6 +136,26 @@ fn json_roundtrip_of_three_pane_tree() {
         back.sessions[0].windows[0].layout,
         snap.sessions[0].windows[0].layout
     );
+}
+
+#[test]
+fn pane_auto_focus_optout_roundtrips_and_old_snapshots_default_enabled() {
+    let old = serde_json::to_string(&LeafSnap::default()).unwrap();
+    assert!(!old.contains("auto_focus_disabled"));
+    assert!(
+        !serde_json::from_str::<LeafSnap>(&old)
+            .unwrap()
+            .auto_focus_disabled
+    );
+    let leaf = LeafSnap {
+        auto_focus_disabled: true,
+        ..LeafSnap::default()
+    };
+    let json = serde_json::to_string(&leaf).unwrap();
+    assert!(json.contains("\"auto_focus_disabled\":true"));
+    assert_eq!(serde_json::from_str::<LeafSnap>(&json).unwrap(), leaf);
+    let snap = snapshot_of(&[three_pane_session()], &|_| leaf.clone());
+    assert_eq!(parse_snapshot(&serialize(&snap).unwrap()).unwrap(), snap);
 }
 
 #[test]

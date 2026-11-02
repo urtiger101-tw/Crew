@@ -14,7 +14,7 @@ D:/Crew-layout，feat/select-layout，Sol xhigh author獨占此工作樹產品sr
 
 ## 第二部分：auto-focus（依賴第一部分本機commit）
 
-Terra xhigh先只讀調查134的status/client/input/UI/config邊界，提供必要文件所有權與接線設計，不改產品；第一部分source frozen並由lead commit後，建立feat/auto-focus（堆疊在feat/select-layout）及新工作樹，再交給Terra獨占產品實作，Sol停止寫Crew。預設off，不改主人config；主人restart時由Claude設定。
+Terra xhigh已完成134的status/client/input/UI/config唯讀設計；因Terra正執行新增的SigmaUX，改由Sol在第一部分source frozen及lead commit ca0d226後，於新D:/Crew-autofocus的feat/auto-focus獨占產品實作。該分支已堆疊在feat/select-layout。Terra不改Crew產品，非作者review由獨立實例完成。預設off，不先改主人config；137授權lead於通過gates/review並推送後的restart8設定。
 
 規格完整依134：既有status pipeline的Blocked/Done edge；client個別typing guard2500ms、dwell4000ms、copy/menu/confirm/prompt禁止搶焦點；priorityqueue blocked先、同window優先、scopewindow/session/all；drop stale、optout、no-clientno-op；jump只換focus不送keys/text；zoom/last-pane行為需明示；prefixF切換及prefixa手動attention需先查衝突；AF狀態列en/zh-TW。純決策函式與tabletests涵蓋所有guard、edge/level、scope/zoom/mode；隔離fakeagent server測試focus與toast。不得新增status detectionheuristics。
 

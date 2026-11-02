@@ -264,7 +264,7 @@ pub fn attach_hint(st: &mut State, cid: usize) {
     st.mark_dirty();
 }
 
-/// `C-b ? keys · C-b a agents · C-b Tab next alert`; the separator comes from the theme.
+/// `C-b ? keys · C-b b agents · C-b Tab next alert`; the separator comes from the theme.
 pub fn attach_hint_text(theme: &Theme, lang: Lang, prefix: &str) -> String {
     trf(
         lang,
@@ -299,6 +299,7 @@ pub fn debug_frame(st: &mut State, target: Option<&str>, o: &FrameOpts) -> Resul
         None
     };
     let mut c = Client {
+        focus: Default::default(),
         session: name,
         sender: Box::new(io::sink()),
         prefix: o.prefix,
@@ -374,14 +375,8 @@ impl State {
             self.message(cid, tr(lang, "messages.no_attention"));
             return;
         };
-        let Some((nsi, _)) = self.locate(pid) else {
-            return;
-        };
         // a session switch is a full redraw: pay it only when the target is another session
-        if nsi != si {
-            self.switch_session(cid, nsi);
-        }
-        self.focus_pane(pid);
+        self.autofocus_jump(cid, pid, false, Instant::now());
         let theme = self.client_theme(cid);
         let text = attention_text(self, pid, status, &theme, lang);
         self.message(cid, text);

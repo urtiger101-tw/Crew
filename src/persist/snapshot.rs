@@ -58,6 +58,8 @@ pub struct WindowSnap {
 /// Per-pane data kept for a leaf. Serialized as the `Leaf` variant's body.
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
 pub struct LeafSnap {
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub auto_focus_disabled: bool,
     pub cwd: Option<String>,
     #[serde(default)]
     pub env: BTreeMap<String, String>,
@@ -332,6 +334,7 @@ fn leaf_of(pane: Option<&Pane>) -> LeafSnap {
     };
     let agent = p.agent.as_ref();
     LeafSnap {
+        auto_focus_disabled: p.auto_focus_disabled,
         cwd: live_cwd(p),
         env: p.env.clone(),
         label: p.label.clone(),

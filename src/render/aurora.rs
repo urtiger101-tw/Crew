@@ -173,6 +173,15 @@ fn footer_runs(st: &State, c: &Client, s: &Session, theme: &Theme) -> Vec<Run> {
     } else {
         s.cols
     };
+    let badge = crate::server::autofocus::indicator(st.cfg.auto_focus, lang);
+    if !badge.is_empty() {
+        let label = format!("{badge} ");
+        if end.saturating_sub(x) >= label.width() as u16 {
+            let width = label.width() as u16;
+            runs.push(run(x, y, label, (theme.c(theme.accent), bg, BOLD), None));
+            x += width;
+        }
+    }
     if st.cfg.hints {
         let help = format!(
             "{} {}",

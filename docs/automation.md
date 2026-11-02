@@ -75,6 +75,51 @@ running daemon; restart remains an explicitly authorized operation.
 
 ## Explicit agent lifecycle
 
+### Optional automatic focus
+
+Auto-focus defaults to off. Configure `auto_focus = "off"|"blocked"|"on"`,
+`auto_focus_scope = "window"|"session"|"all"` (default session),
+`auto_focus_idle_ms = 2500`, and `auto_focus_dwell_ms = 4000`.
+The corresponding `set auto-focus`, `set auto-focus-scope`,
+`set auto-focus-idle-ms`, and `set auto-focus-dwell-ms` options take effect at
+runtime. Config files also accept the hyphenated spellings. No owner config is
+changed automatically. `prefix F` toggles off/on; `prefix a` invokes manual
+next-attention, `prefix ;` / `last-pane` returns to the previous pane, including
+across sessions. `prefix b` retains the sidebar binding in both themes. Custom
+bindings override these defaults.
+
+Only transitions into the existing effective Blocked or Done state enqueue work.
+Mode blocked accepts Blocked only; mode on accepts both. There are no new status
+heuristics. Repeated levels, enabling the mode, opting a pane back in, or attaching
+after a headless event do not replay old edges. Each queued item pins an occupant
+and generation; changes of status/occupant, closure, opt-out or scope remove stale
+items. Priority is Blocked, then same-window preference, then oldest edge. A
+queued notice reuses attention text and shows the `prefix a` manual action.
+
+Keyboard presses/repeats, paste and mouse activity reset the client's idle guard;
+resize and key-release events do not. Copy mode, prefix mode, chooser, popup,
+prompt/confirmation and active drag gestures defer automatic jumps. The dwell
+clock starts after a successful automatic jump. A focused target is ignored.
+Jumps switch focus/session and unzoom the target window; no keys or text are
+sent, no process is respawned, and scrollback remains owned by its pane. Manual
+next-attention/last-pane are explicit requests and bypass automatic guards.
+
+Crew's current pane/window focus is shared by a session, not an independent
+viewport per client. Decisions and queues are per client, but a proposed jump
+also checks typing, dwell and view-mode guards on **every other attached client
+whose shared view would change**. Otherwise the proposal waits. A jump updates
+the affected clients' dwell/prior-pane state together. A client in an unrelated
+session is not disturbed. Without clients the scheduler changes no focus and
+stores no pending jumps.
+
+`crew pane auto-focus p2 off` opts a noisy pane out; `on` opts it back in. The
+setting appears as `auto_focus` in pane JSON and persists as an optional
+`auto_focus_disabled` field in version-1 leaf snapshots; absent means enabled.
+The bridge method is `pane.auto-focus` with the same CLI arguments. Runtime
+queues, clocks and prior-pane pointers are not persisted. Status bars in both
+studio and Aurora show AF / AF:blocked (自焦 / 自焦:待回應 in zh-TW). Existing
+status/event API semantics remain unchanged; no new protocol events are added.
+
 Workspace and tab ordering is available through `workspace move TARGET --index N`
 and `tab move TARGET --index N [--workspace TARGET]`. `N` is a slot in the original
 ordered list, from zero through its length. The operation preserves IDs and live

@@ -468,8 +468,8 @@ fn which_key_width_40_keeps_the_reserved_end() {
 fn which_key_full_line_at_120_columns() {
     let line = which_key(&defaults(), 120, Lang::En);
     let expected = format!(
-        " PREFIX c new  n/p win  %/\" split  h/j/k/l move  z zoom  x kill  Tab alert  s tree  [ copy  d detach{} ? all  Esc cancel",
-        " ".repeat(2)
+        " PREFIX c new  n/p win  %/\" split  h/j/k/l move  z zoom  x kill  a alert  s tree  [ copy  d detach{} ? all  Esc cancel",
+        " ".repeat(4)
     );
     assert_eq!(line, expected);
     assert_eq!(line.width(), 120);
@@ -486,7 +486,7 @@ fn which_key_lists_live_bindings_in_priority_order() {
         "h/j/k/l move",
         "z zoom",
         "x kill",
-        "Tab alert",
+        "a alert",
         "s tree",
         "[ copy",
         "d detach",
@@ -503,6 +503,7 @@ fn which_key_follows_unbinding_and_drops_alert_without_binding() {
     bindings.remove("x");
     bindings.remove("Tab");
     bindings.remove("BTab");
+    bindings.remove("a");
     let line = which_key(&bindings, 200, Lang::En);
     assert!(!line.contains("x kill"), "{line:?}");
     assert!(!line.contains("alert"), "{line:?}");

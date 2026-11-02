@@ -281,6 +281,7 @@ pub(super) fn add_client(st: &mut State, id: usize, entry: crate::render::Entry,
     st.clients.insert(
         id,
         Client {
+            focus: Default::default(),
             session: st.sessions[1].name.clone(),
             sender: Box::new(std::io::sink()),
             prefix: false,

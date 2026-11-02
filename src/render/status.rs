@@ -771,7 +771,14 @@ fn status_input(st: &State, s: &Session, c: &Client, theme: &Theme) -> StatusInp
         })
         .collect();
     StatusInput {
-        session: s.name.clone(),
+        session: {
+            let badge = crate::server::autofocus::indicator(st.cfg.auto_focus, client_lang(st, c));
+            if badge.is_empty() {
+                s.name.clone()
+            } else {
+                format!("{} {badge}", s.name)
+            }
+        },
         wins,
         active: s.active,
         ellipsis: theme.g.ellipsis,

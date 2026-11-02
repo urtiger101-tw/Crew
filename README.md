@@ -147,8 +147,8 @@ snapshot；舊 epoch 會回 `server_restarted`。事件 `pane.output` 只提供�
 - 滑鼠：點選聚焦窗格（含側邊欄列與窗格標題列）、點狀態列切換視窗、點 session 名稱開啟選單、點計數跳到需要處理的窗格、滾輪捲動；點擊會取消等待中的前綴鍵 · Mouse: click to focus panes (including sidebar rows and pane title rows), click a window label to switch windows, click the session name to open the chooser, click the counters to jump to the next pane needing attention, wheel to scroll; any click cancels a pending prefix
 - Agent 狀態處處可見：▲ 等待你（blocked）、◆ 完成未查看（done）、● 執行中（working）、○ 閒置（idle）；顯示於狀態列計數、視窗標籤、窗格標題列、側邊欄與選單，每種狀態都有符號與文字，不只靠顏色（見下方「狀態符號」）
   Agent status everywhere: ▲ blocked, ◆ done, ● working, ○ idle — in the status-bar counts, window labels, pane title rows, the sidebar and the chooser; every state has a glyph and a word, not just a color (see Status glyphs below)
-- 側邊欄（`prefix a`）：依 session 分組列出每個窗格的狀態與 blocked 訊息，適合同時監看多個 AI agent；終端機太窄時自動隱藏
-  Sidebar (`prefix a`): panes grouped by session with their state and blocked message, handy for watching several AI agents; hidden automatically when the terminal is too narrow
+- 側邊欄（`prefix b`）：依 session 分組列出每個窗格的狀態與 blocked 訊息，適合同時監看多個 AI agent；終端機太窄時自動隱藏
+  Sidebar (`prefix b`): panes grouped by session with their state and blocked message, handy for watching several AI agents; hidden automatically when the terminal is too narrow
 - 需要處理的窗格：`prefix Tab` / `prefix BTab` 跳到下一個／上一個等待你或完成未查看的窗格（blocked 優先，跨 session）；背景窗格變為 blocked 時顯示提示
   Next attention: `prefix Tab` / `prefix BTab` jump to the next / previous pane that needs you (blocked first, then done, across sessions); a background pane turning blocked shows a toast
 - 窗格標題列：分割視窗中，有 agent 回報或標籤的窗格顯示狀態與窗格 ID，例如 `▲ claude · blocked`（`pane-titles`）
@@ -258,7 +258,10 @@ crew set mouse off          # 任何伺服器指令皆可從命令列執行 / ru
 | `s` / `g` | Session／視窗／窗格選單（見下節）Session/window/pane chooser (see below); `g` is an alias |
 | `w` | 視窗切換器（類似 Alt+Tab）：只列視窗，預設選上一個用過的視窗，`w`／`Tab` 下一個、`Shift+Tab` 上一個、`Enter` 切換；`C-b w Enter` 即在最近兩個視窗間來回 Window switcher (Alt+Tab-like): window rows only, opens on the last-used window; `w`/`Tab` next, `Shift+Tab` previous, `Enter` switches, so `C-b w Enter` toggles the last two windows |
 | `(` `)` | 上一個／下一個 session Previous / next session |
-| `a` or `b` | 切換側邊欄 Toggle status sidebar |
+| `a` | 手動跳到需要處理的窗格 Next attention |
+| `b` | 切換側邊欄 Toggle status sidebar |
+| `F` | 自動焦點 off/on 切換 Toggle auto-focus |
+| `;` | 回到自動／attention 跳轉前的窗格 Return to previous pane (`last-pane`) |
 | `r` | 重新載入設定 Reload config |
 | `?` | 列出按鍵 List key bindings (`j/k/Space` 捲動 scroll) |
 | `d` | 離開（detach）Detach |
@@ -415,6 +418,7 @@ A JSON command interface over the same local socket, so scripts and coding agent
 | pane | `pane focus <id>` / `pane focus --direction D` | 移動焦點 Move focus |
 | pane | `pane zoom [ID] [--toggle\|--on\|--off]` | 縮放 Zoom |
 | pane | `pane layout NAME [--window N] [--session S]` | 套用五種版面，保留窗格／程序／焦點，解除多窗格 zoom Apply a preset without replacing panes/processes/focus; unzoom split windows |
+| pane | `pane auto-focus ID on\|off` | 此窗格參與／退出自動焦點 Opt a pane in/out of auto-focus |
 | pane | `pane rename <id> <label>` / `--clear` | 設定窗格標籤 Pane label |
 | pane | `pane close <id>` | 關閉窗格 Close pane |
 | pane | `pane read <id> [--source visible\|recent] [--lines N]` | 讀取文字 Read text |
@@ -535,6 +539,10 @@ persist = true          # 保存並還原版面 / save and restore the layout ac
 hints = true            # 狀態列的 "? help"、側邊欄提示與首次連線提示（which-key 不受影響）/ status-bar help, sidebar hint and first-attach tip (not the which-key bar)
 confirm_close = true    # x 與 & 先以 y/n 確認 / ask y/n before x and &
 pane_titles = "always"    # 窗格標題列：off | auto | always / pane title rows
+auto_focus = "off"       # off | blocked | on；預設關閉 / disabled by default
+auto_focus_scope = "session" # window | session | all
+auto_focus_idle_ms = 2500 # 最近輸入後的保護時間 / recent-input guard
+auto_focus_dwell_ms = 4000 # 自動跳轉後停留時間 / minimum dwell after an auto jump
 toolbar = true          # 頂列功能鍵工具列 / function-key toolbar on the top row
 toolbar_fkeys = false   # F2..F12 直接執行按鈕 / plain F1..F12 run the buttons
 scroll_keys = true      # Shift+方向鍵/PgUp/PgDn 捲動先前輸出 / Shift+arrows/PgUp/PgDn scroll back
@@ -561,7 +569,7 @@ Values under `[theme.colors]` must be strings, so quote color values (for exampl
 `pane_utf8` 預設為 `true`，讓 Windows 新窗格的主控台輸入與輸出碼頁使用 UTF-8（65001），shell 與其子程序皆受影響；設為 `false` 保留原本的碼頁。已執行的窗格不受影響，Linux／macOS 不變。
 `pane_utf8` defaults to `true`, setting the console input and output code pages to UTF-8 (65001) for new Windows panes, their shells and child processes. Set it to `false` to retain the original code pages. Existing panes and Linux/macOS are unchanged.
 
-`set` 可用選項 options: `prefix`, `shell`, `pane-utf8`（僅影響 Windows 新窗格 new Windows panes only）, `mouse`, `sidebar`, `sidebar-width`, `scrollback`/`history-limit`（僅影響新窗格 new panes only）, `busy-secs`, `automatic-rename`, `osc52`/`set-clipboard`, `persist`, `hints on|off`, `confirm-close on|off`, `toolbar on|off`, `toolbar-fkeys on|off`, `scroll-keys on|off`, `pane-titles off|auto|always`, `theme studio|terminal|dark|light|mono`, `ascii-glyphs auto|on|off`.
+`set` 可用選項 options: `prefix`, `shell`, `pane-utf8`（僅影響 Windows 新窗格 new Windows panes only）, `mouse`, `sidebar`, `sidebar-width`, `scrollback`/`history-limit`（僅影響新窗格 new panes only）, `busy-secs`, `automatic-rename`, `osc52`/`set-clipboard`, `persist`, `hints on|off`, `confirm-close on|off`, `toolbar on|off`, `toolbar-fkeys on|off`, `scroll-keys on|off`, `pane-titles off|auto|always`, `auto-focus off|blocked|on`, `auto-focus-scope window|session|all`, `auto-focus-idle-ms`, `auto-focus-dwell-ms`, `theme studio|terminal|dark|light|mono`, `ascii-glyphs auto|on|off`.
 
 窗格環境：每個新窗格都會設定 `TERM=xterm-256color` 與 `COLORTERM=truecolor`，並**移除**從伺服器繼承來的 `NO_COLOR`，以免啟動伺服器的那個 shell 剛好帶著 `NO_COLOR` 時，讓所有窗格的程式都失去顏色。要讓某個窗格不顯示顏色，請明確指定：`crew workspace create … --env NO_COLOR=1`（`tab create` 同理）。Crew 自身介面（狀態列、側邊欄）仍依各客戶端自己的 `NO_COLOR` 決定是否上色。已在執行的窗格保有原本的環境，需重啟伺服器或開新窗格才會套用。
 Pane environment: every new pane gets `TERM=xterm-256color` and `COLORTERM=truecolor`, and an inherited server `NO_COLOR` is **removed**, so a shell that happened to start the server with `NO_COLOR` no longer strips color from every pane. Opt a pane out explicitly with `--env NO_COLOR=1` on `workspace create` or `tab create`. Crew's own chrome still follows each client's `NO_COLOR`. Running panes keep their environment; restart the server or open new panes to pick this up.

@@ -39,6 +39,11 @@ impl State {
             return;
         };
         self.sessions[si].last_used = Instant::now();
+        if matches!(&ev, Event::Key(k) if k.kind != KeyEventKind::Release)
+            || matches!(&ev, Event::Paste(_) | Event::Mouse(_))
+        {
+            self.clients.get_mut(&cid).unwrap().focus.last_input = Some(Instant::now());
+        }
         match ev {
             Event::Resize(cols, rows) => {
                 let s = &mut self.sessions[si];
@@ -72,5 +77,6 @@ impl State {
             }
             _ => {}
         }
+        self.autofocus_update(Instant::now());
     }
 }

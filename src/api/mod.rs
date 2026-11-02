@@ -151,6 +151,10 @@ pub enum Request {
         window: Option<usize>,
         session: Option<String>,
     },
+    PaneAutoFocus {
+        pane: usize,
+        enabled: bool,
+    },
     PaneRename {
         pane: usize,
         label: Option<String>,
@@ -389,6 +393,7 @@ pub fn pane_json(st: &State, pid: usize) -> Option<Value> {
         "zoomed": w.zoomed && w.active == pid,
         "label": p.label,
         "cwd": p.cwd.as_deref().map(display_cwd),
+        "auto_focus": !p.auto_focus_disabled,
         "plugin_path_dirs": p.plugin_path_dirs,
         "plugin_path_diagnostics": p.plugin_path_diagnostics,
         "cols": p.rect.w,

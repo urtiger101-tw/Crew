@@ -5,6 +5,8 @@
 use super::super::Entry;
 
 pub const ENTRIES: &[Entry] = &[
+    ("render.auto_focus.on", "AF", "自焦"),
+    ("render.auto_focus.blocked", "AF:blocked", "自焦:待回應"),
     // status bar
     ("render.status.prefix_chip", " PREFIX ", " 前綴鍵 "),
     ("render.status.copy_chip", " COPY ", " 複製模式 "),

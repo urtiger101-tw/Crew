@@ -47,6 +47,8 @@ pub enum Cmd {
     KillServer,
     SelectPane(Move),
     NextPane,
+    LastPane,
+    ToggleAutoFocus,
     SwapPane {
         source: Option<usize>,
         target: Option<usize>,
@@ -122,6 +124,8 @@ impl Cmd {
             Cmd::KillServer => "kill-server",
             Cmd::SelectPane(_) => "select-pane",
             Cmd::NextPane => "next-pane",
+            Cmd::LastPane => "last-pane",
+            Cmd::ToggleAutoFocus => "toggle-auto-focus",
             Cmd::SwapPane { .. } => "swap-pane",
             Cmd::MoveWindow { .. } => "move-window",
             Cmd::ResizePane(..) | Cmd::Zoom => "resize-pane",
@@ -437,6 +441,10 @@ pub fn parse(line: &str) -> Result<Cmd, String> {
             None => Cmd::NextPane,
         },
         "next-pane" => Cmd::NextPane,
+        "last-pane" if args.is_empty() => Cmd::LastPane,
+        "last-pane" => return Err("usage: last-pane".into()),
+        "toggle-auto-focus" if args.is_empty() => Cmd::ToggleAutoFocus,
+        "toggle-auto-focus" => return Err("usage: toggle-auto-focus".into()),
         "select-layout" => {
             if args.len() != 1 {
                 return Err("usage: select-layout <name>".into());
@@ -786,8 +794,10 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     ("[", "copy-mode"),
     ("PageUp", "copy-mode -u"),
     ("]", "paste-buffer"),
-    ("a", "toggle-sidebar"),
+    ("a", "next-attention"),
     ("b", "toggle-sidebar"),
+    ("F", "toggle-auto-focus"),
+    (";", "last-pane"),
     ("s", "choose-tree"),
     ("w", "choose-window"),
     ("g", "choose-tree"),

@@ -47,6 +47,7 @@ const METHODS: &[&str] = &[
     "pane.focus",
     "pane.zoom",
     "pane.layout",
+    "pane.auto-focus",
     "pane.rename",
     "pane.close",
     "pane.read",

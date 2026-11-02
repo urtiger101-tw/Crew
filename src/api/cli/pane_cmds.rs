@@ -20,6 +20,7 @@ const PANE_SUBS: &[&str] = &[
     "focus",
     "zoom",
     "layout",
+    "auto-focus",
     "rename",
     "close",
     "read",
@@ -38,6 +39,19 @@ pub(super) fn dispatch(
     current: Option<usize>,
 ) -> Result<Request, String> {
     match sub {
+        "auto-focus" => {
+            let words = no_opts(rest)?;
+            check_count(&words, 2, 2, "pane auto-focus <id> on|off")?;
+            let enabled = match words[1].as_str() {
+                "on" => true,
+                "off" => false,
+                _ => return Err("pane auto-focus: expected on|off".into()),
+            };
+            Ok(Request::PaneAutoFocus {
+                pane: pane_id(&words[0])?,
+                enabled,
+            })
+        }
         "swap" => {
             let words = no_opts(rest)?;
             check_count(&words, 2, 2, "pane swap <source-id> <target-id>")?;
