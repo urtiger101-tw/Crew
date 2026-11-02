@@ -3,6 +3,7 @@
 版本：2026-11-02 草案。需求：讓 Codex 與 Claude Code 在 Crew 中主動找對對方、可靠交接資料，減少人類轉述與畫面輪詢。
 範圍：本機同一專案的兩個 agent；先沿用 Crew daemon、JSON API 與 CRL 檔案，再增加持久信箱。
 本文件的 peer／msg 命令與自動收件 adapter 均為提案，尚未實作或進行兩個真實 agent 的端到端驗收；G 的終端標題接收與明確指定來源的進度同步已在本輪完成首版。
+§62–65 已把首版縮小為具名 peer、send/list/read/ack 與一個 receiver；具體欄位和 CLI 待 [B v1 草案](contract/B-V1.md) 審查凍結。依 §66，hook probes 也等凍結後才開始。
 
 ## 已確認的起點
 
@@ -26,7 +27,7 @@
 1. 每個 agent 的實際啟動／恢復流程回報唯一 `source`，設定專案內的 peer 名稱，並發布可接受訊息的能力。
 2. 寄件端先保存 CRL 或其他交接檔，再送一個包含短摘要、檔案路徑與雜湊的結構化訊息；立即取得訊息 ID。
 3. Crew 寫入信箱後發出事件；收件端整合程式從游標取新訊息，主動喚醒 agent 或留待當前工作結束。
-4. 收件 agent 讀取內容後明確回報 `read`，接受派工後回報 `accepted`；完成時回覆原訊息 ID 與驗證依據。
+4. 收件端取到內容後明確回報 `read`，完成時回報 `done` 的 ok/failed 結果並回覆原訊息 ID 與驗證依據；接受責任透過回信表達，首版沒有 accepted ack。
 5. 使用者隨時看到待讀、處理中、需要協助及完成；雙方不必用整個終端畫面猜測工作是否已交接。
 
 此流程需要收件端整合程式。Crew 有一個信箱，不會因此讓正在推論的模型自動取得新內容；必須驗證各 CLI／app-server 實際支援的接收方式。
@@ -38,8 +39,8 @@
 | P0 | A：先改善現有協作流程 | 無 | 明確回報、具名 peer、檔案交接與單一通知者；更換窗格後能重新綁定，找不到或有歧義就停止投遞並報錯。 |
 | P0 | G：工作階段標題與可信的當前進度 | 可與 A 平行 | Crew 標題能顯示真實討論／工作階段名，例如 Review collaboration task；Working 旁能顯示目前步驟及來源時間，不編造百分比。 |
 | P1 | B：凍結訊息與身份契約 | A 的實際流程資料 | 明確區分 logical peer、daemon epoch、agent instance、message ID、reply-to 與各種確認狀態；CLI/JSON fixture 可共同審查。 |
-| P1 | C：持久信箱與查詢 | B | `send/list/read/ack/wait` 垂直切片；寄件成功後重啟 daemon 仍能讀到，重試相同寄件鍵不產生第二則訊息。 |
-| P1 | D：主動通知與兩端 adapter | B；C 完成後整合 | 明確回報收件能力；ready 時送一次通知，busy 時合併通知，blocked 時保留待辦；不可因超時自動重送 Enter。 |
+| P1 | C：持久信箱與查詢 | B 凍結 | `send/list/read/ack` 垂直切片與一個 receiver；重啟後仍能讀到，重試不產生第二則訊息；msg wait 延後。 |
+| P1 | D：主動通知與兩端 adapter | B 凍結後 probes；C 完成後整合 | 驗證收件能力；ready 時送一次通知，busy/blocked 時保留待辦；不可因超時重送 Enter，通知合併延後。 |
 | P2 | E：快速資料交換與可見狀態 | C、D | 常駐 JSON bridge、依收件人等待、短摘要與檔案指標；TUI 顯示未讀與需回應數，不把訊息全文塞入標題。 |
 | P2 | F：輸出檢查點與相容橋接 | B；可與 C 平行 | 為仍需讀終端的整合補 `wait-output --after`；以 pane/epoch/輸出位置限定新輸出，舊標記不再命中。 |
 
@@ -72,21 +73,22 @@
 
 ```text
 crew peer list
-crew msg send --to crew-claude --kind review --file log/61-codex.crl --key review-61
-crew msg list --to crew-claude --after INBOX_CURSOR
+crew msg send --from crew-codex --to crew-claude --kind review --summary "請審查交接" --repo-root D:/Crew --file docs/collab/claude-codex/log/61-codex.crl --key review-61
+crew msg list --to crew-claude --open --limit 20
 crew msg read MESSAGE_ID
-crew msg ack MESSAGE_ID --stage read|accepted|completed|failed
-crew msg wait --to crew-claude --after INBOX_CURSOR --timeout 30000
+crew msg ack MESSAGE_ID --by crew-claude --stage read
+crew msg ack MESSAGE_ID --by crew-claude --stage done --result ok
 ```
 
 - `peer` 屬於明確的專案／協作 namespace，名稱解析到當前回報者；不能把「偵測到 claude.exe」當作確定收件人或授權。
-- 訊息欄位至少有 `id/from/to/kind/task_id/reply_to/created_at/summary/artifacts`；artifact 記相對路徑、大小與 SHA-256，完整測試／diff 仍留在檔案。
-- `send` 接受由寄件端建立的重試鍵，範圍為 sender instance + key；同鍵同內容回同一 ID，同鍵不同內容明確報衝突。
-- `stored`：Crew 已保存訊息。`read`：收件端明確確認已取得內容。`accepted`：agent 接受責任。`completed/failed`：agent 回報處理結果。
-- `read` 不能證明模型理解；`completed` 也不等於測試通過、已合併或已發布，完成回覆仍需 CRL 的 IMP/TST/NR 與證據。
-- 通知狀態另存 `deferred/notified/unsupported/failed`；TUI 貼上成功只能算 notified，不能升級為 read。
+- 首版欄位為 `id/key/from/to/kind/reply_to/created_at/summary/artifacts/acks`；artifact 記相對路徑、大小、SHA-256 與 display-only sender repo_root，完整測試／diff 仍留在檔案。
+- `send` 接受由寄件端建立的重試鍵，範圍為同 store 的 from + key；同鍵同內容回同一 ID，同鍵不同內容明確報衝突。
+- §68 修訂：artifact.repo_root 不參與去重；recipient 可為 store 歷史已知的離線 peer；caller 的 live reported name 必須與 --from 相符。receiver 查 --open，讓 read 後中斷的工作仍可恢復。
+- `stored`：Crew 已保存訊息。`read`：receiver／adapter 明確確認已取得內容。`done` 配合 result=ok|failed：receiver 回報處理結果。
+- `read` 不能證明模型理解；`done` 也不等於測試通過、已合併或已發布，完成回覆仍需 CRL 的 IMP/TST/NR 與證據。
+- 通知狀態另存 `deferred/notified/failed`；TUI 貼上成功只能算 notified，不能升級為 read。
 - 長內容預設用 artifact；短訊息本體設定明確上限，列表只回摘要，可依 kind/task/peer 篩選，避免反覆搬運全部歷史。
-- 第一版使用有界的本機 JSON 儲存，沿用現有 file-lock、sync 與原子更新慣例，但不混入 plugin registry；參考 [src/plugins/store.rs:117](../../../src/plugins/store.rs#L117)、[130](../../../src/plugins/store.rs#L130)。
+- 第一版使用每 socket 一個有界本機 JSON store：state dir/inbox/socket-name.json，可用 CREW_INBOX_STORE 覆寫；最多10000筆、16 artifacts/message、summary/note各512 UTF-8 bytes、key為1..128 ASCII bytes。沿用 file-lock／原子更新，滿時 store_full，v1不自動刪除；不混入 plugin registry。詳見 [B v1](contract/B-V1.md)。
 - 保存回覆成功後才能回 stored；程序重啟可恢復訊息／確認／寄件去重記錄。保留期限與清理需明確設定，不默默刪除未讀訊息。
 - API 額外提供持久的 inbox cursor；現有 events cursor 只當快速通知，不承擔訊息保存。events_lost 或 epoch 改變時，從 inbox cursor 補讀。
 - 可重試的傳輸與去重提供可解釋的至少一次取件；不宣稱模型工作恰好執行一次。
@@ -95,7 +97,7 @@ crew msg wait --to crew-claude --after INBOX_CURSOR --timeout 30000
 
 - 每端 adapter 提供 `capabilities` 與明確 `input_ready/busy/blocked/offline`，與 Crew 的 working/idle、PTY 安靜程度分開；未回報 ready 就不自動按 Enter。
 - 若 CLI/app-server 有已驗證的接收介面，優先以訊息 ID 通知；否則只採單一投遞者的 TUI 相容途徑，並讓 adapter 回報可驗證的 read。
-- busy 時保存所有訊息，只合併「有 N 則新訊息」的喚醒提示；agent 下個可接收時讀取完整信箱，禁止逐則重送相同提示。
+- busy 時保存所有訊息並延後通知；agent 下個可接收時讀取信箱，禁止逐則重送相同提示。首版通知合併延後，待最小 receiver 量測後再做。
 - blocked／確認畫面不自動送 y、Esc 或 Ctrl-C；保留訊息並讓使用者看到需要處理。這直接避免把通知打進許可／登入提示。
 - 送出前檢查目的 epoch/instance；延後到 ready 時重新解析邏輯 peer。舊占用者退出後，舊的投遞動作不得對新占用者補送 Enter。
 - 訊息期限只影響是否繼續通知，不能等同取消對方已接受的工作；取消使用獨立訊息，由收件端確認結果。
@@ -104,7 +106,7 @@ crew msg wait --to crew-claude --after INBOX_CURSOR --timeout 30000
 
 ## E／F：讓交換更快，也保留相容性
 
-- adapter 維持一個 `crew api serve`，用 request ID 接回覆，最多保留一個有期限的 inbox 等待；不以大量長等待佔滿目前 16 個並行名額。
+- adapter 可沿用一個 `crew api serve`，用 request ID 接回覆；未來加入 msg wait 時最多保留一個有期限等待，不以大量長等待佔滿目前 16 個並行名額。
 - 新增 msg/peer 方法沿用既有 request/reply envelope；先擴充 Crew API，再考慮各 agent 的工具介面，不另造一套互斥協定。
 - 向現有事件日誌記錄 `message.stored`、`message.acked`、`peer.changed`，事件只含 ID 與狀態；詳細內容透過信箱補讀。
 - 現有 `api snapshot` 沒有同時回 epoch/cursor（[src/api/pane/query.rs:39](../../../src/api/pane/query.rs#L39)）；初始化不能假設它提供無縫事件接點。

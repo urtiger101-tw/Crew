@@ -1,0 +1,2629 @@
+{
+  "contract": "crew-collaboration-b-v1",
+  "status": "DRAFT_NOT_FROZEN",
+  "provenance": "Synthetic acceptance oracles, not observed Crew runtime output. No hook probe or C implementation is present.",
+  "messages": {
+    "stored": {
+      "id": "msg_fixture_1",
+      "key": "review-b-1",
+      "from": "crew-codex",
+      "to": "crew-claude",
+      "kind": "review",
+      "reply_to": null,
+      "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+      "artifacts": [
+        {
+          "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+          "repo_root": "D:/Crew-agentcmd",
+          "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+          "bytes": 64
+        }
+      ],
+      "created_at": "2026-11-02T04:00:00Z",
+      "acks": []
+    },
+    "read": {
+      "id": "msg_fixture_1",
+      "key": "review-b-1",
+      "from": "crew-codex",
+      "to": "crew-claude",
+      "kind": "review",
+      "reply_to": null,
+      "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+      "artifacts": [
+        {
+          "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+          "repo_root": "D:/Crew-agentcmd",
+          "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+          "bytes": 64
+        }
+      ],
+      "created_at": "2026-11-02T04:00:00Z",
+      "acks": [
+        {
+          "stage": "read",
+          "by": "crew-claude",
+          "at": "2026-11-02T04:00:03Z",
+          "note": "Receiver fetched the message"
+        }
+      ]
+    },
+    "done_ok": {
+      "id": "msg_fixture_1",
+      "key": "review-b-1",
+      "from": "crew-codex",
+      "to": "crew-claude",
+      "kind": "review",
+      "reply_to": null,
+      "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+      "artifacts": [
+        {
+          "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+          "repo_root": "D:/Crew-agentcmd",
+          "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+          "bytes": 64
+        }
+      ],
+      "created_at": "2026-11-02T04:00:00Z",
+      "acks": [
+        {
+          "stage": "read",
+          "by": "crew-claude",
+          "at": "2026-11-02T04:00:03Z",
+          "note": "Receiver fetched the message"
+        },
+        {
+          "stage": "done",
+          "by": "crew-claude",
+          "at": "2026-11-02T04:00:10Z",
+          "note": "Review recorded in a reply",
+          "result": "ok"
+        }
+      ]
+    },
+    "done_failed": {
+      "id": "msg_fixture_1",
+      "key": "review-b-1",
+      "from": "crew-codex",
+      "to": "crew-claude",
+      "kind": "review",
+      "reply_to": null,
+      "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+      "artifacts": [
+        {
+          "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+          "repo_root": "D:/Crew-agentcmd",
+          "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+          "bytes": 64
+        }
+      ],
+      "created_at": "2026-11-02T04:00:00Z",
+      "acks": [
+        {
+          "stage": "read",
+          "by": "crew-claude",
+          "at": "2026-11-02T04:00:03Z",
+          "note": "Receiver fetched the message"
+        },
+        {
+          "stage": "done",
+          "by": "crew-claude",
+          "at": "2026-11-02T04:00:10Z",
+          "note": "Artifact mismatch; no sender-root fallback",
+          "result": "failed"
+        }
+      ]
+    },
+    "reply": {
+      "id": "msg_fixture_2",
+      "key": "answer-b-1",
+      "from": "crew-claude",
+      "to": "crew-codex",
+      "kind": "answer",
+      "reply_to": "msg_fixture_1",
+      "summary": "接受範圍；請修正 fixture 的兩點。",
+      "artifacts": [],
+      "created_at": "2026-11-02T04:00:11Z",
+      "acks": []
+    },
+    "later": {
+      "id": "msg_fixture_3",
+      "key": "review-b-2",
+      "from": "crew-codex",
+      "to": "crew-claude",
+      "kind": "review",
+      "reply_to": null,
+      "summary": "第二個審查項目。",
+      "artifacts": [
+        {
+          "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+          "repo_root": "D:/Crew-agentcmd",
+          "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+          "bytes": 64
+        }
+      ],
+      "created_at": "2026-11-02T04:00:12Z",
+      "acks": []
+    },
+    "offline_stored": {
+      "id": "msg_fixture_4",
+      "key": "offline-b-1",
+      "from": "crew-codex",
+      "to": "crew-claude",
+      "kind": "review",
+      "reply_to": null,
+      "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+      "artifacts": [
+        {
+          "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+          "repo_root": "D:/Crew-agentcmd",
+          "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+          "bytes": 64
+        }
+      ],
+      "created_at": "2026-11-02T04:01:00Z",
+      "acks": []
+    }
+  },
+  "exchanges": [
+    {
+      "id": "peer-list",
+      "runtime_status": "NOT_RUN",
+      "argv": [
+        "crew",
+        "peer",
+        "list"
+      ],
+      "bridge_request": {
+        "id": "peer-list",
+        "method": "peer.list",
+        "params": {
+          "args": []
+        }
+      },
+      "expected_bridge_response": {
+        "id": "peer-list",
+        "result": {
+          "epoch": "epoch_fixture_a",
+          "peers": [
+            {
+              "name": "crew-codex",
+              "pane_id": "p4",
+              "instance": 104,
+              "source": "codex.fixture",
+              "agent": "codex",
+              "state": "working"
+            },
+            {
+              "name": "crew-claude",
+              "pane_id": "p1",
+              "instance": 101,
+              "source": "claude.fixture",
+              "agent": "claude",
+              "state": "idle"
+            }
+          ]
+        }
+      },
+      "expected_cli_json": {
+        "result": {
+          "epoch": "epoch_fixture_a",
+          "peers": [
+            {
+              "name": "crew-codex",
+              "pane_id": "p4",
+              "instance": 104,
+              "source": "codex.fixture",
+              "agent": "codex",
+              "state": "working"
+            },
+            {
+              "name": "crew-claude",
+              "pane_id": "p1",
+              "instance": 101,
+              "source": "claude.fixture",
+              "agent": "claude",
+              "state": "idle"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "send-new",
+      "runtime_status": "NOT_RUN",
+      "argv": [
+        "crew",
+        "msg",
+        "send",
+        "--from",
+        "crew-codex",
+        "--to",
+        "crew-claude",
+        "--key",
+        "review-b-1",
+        "--kind",
+        "review",
+        "--summary",
+        "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+        "--repo-root",
+        "D:/Crew-agentcmd",
+        "--file",
+        "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt"
+      ],
+      "bridge_request": {
+        "id": "send-new",
+        "method": "msg.send",
+        "params": {
+          "args": [
+            "--from",
+            "crew-codex",
+            "--to",
+            "crew-claude",
+            "--key",
+            "review-b-1",
+            "--kind",
+            "review",
+            "--summary",
+            "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "--repo-root",
+            "D:/Crew-agentcmd",
+            "--file",
+            "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt"
+          ]
+        }
+      },
+      "expected_bridge_response": {
+        "id": "send-new",
+        "result": {
+          "message": {
+            "id": "msg_fixture_1",
+            "key": "review-b-1",
+            "from": "crew-codex",
+            "to": "crew-claude",
+            "kind": "review",
+            "reply_to": null,
+            "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "artifacts": [
+              {
+                "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+                "repo_root": "D:/Crew-agentcmd",
+                "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+                "bytes": 64
+              }
+            ],
+            "created_at": "2026-11-02T04:00:00Z",
+            "acks": []
+          },
+          "deduplicated": false
+        }
+      },
+      "expected_cli_json": {
+        "result": {
+          "message": {
+            "id": "msg_fixture_1",
+            "key": "review-b-1",
+            "from": "crew-codex",
+            "to": "crew-claude",
+            "kind": "review",
+            "reply_to": null,
+            "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "artifacts": [
+              {
+                "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+                "repo_root": "D:/Crew-agentcmd",
+                "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+                "bytes": 64
+              }
+            ],
+            "created_at": "2026-11-02T04:00:00Z",
+            "acks": []
+          },
+          "deduplicated": false
+        }
+      },
+      "caller_context": {
+        "crew_pane_id": "p4",
+        "epoch": "epoch_fixture_a",
+        "instance": 104,
+        "reported_name": "crew-codex",
+        "live": true
+      }
+    },
+    {
+      "id": "send-retry-after-read",
+      "runtime_status": "NOT_RUN",
+      "argv": [
+        "crew",
+        "msg",
+        "send",
+        "--from",
+        "crew-codex",
+        "--to",
+        "crew-claude",
+        "--key",
+        "review-b-1",
+        "--kind",
+        "review",
+        "--summary",
+        "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+        "--repo-root",
+        "D:/Crew-agentcmd",
+        "--file",
+        "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt"
+      ],
+      "bridge_request": {
+        "id": "send-retry-after-read",
+        "method": "msg.send",
+        "params": {
+          "args": [
+            "--from",
+            "crew-codex",
+            "--to",
+            "crew-claude",
+            "--key",
+            "review-b-1",
+            "--kind",
+            "review",
+            "--summary",
+            "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "--repo-root",
+            "D:/Crew-agentcmd",
+            "--file",
+            "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt"
+          ]
+        }
+      },
+      "expected_bridge_response": {
+        "id": "send-retry-after-read",
+        "result": {
+          "message": {
+            "id": "msg_fixture_1",
+            "key": "review-b-1",
+            "from": "crew-codex",
+            "to": "crew-claude",
+            "kind": "review",
+            "reply_to": null,
+            "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "artifacts": [
+              {
+                "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+                "repo_root": "D:/Crew-agentcmd",
+                "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+                "bytes": 64
+              }
+            ],
+            "created_at": "2026-11-02T04:00:00Z",
+            "acks": [
+              {
+                "stage": "read",
+                "by": "crew-claude",
+                "at": "2026-11-02T04:00:03Z",
+                "note": "Receiver fetched the message"
+              }
+            ]
+          },
+          "deduplicated": true
+        }
+      },
+      "expected_cli_json": {
+        "result": {
+          "message": {
+            "id": "msg_fixture_1",
+            "key": "review-b-1",
+            "from": "crew-codex",
+            "to": "crew-claude",
+            "kind": "review",
+            "reply_to": null,
+            "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "artifacts": [
+              {
+                "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+                "repo_root": "D:/Crew-agentcmd",
+                "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+                "bytes": 64
+              }
+            ],
+            "created_at": "2026-11-02T04:00:00Z",
+            "acks": [
+              {
+                "stage": "read",
+                "by": "crew-claude",
+                "at": "2026-11-02T04:00:03Z",
+                "note": "Receiver fetched the message"
+              }
+            ]
+          },
+          "deduplicated": true
+        }
+      },
+      "caller_context": {
+        "crew_pane_id": "p4",
+        "epoch": "epoch_fixture_a",
+        "instance": 104,
+        "reported_name": "crew-codex",
+        "live": true
+      }
+    },
+    {
+      "id": "read-no-ack",
+      "runtime_status": "NOT_RUN",
+      "argv": [
+        "crew",
+        "msg",
+        "read",
+        "msg_fixture_1"
+      ],
+      "bridge_request": {
+        "id": "read-no-ack",
+        "method": "msg.read",
+        "params": {
+          "args": [
+            "msg_fixture_1"
+          ]
+        }
+      },
+      "expected_bridge_response": {
+        "id": "read-no-ack",
+        "result": {
+          "message": {
+            "id": "msg_fixture_1",
+            "key": "review-b-1",
+            "from": "crew-codex",
+            "to": "crew-claude",
+            "kind": "review",
+            "reply_to": null,
+            "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "artifacts": [
+              {
+                "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+                "repo_root": "D:/Crew-agentcmd",
+                "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+                "bytes": 64
+              }
+            ],
+            "created_at": "2026-11-02T04:00:00Z",
+            "acks": []
+          }
+        }
+      },
+      "expected_cli_json": {
+        "result": {
+          "message": {
+            "id": "msg_fixture_1",
+            "key": "review-b-1",
+            "from": "crew-codex",
+            "to": "crew-claude",
+            "kind": "review",
+            "reply_to": null,
+            "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "artifacts": [
+              {
+                "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+                "repo_root": "D:/Crew-agentcmd",
+                "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+                "bytes": 64
+              }
+            ],
+            "created_at": "2026-11-02T04:00:00Z",
+            "acks": []
+          }
+        }
+      }
+    },
+    {
+      "id": "ack-read",
+      "runtime_status": "NOT_RUN",
+      "argv": [
+        "crew",
+        "msg",
+        "ack",
+        "msg_fixture_1",
+        "--by",
+        "crew-claude",
+        "--stage",
+        "read",
+        "--note",
+        "Receiver fetched the message"
+      ],
+      "bridge_request": {
+        "id": "ack-read",
+        "method": "msg.ack",
+        "params": {
+          "args": [
+            "msg_fixture_1",
+            "--by",
+            "crew-claude",
+            "--stage",
+            "read",
+            "--note",
+            "Receiver fetched the message"
+          ]
+        }
+      },
+      "expected_bridge_response": {
+        "id": "ack-read",
+        "result": {
+          "message": {
+            "id": "msg_fixture_1",
+            "key": "review-b-1",
+            "from": "crew-codex",
+            "to": "crew-claude",
+            "kind": "review",
+            "reply_to": null,
+            "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "artifacts": [
+              {
+                "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+                "repo_root": "D:/Crew-agentcmd",
+                "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+                "bytes": 64
+              }
+            ],
+            "created_at": "2026-11-02T04:00:00Z",
+            "acks": [
+              {
+                "stage": "read",
+                "by": "crew-claude",
+                "at": "2026-11-02T04:00:03Z",
+                "note": "Receiver fetched the message"
+              }
+            ]
+          },
+          "changed": true
+        }
+      },
+      "expected_cli_json": {
+        "result": {
+          "message": {
+            "id": "msg_fixture_1",
+            "key": "review-b-1",
+            "from": "crew-codex",
+            "to": "crew-claude",
+            "kind": "review",
+            "reply_to": null,
+            "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "artifacts": [
+              {
+                "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+                "repo_root": "D:/Crew-agentcmd",
+                "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+                "bytes": 64
+              }
+            ],
+            "created_at": "2026-11-02T04:00:00Z",
+            "acks": [
+              {
+                "stage": "read",
+                "by": "crew-claude",
+                "at": "2026-11-02T04:00:03Z",
+                "note": "Receiver fetched the message"
+              }
+            ]
+          },
+          "changed": true
+        }
+      }
+    },
+    {
+      "id": "ack-read-retry",
+      "runtime_status": "NOT_RUN",
+      "argv": [
+        "crew",
+        "msg",
+        "ack",
+        "msg_fixture_1",
+        "--by",
+        "crew-claude",
+        "--stage",
+        "read",
+        "--note",
+        "Receiver fetched the message"
+      ],
+      "bridge_request": {
+        "id": "ack-read-retry",
+        "method": "msg.ack",
+        "params": {
+          "args": [
+            "msg_fixture_1",
+            "--by",
+            "crew-claude",
+            "--stage",
+            "read",
+            "--note",
+            "Receiver fetched the message"
+          ]
+        }
+      },
+      "expected_bridge_response": {
+        "id": "ack-read-retry",
+        "result": {
+          "message": {
+            "id": "msg_fixture_1",
+            "key": "review-b-1",
+            "from": "crew-codex",
+            "to": "crew-claude",
+            "kind": "review",
+            "reply_to": null,
+            "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "artifacts": [
+              {
+                "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+                "repo_root": "D:/Crew-agentcmd",
+                "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+                "bytes": 64
+              }
+            ],
+            "created_at": "2026-11-02T04:00:00Z",
+            "acks": [
+              {
+                "stage": "read",
+                "by": "crew-claude",
+                "at": "2026-11-02T04:00:03Z",
+                "note": "Receiver fetched the message"
+              }
+            ]
+          },
+          "changed": false
+        }
+      },
+      "expected_cli_json": {
+        "result": {
+          "message": {
+            "id": "msg_fixture_1",
+            "key": "review-b-1",
+            "from": "crew-codex",
+            "to": "crew-claude",
+            "kind": "review",
+            "reply_to": null,
+            "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "artifacts": [
+              {
+                "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+                "repo_root": "D:/Crew-agentcmd",
+                "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+                "bytes": 64
+              }
+            ],
+            "created_at": "2026-11-02T04:00:00Z",
+            "acks": [
+              {
+                "stage": "read",
+                "by": "crew-claude",
+                "at": "2026-11-02T04:00:03Z",
+                "note": "Receiver fetched the message"
+              }
+            ]
+          },
+          "changed": false
+        }
+      }
+    },
+    {
+      "id": "ack-read-retry-after-done",
+      "runtime_status": "NOT_RUN",
+      "argv": [
+        "crew",
+        "msg",
+        "ack",
+        "msg_fixture_1",
+        "--by",
+        "crew-claude",
+        "--stage",
+        "read",
+        "--note",
+        "Receiver fetched the message"
+      ],
+      "bridge_request": {
+        "id": "ack-read-retry-after-done",
+        "method": "msg.ack",
+        "params": {
+          "args": [
+            "msg_fixture_1",
+            "--by",
+            "crew-claude",
+            "--stage",
+            "read",
+            "--note",
+            "Receiver fetched the message"
+          ]
+        }
+      },
+      "expected_bridge_response": {
+        "id": "ack-read-retry-after-done",
+        "result": {
+          "message": {
+            "id": "msg_fixture_1",
+            "key": "review-b-1",
+            "from": "crew-codex",
+            "to": "crew-claude",
+            "kind": "review",
+            "reply_to": null,
+            "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "artifacts": [
+              {
+                "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+                "repo_root": "D:/Crew-agentcmd",
+                "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+                "bytes": 64
+              }
+            ],
+            "created_at": "2026-11-02T04:00:00Z",
+            "acks": [
+              {
+                "stage": "read",
+                "by": "crew-claude",
+                "at": "2026-11-02T04:00:03Z",
+                "note": "Receiver fetched the message"
+              },
+              {
+                "stage": "done",
+                "by": "crew-claude",
+                "at": "2026-11-02T04:00:10Z",
+                "note": "Review recorded in a reply",
+                "result": "ok"
+              }
+            ]
+          },
+          "changed": false
+        }
+      },
+      "expected_cli_json": {
+        "result": {
+          "message": {
+            "id": "msg_fixture_1",
+            "key": "review-b-1",
+            "from": "crew-codex",
+            "to": "crew-claude",
+            "kind": "review",
+            "reply_to": null,
+            "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "artifacts": [
+              {
+                "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+                "repo_root": "D:/Crew-agentcmd",
+                "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+                "bytes": 64
+              }
+            ],
+            "created_at": "2026-11-02T04:00:00Z",
+            "acks": [
+              {
+                "stage": "read",
+                "by": "crew-claude",
+                "at": "2026-11-02T04:00:03Z",
+                "note": "Receiver fetched the message"
+              },
+              {
+                "stage": "done",
+                "by": "crew-claude",
+                "at": "2026-11-02T04:00:10Z",
+                "note": "Review recorded in a reply",
+                "result": "ok"
+              }
+            ]
+          },
+          "changed": false
+        }
+      }
+    },
+    {
+      "id": "ack-done-ok",
+      "runtime_status": "NOT_RUN",
+      "argv": [
+        "crew",
+        "msg",
+        "ack",
+        "msg_fixture_1",
+        "--by",
+        "crew-claude",
+        "--stage",
+        "done",
+        "--result",
+        "ok",
+        "--note",
+        "Review recorded in a reply"
+      ],
+      "bridge_request": {
+        "id": "ack-done-ok",
+        "method": "msg.ack",
+        "params": {
+          "args": [
+            "msg_fixture_1",
+            "--by",
+            "crew-claude",
+            "--stage",
+            "done",
+            "--result",
+            "ok",
+            "--note",
+            "Review recorded in a reply"
+          ]
+        }
+      },
+      "expected_bridge_response": {
+        "id": "ack-done-ok",
+        "result": {
+          "message": {
+            "id": "msg_fixture_1",
+            "key": "review-b-1",
+            "from": "crew-codex",
+            "to": "crew-claude",
+            "kind": "review",
+            "reply_to": null,
+            "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "artifacts": [
+              {
+                "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+                "repo_root": "D:/Crew-agentcmd",
+                "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+                "bytes": 64
+              }
+            ],
+            "created_at": "2026-11-02T04:00:00Z",
+            "acks": [
+              {
+                "stage": "read",
+                "by": "crew-claude",
+                "at": "2026-11-02T04:00:03Z",
+                "note": "Receiver fetched the message"
+              },
+              {
+                "stage": "done",
+                "by": "crew-claude",
+                "at": "2026-11-02T04:00:10Z",
+                "note": "Review recorded in a reply",
+                "result": "ok"
+              }
+            ]
+          },
+          "changed": true
+        }
+      },
+      "expected_cli_json": {
+        "result": {
+          "message": {
+            "id": "msg_fixture_1",
+            "key": "review-b-1",
+            "from": "crew-codex",
+            "to": "crew-claude",
+            "kind": "review",
+            "reply_to": null,
+            "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "artifacts": [
+              {
+                "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+                "repo_root": "D:/Crew-agentcmd",
+                "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+                "bytes": 64
+              }
+            ],
+            "created_at": "2026-11-02T04:00:00Z",
+            "acks": [
+              {
+                "stage": "read",
+                "by": "crew-claude",
+                "at": "2026-11-02T04:00:03Z",
+                "note": "Receiver fetched the message"
+              },
+              {
+                "stage": "done",
+                "by": "crew-claude",
+                "at": "2026-11-02T04:00:10Z",
+                "note": "Review recorded in a reply",
+                "result": "ok"
+              }
+            ]
+          },
+          "changed": true
+        }
+      }
+    },
+    {
+      "id": "ack-done-retry",
+      "runtime_status": "NOT_RUN",
+      "argv": [
+        "crew",
+        "msg",
+        "ack",
+        "msg_fixture_1",
+        "--by",
+        "crew-claude",
+        "--stage",
+        "done",
+        "--result",
+        "ok",
+        "--note",
+        "Review recorded in a reply"
+      ],
+      "bridge_request": {
+        "id": "ack-done-retry",
+        "method": "msg.ack",
+        "params": {
+          "args": [
+            "msg_fixture_1",
+            "--by",
+            "crew-claude",
+            "--stage",
+            "done",
+            "--result",
+            "ok",
+            "--note",
+            "Review recorded in a reply"
+          ]
+        }
+      },
+      "expected_bridge_response": {
+        "id": "ack-done-retry",
+        "result": {
+          "message": {
+            "id": "msg_fixture_1",
+            "key": "review-b-1",
+            "from": "crew-codex",
+            "to": "crew-claude",
+            "kind": "review",
+            "reply_to": null,
+            "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "artifacts": [
+              {
+                "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+                "repo_root": "D:/Crew-agentcmd",
+                "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+                "bytes": 64
+              }
+            ],
+            "created_at": "2026-11-02T04:00:00Z",
+            "acks": [
+              {
+                "stage": "read",
+                "by": "crew-claude",
+                "at": "2026-11-02T04:00:03Z",
+                "note": "Receiver fetched the message"
+              },
+              {
+                "stage": "done",
+                "by": "crew-claude",
+                "at": "2026-11-02T04:00:10Z",
+                "note": "Review recorded in a reply",
+                "result": "ok"
+              }
+            ]
+          },
+          "changed": false
+        }
+      },
+      "expected_cli_json": {
+        "result": {
+          "message": {
+            "id": "msg_fixture_1",
+            "key": "review-b-1",
+            "from": "crew-codex",
+            "to": "crew-claude",
+            "kind": "review",
+            "reply_to": null,
+            "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "artifacts": [
+              {
+                "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+                "repo_root": "D:/Crew-agentcmd",
+                "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+                "bytes": 64
+              }
+            ],
+            "created_at": "2026-11-02T04:00:00Z",
+            "acks": [
+              {
+                "stage": "read",
+                "by": "crew-claude",
+                "at": "2026-11-02T04:00:03Z",
+                "note": "Receiver fetched the message"
+              },
+              {
+                "stage": "done",
+                "by": "crew-claude",
+                "at": "2026-11-02T04:00:10Z",
+                "note": "Review recorded in a reply",
+                "result": "ok"
+              }
+            ]
+          },
+          "changed": false
+        }
+      }
+    },
+    {
+      "id": "list-unread",
+      "runtime_status": "NOT_RUN",
+      "argv": [
+        "crew",
+        "msg",
+        "list",
+        "--to",
+        "crew-claude",
+        "--unread",
+        "--limit",
+        "20"
+      ],
+      "bridge_request": {
+        "id": "list-unread",
+        "method": "msg.list",
+        "params": {
+          "args": [
+            "--to",
+            "crew-claude",
+            "--unread",
+            "--limit",
+            "20"
+          ]
+        }
+      },
+      "expected_bridge_response": {
+        "id": "list-unread",
+        "result": {
+          "messages": [
+            {
+              "id": "msg_fixture_1",
+              "from": "crew-codex",
+              "to": "crew-claude",
+              "kind": "review",
+              "reply_to": null,
+              "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+              "created_at": "2026-11-02T04:00:00Z",
+              "read": false,
+              "done": null
+            }
+          ],
+          "next_cursor": "cursor_fixture_store_1",
+          "has_more": false
+        }
+      },
+      "expected_cli_json": {
+        "result": {
+          "messages": [
+            {
+              "id": "msg_fixture_1",
+              "from": "crew-codex",
+              "to": "crew-claude",
+              "kind": "review",
+              "reply_to": null,
+              "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+              "created_at": "2026-11-02T04:00:00Z",
+              "read": false,
+              "done": null
+            }
+          ],
+          "next_cursor": "cursor_fixture_store_1",
+          "has_more": false
+        }
+      }
+    },
+    {
+      "id": "send-conflict",
+      "runtime_status": "NOT_RUN",
+      "argv": [
+        "crew",
+        "msg",
+        "send",
+        "--from",
+        "crew-codex",
+        "--to",
+        "crew-claude",
+        "--key",
+        "review-b-1",
+        "--kind",
+        "review",
+        "--summary",
+        "Changed summary",
+        "--repo-root",
+        "D:/Crew-agentcmd",
+        "--file",
+        "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt"
+      ],
+      "bridge_request": {
+        "id": "send-conflict",
+        "method": "msg.send",
+        "params": {
+          "args": [
+            "--from",
+            "crew-codex",
+            "--to",
+            "crew-claude",
+            "--key",
+            "review-b-1",
+            "--kind",
+            "review",
+            "--summary",
+            "Changed summary",
+            "--repo-root",
+            "D:/Crew-agentcmd",
+            "--file",
+            "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt"
+          ]
+        }
+      },
+      "expected_bridge_response": {
+        "id": "send-conflict",
+        "error": {
+          "code": "message_conflict",
+          "message": "from + key already exists with different content"
+        }
+      },
+      "expected_cli_json": {
+        "error": {
+          "code": "message_conflict",
+          "message": "from + key already exists with different content"
+        }
+      },
+      "caller_context": {
+        "crew_pane_id": "p4",
+        "epoch": "epoch_fixture_a",
+        "instance": 104,
+        "reported_name": "crew-codex",
+        "live": true
+      }
+    },
+    {
+      "id": "send-retry-root-1",
+      "runtime_status": "NOT_RUN",
+      "argv": [
+        "crew",
+        "msg",
+        "send",
+        "--from",
+        "crew-codex",
+        "--to",
+        "crew-claude",
+        "--key",
+        "review-b-1",
+        "--kind",
+        "review",
+        "--summary",
+        "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+        "--repo-root",
+        "d:/crew-agentcmd",
+        "--file",
+        "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt"
+      ],
+      "bridge_request": {
+        "id": "send-retry-root-1",
+        "method": "msg.send",
+        "params": {
+          "args": [
+            "--from",
+            "crew-codex",
+            "--to",
+            "crew-claude",
+            "--key",
+            "review-b-1",
+            "--kind",
+            "review",
+            "--summary",
+            "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "--repo-root",
+            "d:/crew-agentcmd",
+            "--file",
+            "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt"
+          ]
+        }
+      },
+      "expected_bridge_response": {
+        "id": "send-retry-root-1",
+        "result": {
+          "message": {
+            "id": "msg_fixture_1",
+            "key": "review-b-1",
+            "from": "crew-codex",
+            "to": "crew-claude",
+            "kind": "review",
+            "reply_to": null,
+            "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "artifacts": [
+              {
+                "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+                "repo_root": "D:/Crew-agentcmd",
+                "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+                "bytes": 64
+              }
+            ],
+            "created_at": "2026-11-02T04:00:00Z",
+            "acks": [
+              {
+                "stage": "read",
+                "by": "crew-claude",
+                "at": "2026-11-02T04:00:03Z",
+                "note": "Receiver fetched the message"
+              }
+            ]
+          },
+          "deduplicated": true
+        }
+      },
+      "expected_cli_json": {
+        "result": {
+          "message": {
+            "id": "msg_fixture_1",
+            "key": "review-b-1",
+            "from": "crew-codex",
+            "to": "crew-claude",
+            "kind": "review",
+            "reply_to": null,
+            "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "artifacts": [
+              {
+                "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+                "repo_root": "D:/Crew-agentcmd",
+                "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+                "bytes": 64
+              }
+            ],
+            "created_at": "2026-11-02T04:00:00Z",
+            "acks": [
+              {
+                "stage": "read",
+                "by": "crew-claude",
+                "at": "2026-11-02T04:00:03Z",
+                "note": "Receiver fetched the message"
+              }
+            ]
+          },
+          "deduplicated": true
+        }
+      },
+      "caller_context": {
+        "crew_pane_id": "p4",
+        "epoch": "epoch_fixture_a",
+        "instance": 104,
+        "reported_name": "crew-codex",
+        "live": true
+      }
+    },
+    {
+      "id": "send-retry-root-2",
+      "runtime_status": "NOT_RUN",
+      "argv": [
+        "crew",
+        "msg",
+        "send",
+        "--from",
+        "crew-codex",
+        "--to",
+        "crew-claude",
+        "--key",
+        "review-b-1",
+        "--kind",
+        "review",
+        "--summary",
+        "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+        "--repo-root",
+        "D:\\Crew-agentcmd",
+        "--file",
+        "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt"
+      ],
+      "bridge_request": {
+        "id": "send-retry-root-2",
+        "method": "msg.send",
+        "params": {
+          "args": [
+            "--from",
+            "crew-codex",
+            "--to",
+            "crew-claude",
+            "--key",
+            "review-b-1",
+            "--kind",
+            "review",
+            "--summary",
+            "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "--repo-root",
+            "D:\\Crew-agentcmd",
+            "--file",
+            "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt"
+          ]
+        }
+      },
+      "expected_bridge_response": {
+        "id": "send-retry-root-2",
+        "result": {
+          "message": {
+            "id": "msg_fixture_1",
+            "key": "review-b-1",
+            "from": "crew-codex",
+            "to": "crew-claude",
+            "kind": "review",
+            "reply_to": null,
+            "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "artifacts": [
+              {
+                "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+                "repo_root": "D:/Crew-agentcmd",
+                "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+                "bytes": 64
+              }
+            ],
+            "created_at": "2026-11-02T04:00:00Z",
+            "acks": [
+              {
+                "stage": "read",
+                "by": "crew-claude",
+                "at": "2026-11-02T04:00:03Z",
+                "note": "Receiver fetched the message"
+              }
+            ]
+          },
+          "deduplicated": true
+        }
+      },
+      "expected_cli_json": {
+        "result": {
+          "message": {
+            "id": "msg_fixture_1",
+            "key": "review-b-1",
+            "from": "crew-codex",
+            "to": "crew-claude",
+            "kind": "review",
+            "reply_to": null,
+            "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "artifacts": [
+              {
+                "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+                "repo_root": "D:/Crew-agentcmd",
+                "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+                "bytes": 64
+              }
+            ],
+            "created_at": "2026-11-02T04:00:00Z",
+            "acks": [
+              {
+                "stage": "read",
+                "by": "crew-claude",
+                "at": "2026-11-02T04:00:03Z",
+                "note": "Receiver fetched the message"
+              }
+            ]
+          },
+          "deduplicated": true
+        }
+      },
+      "caller_context": {
+        "crew_pane_id": "p4",
+        "epoch": "epoch_fixture_a",
+        "instance": 104,
+        "reported_name": "crew-codex",
+        "live": true
+      }
+    },
+    {
+      "id": "send-retry-root-3",
+      "runtime_status": "NOT_RUN",
+      "argv": [
+        "crew",
+        "msg",
+        "send",
+        "--from",
+        "crew-codex",
+        "--to",
+        "crew-claude",
+        "--key",
+        "review-b-1",
+        "--kind",
+        "review",
+        "--summary",
+        "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+        "--repo-root",
+        "E:/Resumed Worktree",
+        "--file",
+        "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt"
+      ],
+      "bridge_request": {
+        "id": "send-retry-root-3",
+        "method": "msg.send",
+        "params": {
+          "args": [
+            "--from",
+            "crew-codex",
+            "--to",
+            "crew-claude",
+            "--key",
+            "review-b-1",
+            "--kind",
+            "review",
+            "--summary",
+            "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "--repo-root",
+            "E:/Resumed Worktree",
+            "--file",
+            "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt"
+          ]
+        }
+      },
+      "expected_bridge_response": {
+        "id": "send-retry-root-3",
+        "result": {
+          "message": {
+            "id": "msg_fixture_1",
+            "key": "review-b-1",
+            "from": "crew-codex",
+            "to": "crew-claude",
+            "kind": "review",
+            "reply_to": null,
+            "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "artifacts": [
+              {
+                "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+                "repo_root": "D:/Crew-agentcmd",
+                "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+                "bytes": 64
+              }
+            ],
+            "created_at": "2026-11-02T04:00:00Z",
+            "acks": [
+              {
+                "stage": "read",
+                "by": "crew-claude",
+                "at": "2026-11-02T04:00:03Z",
+                "note": "Receiver fetched the message"
+              }
+            ]
+          },
+          "deduplicated": true
+        }
+      },
+      "expected_cli_json": {
+        "result": {
+          "message": {
+            "id": "msg_fixture_1",
+            "key": "review-b-1",
+            "from": "crew-codex",
+            "to": "crew-claude",
+            "kind": "review",
+            "reply_to": null,
+            "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "artifacts": [
+              {
+                "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+                "repo_root": "D:/Crew-agentcmd",
+                "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+                "bytes": 64
+              }
+            ],
+            "created_at": "2026-11-02T04:00:00Z",
+            "acks": [
+              {
+                "stage": "read",
+                "by": "crew-claude",
+                "at": "2026-11-02T04:00:03Z",
+                "note": "Receiver fetched the message"
+              }
+            ]
+          },
+          "deduplicated": true
+        }
+      },
+      "caller_context": {
+        "crew_pane_id": "p4",
+        "epoch": "epoch_fixture_a",
+        "instance": 104,
+        "reported_name": "crew-codex",
+        "live": true
+      }
+    },
+    {
+      "id": "list-open-after-read-crash",
+      "runtime_status": "NOT_RUN",
+      "argv": [
+        "crew",
+        "msg",
+        "list",
+        "--to",
+        "crew-claude",
+        "--open",
+        "--limit",
+        "20"
+      ],
+      "bridge_request": {
+        "id": "list-open-after-read-crash",
+        "method": "msg.list",
+        "params": {
+          "args": [
+            "--to",
+            "crew-claude",
+            "--open",
+            "--limit",
+            "20"
+          ]
+        }
+      },
+      "expected_bridge_response": {
+        "id": "list-open-after-read-crash",
+        "result": {
+          "messages": [
+            {
+              "id": "msg_fixture_1",
+              "from": "crew-codex",
+              "to": "crew-claude",
+              "kind": "review",
+              "reply_to": null,
+              "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+              "created_at": "2026-11-02T04:00:00Z",
+              "read": true,
+              "done": null
+            }
+          ],
+          "next_cursor": "cursor_fixture_store_1",
+          "has_more": false
+        }
+      },
+      "expected_cli_json": {
+        "result": {
+          "messages": [
+            {
+              "id": "msg_fixture_1",
+              "from": "crew-codex",
+              "to": "crew-claude",
+              "kind": "review",
+              "reply_to": null,
+              "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+              "created_at": "2026-11-02T04:00:00Z",
+              "read": true,
+              "done": null
+            }
+          ],
+          "next_cursor": "cursor_fixture_store_1",
+          "has_more": false
+        }
+      }
+    },
+    {
+      "id": "send-offline-known",
+      "runtime_status": "NOT_RUN",
+      "argv": [
+        "crew",
+        "msg",
+        "send",
+        "--from",
+        "crew-codex",
+        "--to",
+        "crew-claude",
+        "--key",
+        "offline-b-1",
+        "--kind",
+        "review",
+        "--summary",
+        "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+        "--repo-root",
+        "D:/Crew-agentcmd",
+        "--file",
+        "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt"
+      ],
+      "bridge_request": {
+        "id": "send-offline-known",
+        "method": "msg.send",
+        "params": {
+          "args": [
+            "--from",
+            "crew-codex",
+            "--to",
+            "crew-claude",
+            "--key",
+            "offline-b-1",
+            "--kind",
+            "review",
+            "--summary",
+            "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "--repo-root",
+            "D:/Crew-agentcmd",
+            "--file",
+            "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt"
+          ]
+        }
+      },
+      "expected_bridge_response": {
+        "id": "send-offline-known",
+        "result": {
+          "message": {
+            "id": "msg_fixture_4",
+            "key": "offline-b-1",
+            "from": "crew-codex",
+            "to": "crew-claude",
+            "kind": "review",
+            "reply_to": null,
+            "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "artifacts": [
+              {
+                "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+                "repo_root": "D:/Crew-agentcmd",
+                "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+                "bytes": 64
+              }
+            ],
+            "created_at": "2026-11-02T04:01:00Z",
+            "acks": []
+          },
+          "deduplicated": false
+        }
+      },
+      "expected_cli_json": {
+        "result": {
+          "message": {
+            "id": "msg_fixture_4",
+            "key": "offline-b-1",
+            "from": "crew-codex",
+            "to": "crew-claude",
+            "kind": "review",
+            "reply_to": null,
+            "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "artifacts": [
+              {
+                "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+                "repo_root": "D:/Crew-agentcmd",
+                "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+                "bytes": 64
+              }
+            ],
+            "created_at": "2026-11-02T04:01:00Z",
+            "acks": []
+          },
+          "deduplicated": false
+        }
+      },
+      "caller_context": {
+        "crew_pane_id": "p4",
+        "epoch": "epoch_fixture_a",
+        "instance": 104,
+        "reported_name": "crew-codex",
+        "live": true
+      }
+    },
+    {
+      "id": "send-unknown-recipient",
+      "runtime_status": "NOT_RUN",
+      "argv": [
+        "crew",
+        "msg",
+        "send",
+        "--from",
+        "crew-codex",
+        "--to",
+        "crew-unseen",
+        "--key",
+        "unknown-b-1",
+        "--kind",
+        "review",
+        "--summary",
+        "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+        "--repo-root",
+        "D:/Crew-agentcmd",
+        "--file",
+        "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt"
+      ],
+      "bridge_request": {
+        "id": "send-unknown-recipient",
+        "method": "msg.send",
+        "params": {
+          "args": [
+            "--from",
+            "crew-codex",
+            "--to",
+            "crew-unseen",
+            "--key",
+            "unknown-b-1",
+            "--kind",
+            "review",
+            "--summary",
+            "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "--repo-root",
+            "D:/Crew-agentcmd",
+            "--file",
+            "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt"
+          ]
+        }
+      },
+      "expected_bridge_response": {
+        "id": "send-unknown-recipient",
+        "error": {
+          "code": "unknown_peer",
+          "message": "recipient is not live or known from this inbox"
+        }
+      },
+      "expected_cli_json": {
+        "error": {
+          "code": "unknown_peer",
+          "message": "recipient is not live or known from this inbox"
+        }
+      },
+      "caller_context": {
+        "crew_pane_id": "p4",
+        "epoch": "epoch_fixture_a",
+        "instance": 104,
+        "reported_name": "crew-codex",
+        "live": true
+      }
+    },
+    {
+      "id": "send-store-full",
+      "runtime_status": "NOT_RUN",
+      "argv": [
+        "crew",
+        "msg",
+        "send",
+        "--from",
+        "crew-codex",
+        "--to",
+        "crew-claude",
+        "--key",
+        "capacity-new",
+        "--kind",
+        "review",
+        "--summary",
+        "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+        "--repo-root",
+        "D:/Crew-agentcmd",
+        "--file",
+        "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt"
+      ],
+      "bridge_request": {
+        "id": "send-store-full",
+        "method": "msg.send",
+        "params": {
+          "args": [
+            "--from",
+            "crew-codex",
+            "--to",
+            "crew-claude",
+            "--key",
+            "capacity-new",
+            "--kind",
+            "review",
+            "--summary",
+            "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "--repo-root",
+            "D:/Crew-agentcmd",
+            "--file",
+            "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt"
+          ]
+        }
+      },
+      "expected_bridge_response": {
+        "id": "send-store-full",
+        "error": {
+          "code": "store_full",
+          "message": "inbox already contains 10000 messages; no automatic pruning"
+        }
+      },
+      "expected_cli_json": {
+        "error": {
+          "code": "store_full",
+          "message": "inbox already contains 10000 messages; no automatic pruning"
+        }
+      },
+      "caller_context": {
+        "crew_pane_id": "p4",
+        "epoch": "epoch_fixture_a",
+        "instance": 104,
+        "reported_name": "crew-codex",
+        "live": true
+      }
+    },
+    {
+      "id": "send-from-mismatch",
+      "runtime_status": "NOT_RUN",
+      "argv": [
+        "crew",
+        "msg",
+        "send",
+        "--from",
+        "crew-claude",
+        "--to",
+        "crew-codex",
+        "--key",
+        "review-b-1",
+        "--kind",
+        "review",
+        "--summary",
+        "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+        "--repo-root",
+        "D:/Crew-agentcmd",
+        "--file",
+        "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt"
+      ],
+      "bridge_request": {
+        "id": "send-from-mismatch",
+        "method": "msg.send",
+        "params": {
+          "args": [
+            "--from",
+            "crew-claude",
+            "--to",
+            "crew-codex",
+            "--key",
+            "review-b-1",
+            "--kind",
+            "review",
+            "--summary",
+            "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "--repo-root",
+            "D:/Crew-agentcmd",
+            "--file",
+            "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt"
+          ]
+        }
+      },
+      "expected_bridge_response": {
+        "id": "send-from-mismatch",
+        "error": {
+          "code": "invalid_argument",
+          "message": "--from does not match the caller reported name"
+        }
+      },
+      "expected_cli_json": {
+        "error": {
+          "code": "invalid_argument",
+          "message": "--from does not match the caller reported name"
+        }
+      },
+      "caller_context": {
+        "crew_pane_id": "p4",
+        "epoch": "epoch_fixture_a",
+        "instance": 104,
+        "reported_name": "crew-codex",
+        "live": true
+      }
+    },
+    {
+      "id": "send-mismatch-before-dedupe",
+      "runtime_status": "NOT_RUN",
+      "argv": [
+        "crew",
+        "msg",
+        "send",
+        "--from",
+        "crew-codex",
+        "--to",
+        "crew-claude",
+        "--key",
+        "review-b-1",
+        "--kind",
+        "review",
+        "--summary",
+        "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+        "--repo-root",
+        "D:/Crew-agentcmd",
+        "--file",
+        "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt"
+      ],
+      "bridge_request": {
+        "id": "send-mismatch-before-dedupe",
+        "method": "msg.send",
+        "params": {
+          "args": [
+            "--from",
+            "crew-codex",
+            "--to",
+            "crew-claude",
+            "--key",
+            "review-b-1",
+            "--kind",
+            "review",
+            "--summary",
+            "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+            "--repo-root",
+            "D:/Crew-agentcmd",
+            "--file",
+            "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt"
+          ]
+        }
+      },
+      "expected_bridge_response": {
+        "id": "send-mismatch-before-dedupe",
+        "error": {
+          "code": "invalid_argument",
+          "message": "--from does not match the caller reported name"
+        }
+      },
+      "expected_cli_json": {
+        "error": {
+          "code": "invalid_argument",
+          "message": "--from does not match the caller reported name"
+        }
+      },
+      "caller_context": {
+        "crew_pane_id": "p1",
+        "epoch": "epoch_fixture_a",
+        "instance": 101,
+        "reported_name": "crew-claude",
+        "live": true
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "new-send",
+      "exchange": "send-new",
+      "before": "empty",
+      "after": "stored",
+      "events": [
+        "message.stored"
+      ]
+    },
+    {
+      "id": "retry-preserves-ack",
+      "exchange": "send-retry-after-read",
+      "before": "read",
+      "after": "read",
+      "events": []
+    },
+    {
+      "id": "retry-with-recipient-offline",
+      "exchange": "send-retry-after-read",
+      "before": "read",
+      "live_peers": [
+        "crew-codex"
+      ],
+      "after": "read",
+      "events": [],
+      "caller_context": {
+        "crew_pane_id": "p4",
+        "reported_name": "crew-codex",
+        "live": true
+      }
+    },
+    {
+      "id": "conflict-does-not-replace",
+      "exchange": "send-conflict",
+      "before": "read",
+      "after": "read",
+      "events": []
+    },
+    {
+      "id": "read-only-fetch",
+      "exchange": "read-no-ack",
+      "before": "stored",
+      "after": "stored",
+      "events": []
+    },
+    {
+      "id": "read-ack",
+      "exchange": "ack-read",
+      "before": "stored",
+      "after": "read",
+      "events": [
+        "message.acked"
+      ]
+    },
+    {
+      "id": "read-ack-retry",
+      "exchange": "ack-read-retry",
+      "before": "read",
+      "after": "read",
+      "events": []
+    },
+    {
+      "id": "read-retry-after-done",
+      "exchange": "ack-read-retry-after-done",
+      "before": "done_ok",
+      "after": "done_ok",
+      "events": []
+    },
+    {
+      "id": "done-ok",
+      "exchange": "ack-done-ok",
+      "before": "read",
+      "after": "done_ok",
+      "events": [
+        "message.acked"
+      ]
+    },
+    {
+      "id": "done-retry",
+      "exchange": "ack-done-retry",
+      "before": "done_ok",
+      "after": "done_ok",
+      "events": []
+    },
+    {
+      "id": "done-failed",
+      "before": "read",
+      "request": {
+        "stage": "done",
+        "by": "crew-claude",
+        "result": "failed",
+        "note": "Artifact mismatch; no sender-root fallback"
+      },
+      "after": "done_failed",
+      "events": [
+        "message.acked"
+      ]
+    },
+    {
+      "id": "done-before-read",
+      "before": "stored",
+      "request": {
+        "stage": "done",
+        "by": "crew-claude",
+        "result": "ok",
+        "note": null
+      },
+      "error": "invalid_argument",
+      "after": "stored",
+      "events": []
+    },
+    {
+      "id": "wrong-ack-recipient",
+      "before": "stored",
+      "request": {
+        "stage": "read",
+        "by": "crew-codex",
+        "note": null
+      },
+      "error": "invalid_argument",
+      "after": "stored",
+      "events": []
+    },
+    {
+      "id": "missing-done-result",
+      "before": "read",
+      "request": {
+        "stage": "done",
+        "by": "crew-claude",
+        "note": null
+      },
+      "error": "invalid_argument",
+      "after": "read",
+      "events": []
+    },
+    {
+      "id": "no-accepted-stage-in-v1",
+      "before": "stored",
+      "request": {
+        "stage": "accepted",
+        "by": "crew-claude",
+        "note": null
+      },
+      "error": "invalid_argument",
+      "after": "stored",
+      "events": []
+    },
+    {
+      "id": "done-conflict",
+      "before": "done_ok",
+      "request": {
+        "stage": "done",
+        "by": "crew-claude",
+        "result": "failed",
+        "note": "Changed result"
+      },
+      "error": "ack_conflict",
+      "after": "done_ok",
+      "events": []
+    },
+    {
+      "id": "reply-does-not-ack",
+      "before": "stored",
+      "add_message": "reply",
+      "after": "stored",
+      "events": [
+        "message.stored"
+      ]
+    },
+    {
+      "id": "notification-is-not-read",
+      "before": "stored",
+      "notification": {
+        "message_id": "msg_fixture_1",
+        "state": "notified",
+        "at": "2026-11-02T04:00:02Z",
+        "note": "One notifier sent a prompt"
+      },
+      "after": "stored",
+      "events": []
+    },
+    {
+      "id": "same-key-other-sender",
+      "request_changes": {
+        "from": "crew-claude",
+        "to": "crew-codex"
+      },
+      "same_key_as": "stored",
+      "expected_new_id": true,
+      "caller_context": {
+        "crew_pane_id": "p1",
+        "reported_name": "crew-claude",
+        "live": true
+      }
+    },
+    {
+      "id": "new-send-detected-only-sender",
+      "peer": {
+        "pane_id": "p9",
+        "detected_agent": "claude",
+        "reported_name": null
+      },
+      "error": "agent_not_found",
+      "events": [],
+      "identity_role": "caller-sender",
+      "caller_context": {
+        "crew_pane_id": "p9",
+        "reported_name": null,
+        "live": true
+      }
+    },
+    {
+      "id": "list-cursor-after-restart",
+      "before_messages": [
+        "stored",
+        "reply",
+        "later"
+      ],
+      "before_epoch": "epoch_fixture_a",
+      "after_epoch": "epoch_fixture_b",
+      "args": [
+        "--to",
+        "crew-claude",
+        "--after",
+        "cursor_fixture_store_1"
+      ],
+      "expected_ids": [
+        "msg_fixture_3"
+      ],
+      "next_cursor": "cursor_fixture_store_3"
+    },
+    {
+      "id": "send-retry-root-1",
+      "exchange": "send-retry-root-1",
+      "before": "read",
+      "after": "read",
+      "submitted_message": {
+        "id": "msg_fixture_1",
+        "key": "review-b-1",
+        "from": "crew-codex",
+        "to": "crew-claude",
+        "kind": "review",
+        "reply_to": null,
+        "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+        "artifacts": [
+          {
+            "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+            "repo_root": "d:/crew-agentcmd",
+            "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+            "bytes": 64
+          }
+        ],
+        "created_at": "2026-11-02T04:00:00Z",
+        "acks": []
+      },
+      "events": []
+    },
+    {
+      "id": "send-retry-root-2",
+      "exchange": "send-retry-root-2",
+      "before": "read",
+      "after": "read",
+      "submitted_message": {
+        "id": "msg_fixture_1",
+        "key": "review-b-1",
+        "from": "crew-codex",
+        "to": "crew-claude",
+        "kind": "review",
+        "reply_to": null,
+        "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+        "artifacts": [
+          {
+            "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+            "repo_root": "D:\\Crew-agentcmd",
+            "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+            "bytes": 64
+          }
+        ],
+        "created_at": "2026-11-02T04:00:00Z",
+        "acks": []
+      },
+      "events": []
+    },
+    {
+      "id": "send-retry-root-3",
+      "exchange": "send-retry-root-3",
+      "before": "read",
+      "after": "read",
+      "submitted_message": {
+        "id": "msg_fixture_1",
+        "key": "review-b-1",
+        "from": "crew-codex",
+        "to": "crew-claude",
+        "kind": "review",
+        "reply_to": null,
+        "summary": "請審查 B v1 草案；核對相同 key 的重試與跨 worktree artifact。",
+        "artifacts": [
+          {
+            "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+            "repo_root": "E:/Resumed Worktree",
+            "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+            "bytes": 64
+          }
+        ],
+        "created_at": "2026-11-02T04:00:00Z",
+        "acks": []
+      },
+      "events": []
+    },
+    {
+      "id": "read-then-crash-remains-open",
+      "exchange": "list-open-after-read-crash",
+      "before_messages": [
+        "read",
+        "reply"
+      ],
+      "to": "crew-claude",
+      "expected_open_ids": [
+        "msg_fixture_1"
+      ],
+      "expected_unread_ids": [],
+      "events": []
+    },
+    {
+      "id": "done-leaves-open-set",
+      "before_messages": [
+        "done_ok"
+      ],
+      "to": "crew-claude",
+      "expected_open_ids": [],
+      "expected_unread_ids": [],
+      "next_cursor": null,
+      "events": []
+    },
+    {
+      "id": "open-unread-conflict",
+      "args": [
+        "--to",
+        "crew-claude",
+        "--open",
+        "--unread"
+      ],
+      "error": "invalid_argument",
+      "events": []
+    },
+    {
+      "id": "offline-known-recipient-stored",
+      "exchange": "send-offline-known",
+      "before": "read",
+      "live_peers": [
+        "crew-codex"
+      ],
+      "store_history": [
+        "read"
+      ],
+      "after": "offline_stored",
+      "events": [
+        "message.stored"
+      ]
+    },
+    {
+      "id": "unknown-recipient-rejected",
+      "exchange": "send-unknown-recipient",
+      "before": "read",
+      "live_peers": [
+        "crew-codex"
+      ],
+      "store_history": [
+        "read"
+      ],
+      "requested_to": "crew-unseen",
+      "error": "unknown_peer",
+      "after": "read",
+      "events": []
+    },
+    {
+      "id": "new-key-at-store-limit",
+      "exchange": "send-store-full",
+      "before": "read",
+      "before_count": 10000,
+      "after_count": 10000,
+      "submitted_key": "capacity-new",
+      "key_present_before": false,
+      "error": "store_full",
+      "after": "read",
+      "events": []
+    },
+    {
+      "id": "stored-retry-at-store-limit",
+      "exchange": "send-retry-after-read",
+      "before": "read",
+      "before_count": 10000,
+      "after_count": 10000,
+      "after": "read",
+      "events": []
+    },
+    {
+      "id": "from-mismatch",
+      "exchange": "send-from-mismatch",
+      "before": "read",
+      "error": "invalid_argument",
+      "after": "read",
+      "events": []
+    },
+    {
+      "id": "mismatch-even-for-existing-retry",
+      "exchange": "send-mismatch-before-dedupe",
+      "before": "read",
+      "error": "invalid_argument",
+      "after": "read",
+      "events": []
+    },
+    {
+      "id": "sender-offline-cannot-retry",
+      "before": "read",
+      "caller_context": {
+        "crew_pane_id": "p4",
+        "reported_name": null,
+        "live": false
+      },
+      "error": "agent_not_found",
+      "after": "read",
+      "events": []
+    }
+  ],
+  "summary_boundaries": [
+    {
+      "id": "utf8-exact-512",
+      "text": "中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中aa",
+      "utf8_bytes": 512,
+      "accepted": true
+    },
+    {
+      "id": "utf8-over-512",
+      "text": "中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中",
+      "utf8_bytes": 513,
+      "accepted": false,
+      "error": "invalid_argument"
+    }
+  ],
+  "artifact_scenarios": [
+    {
+      "id": "receiver-own-root-match",
+      "artifact": {
+        "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+        "repo_root": "D:/Crew-agentcmd",
+        "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+        "bytes": 64
+      },
+      "receiver_repo_root": "E:/Receiver Worktree",
+      "expected_resolved_path": "E:/Receiver Worktree/docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+      "receiver_content": "fixture-bytes",
+      "consume": true,
+      "sender_root_fallback": false
+    },
+    {
+      "id": "receiver-mismatch",
+      "artifact": {
+        "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+        "repo_root": "D:/Crew-agentcmd",
+        "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+        "bytes": 64
+      },
+      "receiver_repo_root": "E:/Receiver Worktree",
+      "receiver_content": "fixture-bytes-plus-exclamation",
+      "consume": false,
+      "error": "artifact_mismatch",
+      "sender_root_fallback": false
+    },
+    {
+      "id": "receiver-digest-only-mismatch",
+      "artifact": {
+        "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+        "repo_root": "D:/Crew-agentcmd",
+        "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+        "bytes": 64
+      },
+      "receiver_repo_root": "E:/Receiver Worktree",
+      "receiver_content": "fixture-first-byte-changed",
+      "consume": false,
+      "error": "artifact_mismatch",
+      "sender_root_fallback": false
+    },
+    {
+      "id": "receiver-byte-count-only-mismatch",
+      "artifact": {
+        "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+        "repo_root": "D:/Crew-agentcmd",
+        "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+        "bytes": 65
+      },
+      "receiver_repo_root": "E:/Receiver Worktree",
+      "receiver_content": "fixture-bytes",
+      "consume": false,
+      "error": "artifact_mismatch",
+      "sender_root_fallback": false
+    },
+    {
+      "id": "receiver-missing",
+      "artifact": {
+        "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+        "repo_root": "D:/Crew-agentcmd",
+        "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+        "bytes": 64
+      },
+      "receiver_repo_root": "E:/Receiver Worktree",
+      "receiver_content": null,
+      "consume": false,
+      "error": "artifact_missing",
+      "sender_root_fallback": false
+    }
+  ],
+  "invalid_artifact_paths": [
+    "../outside.txt",
+    "/absolute.txt",
+    "C:/outside.txt",
+    "docs\\file.txt",
+    "docs//file.txt",
+    "docs/./file.txt",
+    "docs/../file.txt",
+    "docs/file:stream",
+    "docs/\u0000file.txt"
+  ],
+  "event_examples": [
+    {
+      "cursor": 41,
+      "timestamp_ms": 1793592000000,
+      "kind": "message.stored",
+      "pane_id": null,
+      "data": {
+        "message_id": "msg_fixture_1",
+        "from": "crew-codex",
+        "to": "crew-claude"
+      }
+    },
+    {
+      "cursor": 42,
+      "timestamp_ms": 1793592003000,
+      "kind": "message.acked",
+      "pane_id": null,
+      "data": {
+        "message_id": "msg_fixture_1",
+        "stage": "read",
+        "by": "crew-claude"
+      }
+    },
+    {
+      "cursor": 43,
+      "timestamp_ms": 1793592010000,
+      "kind": "message.acked",
+      "pane_id": null,
+      "data": {
+        "message_id": "msg_fixture_1",
+        "stage": "done",
+        "by": "crew-claude",
+        "result": "ok"
+      }
+    }
+  ],
+  "amendments": [
+    "B1",
+    "B3",
+    "B4",
+    "B5",
+    "NIT"
+  ],
+  "limits": {
+    "summary_utf8_bytes": 512,
+    "note_utf8_bytes": 512,
+    "artifacts_per_message": 16,
+    "key_min_bytes": 1,
+    "key_max_bytes": 128,
+    "key_pattern": "[A-Za-z0-9._:-]+",
+    "messages_per_store": 10000
+  },
+  "note_boundaries": [
+    {
+      "id": "note-null",
+      "text": null,
+      "utf8_bytes": 0,
+      "accepted": true
+    },
+    {
+      "id": "note-exact-512",
+      "text": "中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中aa",
+      "utf8_bytes": 512,
+      "accepted": true
+    },
+    {
+      "id": "note-over-512",
+      "text": "中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中",
+      "utf8_bytes": 513,
+      "accepted": false,
+      "error": "invalid_argument"
+    }
+  ],
+  "key_boundaries": [
+    {
+      "id": "key-min",
+      "text": "x",
+      "accepted": true
+    },
+    {
+      "id": "key-max",
+      "text": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "accepted": true
+    },
+    {
+      "id": "key-punctuation",
+      "text": "task:review_1.0-final",
+      "accepted": true
+    },
+    {
+      "id": "key-empty",
+      "text": "",
+      "accepted": false,
+      "error": "invalid_argument"
+    },
+    {
+      "id": "key-over",
+      "text": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "accepted": false,
+      "error": "invalid_argument"
+    },
+    {
+      "id": "key-space",
+      "text": "review 1",
+      "accepted": false,
+      "error": "invalid_argument"
+    },
+    {
+      "id": "key-non-ascii",
+      "text": "審查",
+      "accepted": false,
+      "error": "invalid_argument"
+    }
+  ],
+  "artifact_count_boundaries": [
+    {
+      "count": 16,
+      "artifact_template": {
+        "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+        "repo_root": "D:/Crew-agentcmd",
+        "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+        "bytes": 64
+      },
+      "accepted": true
+    },
+    {
+      "count": 17,
+      "artifact_template": {
+        "path": "docs/collab/claude-codex/contract/artifacts/handoff-中文.txt",
+        "repo_root": "D:/Crew-agentcmd",
+        "sha256": "b7244c63e27e859e587353f499b550454fab186247d6efdfd00372fe2365573b",
+        "bytes": 64
+      },
+      "accepted": false,
+      "error": "invalid_argument"
+    }
+  ],
+  "store_examples": [
+    {
+      "id": "default-socket-store",
+      "crew_state_file": "D:/Crew/state/state-crew-eda.sock.json",
+      "socket_name": "crew-eda.sock",
+      "inbox_override": null,
+      "expected_path": "D:/Crew/state/inbox/crew-eda.sock.json"
+    },
+    {
+      "id": "other-socket-store",
+      "crew_state_file": "D:/Crew/state/state-other.sock.json",
+      "socket_name": "other.sock",
+      "inbox_override": null,
+      "expected_path": "D:/Crew/state/inbox/other.sock.json"
+    },
+    {
+      "id": "isolated-test-override",
+      "crew_state_file": "D:/Crew/state/state-crew-eda.sock.json",
+      "socket_name": "crew-eda.sock",
+      "inbox_override": "D:/Fixture State/inbox.json",
+      "expected_path": "D:/Fixture State/inbox.json"
+    },
+    {
+      "id": "non-component-socket-needs-override",
+      "crew_state_file": "D:/Crew/state/state-custom.json",
+      "socket_name": "D:/sockets/crew.sock",
+      "inbox_override": null,
+      "error": "invalid_argument"
+    }
+  ]
+}
