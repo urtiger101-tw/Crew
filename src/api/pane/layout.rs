@@ -61,6 +61,7 @@ fn split(
     let dir = split_dir(direction)?;
     let share = existing_share(ratio)?;
     crate::workspace::check_command(command.as_deref())?;
+    let _plugin_paths = crate::server::plugin_paths::prepare();
     let (reply, new_id, native_startup) = {
         let mut st = lock(shared);
         let pid = resolve_pane(&st, pane)?;

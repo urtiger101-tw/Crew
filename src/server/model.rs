@@ -36,6 +36,10 @@ pub struct Pane {
     pub cwd: Option<String>,
     /// Explicit environment overrides, inherited by splits and persisted with the pane.
     pub env: BTreeMap<String, String>,
+    /// Validated plugin directories actually prepended when this pane was started.
+    pub plugin_path_dirs: Vec<String>,
+    /// Problems encountered while resolving this pane's plugin directories.
+    pub plugin_path_diagnostics: Vec<String>,
     /// Set when the pane's console host ended while processes under it still run.
     pub host_lost: Option<crate::server::host::HostLost>,
     /// Set when the pane's root process exited while its console host still serves processes

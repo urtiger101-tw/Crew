@@ -19,6 +19,7 @@ use std::time::{Duration, Instant};
 pub(crate) mod host;
 mod model;
 mod mru;
+pub(crate) mod plugin_paths;
 pub use model::*;
 
 pub struct State {
@@ -432,6 +433,29 @@ impl State {
         for (key, value) in pane_user_env(env) {
             cmd.env(key, value);
         }
+        let mut plugin_paths = plugin_paths::current();
+        if !plugin_paths.dirs.is_empty() {
+            let base = cmd.get_env("PATH").map(std::env::split_paths);
+            let joined = std::env::join_paths(
+                plugin_paths
+                    .dirs
+                    .iter()
+                    .cloned()
+                    .chain(base.into_iter().flatten()),
+            );
+            match joined {
+                Ok(path) => cmd.env("PATH", path),
+                Err(error) => {
+                    plugin_paths.dirs.clear();
+                    plugin_paths.diagnostics.push(format!(
+                        "cannot prepend plugin directories to PATH: {error}"
+                    ));
+                }
+            }
+        }
+        for diagnostic in &plugin_paths.diagnostics {
+            crate::log!("pane {id}: {diagnostic}");
+        }
         cmd.env("CREW", format!("{id}"));
         cmd.env("CREW_PANE_ID", crate::api::pane_id_str(id));
         cmd.env("CREW_SOCKET", ipc::base_name());
@@ -485,6 +509,12 @@ impl State {
             label: None,
             cwd: start_dir,
             env: env.clone(),
+            plugin_path_dirs: plugin_paths
+                .dirs
+                .iter()
+                .map(|path| path.to_string_lossy().into_owned())
+                .collect(),
+            plugin_path_diagnostics: plugin_paths.diagnostics,
             host_lost: None,
             root_exited: None,
         };
@@ -1603,8 +1633,12 @@ fn handle_conn(shared: Shared, cid: usize, stream: interprocess::local_socket::S
             }
         }
         Command::Run { line } => {
+            let parsed = commands::parse(&line);
+            let _plugin_paths =
+                matches!(&parsed, Ok(Cmd::SplitWindow { .. } | Cmd::NewWindow { .. }))
+                    .then(plugin_paths::prepare);
             let mut st = crate::api::lock(&shared);
-            let res = commands::parse(&line).and_then(|c| match c {
+            let res = parsed.and_then(|c| match c {
                 Cmd::CapturePane {
                     target,
                     print: true,
@@ -1653,6 +1687,7 @@ fn handle_conn(shared: Shared, cid: usize, stream: interprocess::local_socket::S
             detached,
             env,
         } => {
+            let _plugin_paths = create.then(plugin_paths::prepare);
             let mut st = crate::api::lock(&shared);
             let name = match workspace_id {
                 Some(id) => workspace_attach_name(&st, id, expected_epoch.as_deref()),
@@ -1708,13 +1743,41 @@ fn handle_conn(shared: Shared, cid: usize, stream: interprocess::local_socket::S
             }
             st.mark_dirty();
             drop(st);
-            while let Ok(msg) = read_msg::<ClientMsg>(&mut r) {
+            drop(_plugin_paths);
+            'events: while let Ok(msg) = read_msg::<ClientMsg>(&mut r) {
                 if let ClientMsg::Event(ev) = msg {
-                    let mut st = crate::api::lock(&shared);
-                    if !st.clients.contains_key(&cid) {
+                    let mut plugin_paths = None;
+                    loop {
+                        let mut st = crate::api::lock(&shared);
+                        let Some(client) = st.clients.get(&cid) else {
+                            break 'events;
+                        };
+                        let may_run_command = match &ev {
+                            crossterm::event::Event::Key(key) => {
+                                client.prefix
+                                    || matches!(key.code, KeyCode::F(_))
+                                    || (client.prompt.is_some()
+                                        && matches!(
+                                            key.code,
+                                            KeyCode::Enter | KeyCode::Char('y' | 'Y')
+                                        ))
+                            }
+                            crossterm::event::Event::Mouse(mouse) => matches!(
+                                mouse.kind,
+                                crossterm::event::MouseEventKind::Down(
+                                    crossterm::event::MouseButton::Left
+                                )
+                            ),
+                            _ => false,
+                        };
+                        if may_run_command && plugin_paths.is_none() {
+                            drop(st);
+                            plugin_paths = Some(plugin_paths::prepare());
+                            continue;
+                        }
+                        st.handle_event(&shared, cid, ev);
                         break;
                     }
-                    st.handle_event(&shared, cid, ev);
                 }
             }
             crate::api::lock(&shared).clients.remove(&cid);
@@ -1762,6 +1825,7 @@ pub fn run() -> Result<()> {
         }
     }
     if crate::api::lock(&shared).cfg.persist {
+        let _plugin_paths = plugin_paths::prepare();
         match crate::persist::restore_on_start(&shared) {
             Ok(n) => crate::log!("restored {n} sessions"),
             Err(e) => crate::log!("restore failed: {e}"),

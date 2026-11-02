@@ -346,6 +346,8 @@ pub fn pane_json(st: &State, pid: usize) -> Option<Value> {
         "zoomed": w.zoomed && w.active == pid,
         "label": p.label,
         "cwd": p.cwd,
+        "plugin_path_dirs": p.plugin_path_dirs,
+        "plugin_path_diagnostics": p.plugin_path_diagnostics,
         "cols": p.rect.w,
         "rows": p.rect.h,
         "status": agent::status(p, &st.cfg).as_str(),

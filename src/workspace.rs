@@ -483,6 +483,7 @@ pub fn handle(shared: &Shared, req: Request) -> ApiResult {
             validate_env(&env)?;
             check_command(command.as_deref())?;
             let cwd = checked_cwd(cwd)?;
+            let _plugin_paths = crate::server::plugin_paths::prepare();
             let (reply, pid, native_startup) = {
                 let mut st = lock(shared);
                 if name.as_ref().is_some_and(|name| st.sidx(name).is_some()) {
@@ -535,6 +536,7 @@ pub fn handle(shared: &Shared, req: Request) -> ApiResult {
             validate_env(&env)?;
             check_command(command.as_deref())?;
             let cwd = checked_cwd(cwd)?;
+            let _plugin_paths = crate::server::plugin_paths::prepare();
             let (reply, pid, native_startup) = {
                 let mut st = lock(shared);
                 let si = selected_workspace(&st, workspace.as_deref(), current)?;

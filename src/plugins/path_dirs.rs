@@ -3,7 +3,6 @@ use anyhow::{Context, Result, ensure};
 use std::path::{Path, PathBuf};
 
 #[derive(Default)]
-#[allow(dead_code)] // Read by pane spawning once the shared contract is integrated.
 pub(crate) struct PanePluginPaths {
     pub dirs: Vec<PathBuf>,
     pub diagnostics: Vec<String>,
@@ -46,14 +45,25 @@ pub(super) fn resolve(entry: &store::Entry, manifest: &manifest::Manifest) -> Re
     Ok(result)
 }
 
-#[allow(dead_code)] // Used by the pane-spawn integration in the next step.
 pub(super) fn collect(home: &Path) -> Result<PanePluginPaths> {
     let mut result = PanePluginPaths::default();
-    for (id, entry) in store::read(home)?.plugins {
+    for (id, entry) in store::read_entries(home)?.plugins {
         if !entry.enabled {
             continue;
         }
-        let stored = manifest::Manifest::parse(&entry.manifest_toml)?;
+        let stored = match manifest::Manifest::parse(&entry.manifest_toml) {
+            Ok(stored) if stored.id == id => stored,
+            Ok(_) => {
+                result
+                    .diagnostics
+                    .push(format!("{id}: plugin registry id mismatch"));
+                continue;
+            }
+            Err(error) => {
+                result.diagnostics.push(format!("{id}: {error:#}"));
+                continue;
+            }
+        };
         if stored.path_dirs.is_empty() || !manifest::compatible(&[], &stored.platforms) {
             continue;
         }
@@ -138,6 +148,22 @@ mod tests {
             .find(|entry| entry["id"] == "a.enabled")
             .unwrap();
         assert_eq!(enabled["effective_path_dirs"].as_array().unwrap().len(), 1);
+
+        let mut corrupt = registry.plugins["a.enabled"].clone();
+        corrupt.manifest_toml = "not a valid manifest".into();
+        registry.plugins.insert("bad.corrupt".into(), corrupt);
+        registry
+            .plugins
+            .insert("bad.mismatch".into(), registry.plugins["z.enabled"].clone());
+        store::write(&home, &registry).unwrap();
+        let paths = collect(&home).unwrap();
+        assert_eq!(paths.dirs, expected);
+        assert_eq!(paths.diagnostics.len(), 2);
+        assert!(paths.diagnostics[0].contains("bad.corrupt"));
+        assert!(paths.diagnostics[1].contains("id mismatch"));
+        registry.plugins.remove("bad.corrupt");
+        registry.plugins.remove("bad.mismatch");
+        store::write(&home, &registry).unwrap();
 
         fs::write(
             dir.join("a.enabled/crew-plugin.toml"),

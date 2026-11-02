@@ -90,6 +90,17 @@ pub fn manifest(root: &Path) -> Result<(String, Manifest)> {
 }
 
 pub fn read(root: &Path) -> Result<Registry> {
+    let registry = read_entries(root)?;
+    for (id, entry) in &registry.plugins {
+        let parsed = Manifest::parse(&entry.manifest_toml)?;
+        ensure!(parsed.id == *id, "plugin registry id mismatch");
+    }
+    Ok(registry)
+}
+
+/// Read the bounded registry without parsing individual stored manifests. Pane PATH
+/// discovery uses this to report one damaged entry without disabling healthy plugins.
+pub(super) fn read_entries(root: &Path) -> Result<Registry> {
     let file = root.join("registry.json");
     if !file.exists() {
         return Ok(Registry::default());
@@ -100,10 +111,6 @@ pub fn read(root: &Path) -> Result<Registry> {
         registry.version == 1 && registry.plugins.len() <= 128,
         "unsupported or oversized plugin registry"
     );
-    for (id, entry) in &registry.plugins {
-        let parsed = Manifest::parse(&entry.manifest_toml)?;
-        ensure!(parsed.id == *id, "plugin registry id mismatch");
-    }
     Ok(registry)
 }
 

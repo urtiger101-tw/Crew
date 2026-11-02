@@ -1,4 +1,5 @@
 //! Crew plugin discovery and explicit argv actions. Installed code runs as the user.
+mod agentcmd;
 mod catalog;
 mod install;
 mod manifest;
@@ -21,6 +22,7 @@ const HELP: &str = r#"Crew plugin marketplace and explicit actions
   crew plugin marketplace show ID [--json]
   crew plugin inspect SOURCE|PATH [--ref REV] [--json]
   crew plugin install ID|owner/repo[/subdir] [--ref REV] [--yes] [--disabled]
+  crew plugin agentcmd install [--source PATH] [--offline] [--yes]
   crew plugin link PATH [--yes] [--disabled]
   crew plugin update [ID|owner/repo[/subdir]] [--yes]
   crew plugin list [--json]
@@ -40,6 +42,10 @@ install, enable or server startup. Uninstall retains files, config, state and lo
 Manifests are crew-plugin.toml with min_crew_version; Herdr manifests are not accepted.
 Actions expand whole argv tokens {crew} and {cwd}; no shell expansion is performed.
 Use CREW_PLUGIN_HOME to isolate the registry and all plugin files.
+agentcmd installs one initially disabled plugin per command from the pinned source.
+--source PATH accepts a local Git repository containing the pinned commit; --offline
+requires --source and builds from Cargo's local cache. Reinstall with the same command;
+generic plugin update skips these managed local modules.
 "#;
 
 #[derive(Default)]
@@ -242,8 +248,6 @@ fn discover(query: &str) -> Result<Vec<Value>> {
     Ok(entries)
 }
 
-// The pane-spawn integration consumes this contract in the next implementation step.
-#[allow(dead_code)]
 pub(crate) fn pane_path_dirs() -> Result<PanePluginPaths> {
     path_dirs::collect(&store::home()?)
 }
@@ -454,6 +458,20 @@ pub fn run(args: &[String]) -> Result<i32> {
     }
     let home = store::home()?;
     let value = match verb {
+        "agentcmd" => {
+            ensure!(
+                args.get(1).is_some_and(|s| s == "install"),
+                "agentcmd requires install"
+            );
+            let a = parse(&args[2..], &["--source"], &["--offline", "--yes"])?;
+            count(&a, 0, 0)?;
+            agentcmd::install(
+                &home,
+                a.values.get("--source").map(Path::new),
+                a.flags.contains("--offline"),
+                a.flags.contains("--yes"),
+            )?
+        }
         "inspect" => {
             let a = parse(&args[1..], &["--ref"], &[])?;
             count(&a, 1, 1)?;
