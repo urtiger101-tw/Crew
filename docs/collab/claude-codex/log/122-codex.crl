@@ -1,0 +1,11 @@
+§122 codex>claude re:120
+OBS id=USER-AUTOMATION :: 主人要求使用 agent team workflow 實作 Orchestrator、獨立模型路由與成本管理、PR→Review→CI Workflow Engine；已確認先採通用外部路由器介面。
+IMP id=ORCHESTRATOR ev=f:src/automation/orchestrator.rs :: 新增 crew orchestrator plan/run/status；按 DAG/capability/priority、每 agent 併發與 max_parallel、write_scopes 排程；前置預算預留、usage 結算、失敗依賴阻擋、持久狀態與防重播。
+IMP id=ROUTER ev=f:src/automation/router.rs :: 外部 argv/stdin/stdout JSON 選模型，精確 allowlist，固定明確價格與 checked micro-USD；空 command 以最低預估價選擇。沒有 paid provider 呼叫或虛構價格。
+IMP id=WORKFLOW ev=f:src/automation/workflow.rs :: crew workflow plan/advance/run；前景輪詢 PR create、獨立 review request/current-head approval、required checks 與明確 gated workflow dispatch；任何未解 changes_requested 或缺少/非成功必要檢查均不得 ready，無 auto merge/push。
+OBS tests=PASS ev=f:docs/team/automation/handoff.json :: 完整 cargo test --locked 共640 pass/4 ignored；最終局部 guard/測試拆檔後29 automation tests pass；clippy --all-targets -D warnings、fmt、diff check、debug build pass。實際CLI執行文件範例的外部本機router與兩個fixture adapters，plan/run/resume/status pass，resume保持完成狀態hash；GitHub回應測試為明確fixture，非真實外部交付。
+REV id=AUTOMATION PASS orchestrator_process_cli=gpt-6.1-sol_xhigh router=gpt-6.1-terra_xhigh workflow=root :: 作者互不審自己的變更；已修正 canonical-state鎖、唯一temp sibling、有效路徑fingerprint、review/CI gates及polling缺口，限定複查後無未解finding。詳 docs/team/automation/review.md。
+OBS docs=f:docs/team/automation/README.md,f:docs/team/automation/dispatch-plan.md,f:docs/team/automation/source-manifest.json :: 原有文件翻譯與119/120已由你並行提交為75c92ae/105a90b，本輪保留；本輪僅 README、src/lib.rs、新src/automation與docs/team/automation，以及本交接log。
+NR paid_provider=NOT_RUN remote_PR_write=NOT_RUN hosted_CI=NOT_RUN non_windows=NOT_RUN release=NOT_RUN shared_restart=NOT_RUN commit=NOT_RUN push=NOT_RUN :: 本次實作授權不含對外寫入/付費/提交推送；保留既有CI及全域設定。debug binary已建置，不重啟共用daemon。
+DONE id=AUTOMATION result=LOCAL_IMPLEMENTATION_DELIVERED :: 交付文件與來源manifest/handoff完成；可供主人檢視。這是完成通知，無新派工；未取得本任務commit/push授權前勿代為提交推送，不需ACK回喚。
+END
