@@ -1,4 +1,4 @@
-//! Top toolbar: a row of function-key buttons (`F1 help  F2 new ...`) over the pane columns,
+//! Top toolbar: a row of function-key buttons (`F1 hide  F2 new ...`) over the pane columns,
 //! each running a Crew command when clicked or when its F-key is pressed.
 //!
 //! Geometry is pure ([`toolbar_layout`]). The drawer paints the buttons that layout returns
@@ -19,7 +19,7 @@ const GAP: u16 = 1;
 /// Default buttons in F-key order: (label catalog key, ASCII label catalog key, command).
 /// The ASCII key is used when the theme swaps glyphs for ASCII (labels with box glyphs).
 const DEFAULT_BUTTONS: &[(&str, Option<&str>, &str)] = &[
-    ("render.toolbar.help", None, "list-keys"),
+    ("render.toolbar.hide", None, "set toolbar off"),
     ("render.toolbar.new", None, "new-window"),
     (
         "render.toolbar.split_h",
@@ -140,7 +140,8 @@ fn button_width(it: &Item) -> u16 {
 pub(crate) fn toolbar_layout(items: &[Item], w: u16, ell: &str) -> ToolbarLayout {
     let widths: Vec<u32> = items.iter().map(|it| u32::from(button_width(it))).collect();
     let gaps = u32::from(GAP) * (items.len().saturating_sub(1) as u32);
-    let all_fit = widths.iter().sum::<u32>() + gaps <= u32::from(w);
+    let cap = if w <= 80 { 6 } else { usize::MAX };
+    let all_fit = items.len() <= cap && widths.iter().sum::<u32>() + gaps <= u32::from(w);
     let ell_w = ell.width() as u32;
     // room kept for ` …` after the last placed button when some are dropped
     let limit = if all_fit {
@@ -150,7 +151,7 @@ pub(crate) fn toolbar_layout(items: &[Item], w: u16, ell: &str) -> ToolbarLayout
     };
     let mut btns = Vec::new();
     let mut end = 0u32;
-    for (i, bw) in widths.iter().enumerate() {
+    for (i, bw) in widths.iter().enumerate().take(cap) {
         let start = if i == 0 { 0 } else { end + u32::from(GAP) };
         if start + bw > limit {
             break;
@@ -232,6 +233,18 @@ pub(super) fn draw_toolbar(g: &mut Grid, cx: &Ctx) {
                 fg,
                 bg,
                 attrs,
+                ..Cell::default()
+            },
+        );
+    }
+    for x in x0..x0.saturating_add(w) {
+        g.put(
+            x,
+            1,
+            Cell {
+                s: t.g.hline.into(),
+                fg: t.c(t.border),
+                bg: t.c(t.bar_bg),
                 ..Cell::default()
             },
         );
@@ -342,7 +355,7 @@ mod tests {
         let cfg = Config::default();
         let en = toolbar_items(&cfg, Lang::En, false);
         assert_eq!(en.len(), 12);
-        assert_eq!(en[0], item("F1", "help", "list-keys"));
+        assert_eq!(en[0], item("F1", "hide", "set toolbar off"));
         assert_eq!(en[2].label, "split│");
         assert_eq!(en[11], item("F12", "detach", "detach-client"));
         let ascii = toolbar_items(&cfg, Lang::En, true);
@@ -350,7 +363,7 @@ mod tests {
         assert_eq!(ascii[3].label, "split-");
         assert!(ascii.iter().all(|it| it.label.is_ascii()), "{ascii:?}");
         let zh = toolbar_items(&cfg, Lang::ZhTw, false);
-        assert_eq!(zh[0].label, "說明");
+        assert_eq!(zh[0].label, "隱藏");
         assert_eq!(zh[9].label, "關閉");
         for (_, _, command) in DEFAULT_BUTTONS {
             assert!(commands::parse(command).is_ok(), "{command}");
@@ -437,7 +450,7 @@ mod tests {
     fn drawer_paints_chips_labels_and_the_ellipsis() {
         let env = crate::theme::ClientEnv::default();
         let (text, attrs) = drawn_row(40, false, env);
-        assert_eq!(text, "F1 help F2 new F3 split│ F4 split─ …    ");
+        assert_eq!(text, "F1 hide F2 new F3 split│ F4 split─ …    ");
         assert_eq!(
             &attrs[..3],
             &[BOLD, BOLD, 0],
@@ -448,7 +461,7 @@ mod tests {
         let (text, _) = drawn_row(80, true, env);
         assert_eq!(
             text.trim_end(),
-            "F1 help F2 new F3 split│ F4 split─ F5 zoom F6 next …"
+            "F1 hide F2 new F3 split│ F4 split─ F5 zoom F6 next …"
         );
     }
 
@@ -460,9 +473,45 @@ mod tests {
             ..Default::default()
         };
         let (text, attrs) = drawn_row(40, false, env);
-        assert_eq!(text, "F1 help F2 new F3 split| F4 split- ~    ");
+        assert_eq!(text, "F1 hide F2 new F3 split| F4 split- ~    ");
         assert!(text.is_ascii());
         assert_eq!(attrs[0], BOLD | INVERSE, "mono chip is inverse");
+    }
+
+    #[test]
+    fn narrow_toolbar_shows_at_most_six_buttons() {
+        let cfg = Config::default();
+        let items = toolbar_items(&cfg, Lang::En, false);
+        let layout = toolbar_layout(&items, 80, "…");
+        assert_eq!(layout.btns.len(), 6);
+        assert!(layout.more.is_some());
+    }
+
+    #[test]
+    fn separator_is_thin_and_toolbar_hit_does_not_include_it() {
+        let mut st = crate::server::test_state();
+        st.cfg.toolbar = true;
+        let s = crate::server::test_session("t", 80, 10, 7);
+        let c = crate::server::test_client("t");
+        let cx = Ctx {
+            st: &st,
+            s: &s,
+            c: &c,
+            w: 80,
+            h: 10,
+            rects: vec![],
+            area: st.pane_area(&s),
+            theme: Theme::resolve(&st.cfg.theme, &c.env),
+            lang: Lang::En,
+        };
+        let mut g = Grid {
+            w: 80,
+            h: 10,
+            cells: vec![Cell::default(); 800],
+        };
+        draw_toolbar(&mut g, &cx);
+        assert!(g.cells[80..160].iter().all(|cell| cell.s == "─"));
+        assert!(toolbar_hit_at(&st, &c, &s, 0, 1).is_none());
     }
 
     #[test]

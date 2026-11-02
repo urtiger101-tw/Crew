@@ -65,9 +65,9 @@ pub struct Config {
     pub theme: crate::theme::ThemeCfg,
     /// UI language: auto (from each client's locale) | en | zh-TW
     pub lang: String,
-    /// Show the function-key toolbar on the top row (needs at least 4 rows)
+    /// Show the function-key toolbar and divider (needs at least 5 rows)
     pub toolbar: bool,
-    /// F1..F12 trigger toolbar buttons directly; when off only `prefix` then `F<n>` does
+    /// F2..F12 trigger toolbar buttons directly; F1 always toggles the toolbar
     pub toolbar_fkeys: bool,
     /// Shift+Up/Down and Shift+PageUp/PageDown scroll the active pane's earlier output
     pub scroll_keys: bool,
@@ -94,7 +94,7 @@ impl Default for Config {
             persist: true,
             hints: true,
             confirm_close: true,
-            pane_titles: "auto".into(),
+            pane_titles: "always".into(),
             pane_template: String::new(),
             sidebar_pane_template: String::new(),
             sidebar_pane_segments: Vec::new(),

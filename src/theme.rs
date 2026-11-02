@@ -192,7 +192,7 @@ pub struct Theme {
     pub sidebar_fg: Color,
     pub pane_bg: Color,
     pub pane_fg: Color,
-    /// Low-emphasis toolbar keys and thin focused separators.
+    /// Low-emphasis toolbar keys and status chips.
     pub quiet_chrome: bool,
     pub warn: Color,
     pub g: Glyphs,
@@ -242,9 +242,6 @@ impl Theme {
         };
         if t.ascii {
             t.g = ASCII;
-        } else if t.quiet_chrome && !t.mono {
-            t.g.vline_active = t.g.vline;
-            t.g.hline_active = t.g.hline;
         }
         t
     }
@@ -415,8 +412,8 @@ mod tests {
         assert_eq!(cfg.preset, "studio");
         let t = Theme::resolve(&cfg, &ClientEnv::default());
         assert!(t.quiet_chrome);
-        assert_eq!(t.g.vline_active, t.g.vline);
-        assert_eq!(t.g.hline_active, t.g.hline);
+        assert_ne!(t.g.vline_active, t.g.vline);
+        assert_ne!(t.g.hline_active, t.g.hline);
         assert_eq!(t.sidebar_bg, parse_color("#1b1d22").unwrap());
         assert_eq!(t.sidebar_fg, parse_color("#d0d2d7").unwrap());
         let mono = Theme::resolve(

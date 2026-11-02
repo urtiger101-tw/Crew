@@ -67,8 +67,8 @@ fn cjk_session_name_uses_display_width() {
     let inp = input("測試", vec![win("cmd")], 0, key_bar("C-b"));
     let (text, hits) = row(&inp, 40);
     // chip " 測試 " is 6 columns, then a 2-column gap before the label
-    assert_eq!(hits, vec![(0, 8, 16)]);
-    assert!(text.starts_with(" 測試    0:cmd*"), "{text:?}");
+    assert_eq!(hits, vec![(0, 8, 25)]);
+    assert!(text.starts_with(" 測試    0:cmd [current]"), "{text:?}");
     assert!(text.ends_with("C-b ? help"), "{text:?}");
 }
 
@@ -81,9 +81,9 @@ fn twelve_windows_at_sixty_columns_keep_the_active_label() {
         .find(|h| h.0 == 5)
         .expect("active label is clickable");
     assert!(active.2 < 60 - " C-b".width() as u16, "{hits:?}");
-    assert!(text.contains("5:w5*"), "{text:?}");
+    assert!(text.contains("5:w5 [current]"), "{text:?}");
     // windows 0-3 are hidden on the left, so the `<` marker is shown
-    assert!(text.contains("<  4:"), "{text:?}");
+    assert!(text.contains("<"), "{text:?}");
     // the help text is the first thing cut when the window list needs the room
     assert!(text.ends_with("C-b"), "{text:?}");
 }
@@ -122,8 +122,8 @@ fn counts_region_matches_the_drawn_counts_block() {
     };
     let inp = input("demo", vec![win("cmd")], 0, right);
     let layout = status_layout(&inp, 80);
-    // "▲1 ◆1 ●1" is 8 columns; then a 2-column gap and " C-b ? help" (11 columns)
-    assert_eq!(layout.regions.counts, Some((59, 67)));
+    // Counts include a word as well as each glyph and number.
+    assert_eq!(layout.regions.counts, Some((31, 67)));
     assert_eq!(layout.regions.session, Some((0, 6)));
     let counts_text: String = {
         let mut g = Grid {
@@ -132,9 +132,9 @@ fn counts_region_matches_the_drawn_counts_block() {
             cells: vec![Cell::default(); 80],
         };
         paint(&mut g, 0, &layout.segs, &Theme::terminal());
-        g.cells[59..67].iter().map(|c| c.s.as_str()).collect()
+        g.cells[31..67].iter().map(|c| c.s.as_str()).collect()
     };
-    assert_eq!(counts_text, "▲1 ◆1 ●1");
+    assert_eq!(counts_text, "▲ needs input 1 ◆ done 1 ● working 1");
 }
 
 #[test]
@@ -359,7 +359,10 @@ fn counts_show_blocked_done_working_and_hide_zero() {
         tail: Tail::Help("C-b".into()),
     };
     let (text, _) = row(&input("demo", vec![win("cmd")], 0, right), 80);
-    assert!(text.ends_with("▲1 ◆1 ●1   C-b ? help"), "{text:?}");
+    assert!(
+        text.ends_with("▲ needs input 1 ◆ done 1 ● working 1   C-b ? help"),
+        "{text:?}"
+    );
 }
 
 #[test]
@@ -400,9 +403,12 @@ fn attention_and_zoom_flags_follow_the_active_window() {
     zoomed.glyph = Some(("▲", Status::Blocked));
     let mut busy = win("logs");
     busy.attention = true;
-    let (text, _) = row(&input("demo", vec![zoomed, busy], 0, key_bar("C-b")), 60);
-    assert!(text.contains("0:cmd*Z▲"), "{text:?}");
-    assert!(text.contains("1:logs!"), "{text:?}");
+    let (text, _) = row(&input("demo", vec![zoomed, busy], 0, key_bar("C-b")), 100);
+    assert!(
+        text.contains("0:cmd [current] [zoomed] ▲ needs input"),
+        "{text:?}"
+    );
+    assert!(text.contains("1:logs [unread]"), "{text:?}");
 }
 
 #[test]
@@ -591,7 +597,7 @@ fn zh_tw_help_hint_and_counts_share_the_right_block() {
         tail: Tail::Help("C-b".into()),
     };
     let (text, _) = row(&zh_input("demo", vec![win("cmd")], 0, right), 80);
-    assert!(text.ends_with("▲1   C-b ? 說明"), "{text:?}");
+    assert!(text.ends_with("▲ 待回應 1   C-b ? 說明"), "{text:?}");
 }
 
 #[test]

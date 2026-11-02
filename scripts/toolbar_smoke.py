@@ -80,8 +80,8 @@ class AttachedClient:
         for kind in ({"Down": "Left"}, {"Up": "Left"}):
             self.send({"Event": {"Mouse": {"kind": kind, "column": column, "row": row, "modifiers": ""}}})
 
-    def key(self, code):
-        self.send({"Event": {"Key": {"code": code, "modifiers": "", "kind": "Press", "state": ""}}})
+    def key(self, code, modifiers=""):
+        self.send({"Event": {"Key": {"code": code, "modifiers": modifiers, "kind": "Press", "state": ""}}})
 
 
 def wait_for(predicate, what, timeout=10):
@@ -151,38 +151,39 @@ def run_smoke(binary):
                 assert api("pane", "wait-output", pane, "--regex", r"PS [^\r\n]*>",
                            "--timeout", "15000")["matched"]
 
-            # 1. Defaults: toolbar on, English labels, status bar kept as the last row, pane = rows-2.
+            # 1. Defaults: toolbar on, English labels, status bar kept as the last row, pane = rows-4 (toolbar, divider, title, status).
             frame = run("debug-frame", "-t", "toolbar", "--text")
             top = first_line(frame)
-            assert top.startswith("F1 help") and "F2 new" in top, top
+            assert top.startswith("F1 hide") and "F2 new" in top, top
             lines = frame.splitlines()
+            assert set(lines[1].strip()) == {"─"}, lines[1]
             assert "F1" not in lines[-1] and "0:" in lines[-1], lines[-1]
             rows = session_rows()
             assert len(lines) == rows, (len(lines), rows)
             pane_rows = api("pane", "get", pane)["pane"]["rows"]
-            assert pane_rows == rows - 2, (pane_rows, rows)
-            print("ok default toolbar row on top with F1 help F2 new, status bar last, pane rows = rows-2",
+            assert pane_rows == rows - 4, (pane_rows, rows)
+            print("ok default toolbar row on top with F1 hide F2 new, status bar last, pane rows = rows-4",
                   flush=True)
 
-            # 2. Runtime toggle removes and restores the row; pane height follows (rows-1 when off).
+            # 2. Runtime toggle removes/restores toolbar plus divider; title/status remain (rows-2 when off).
             run("set", "toolbar", "off")
             off = run("debug-frame", "-t", "toolbar", "--text")
-            assert "F1 help" not in first_line(off), first_line(off)
-            assert api("pane", "get", pane)["pane"]["rows"] == rows - 1
-            run("set", "toolbar", "on")
-            assert first_line(run("debug-frame", "-t", "toolbar", "--text")).startswith("F1 help")
+            assert "F1 hide" not in first_line(off), first_line(off)
             assert api("pane", "get", pane)["pane"]["rows"] == rows - 2
-            print("ok set toolbar off hides the row (pane rows-1); set toolbar on restores it (rows-2)",
+            run("set", "toolbar", "on")
+            assert first_line(run("debug-frame", "-t", "toolbar", "--text")).startswith("F1 hide")
+            assert api("pane", "get", pane)["pane"]["rows"] == rows - 4
+            print("ok set toolbar off hides toolbar and divider (pane rows-2); on restores both (rows-4)",
                   flush=True)
 
             # 3. Localized labels; all twelve zh-TW buttons fit the 120-column row.
             run("set", "lang", "zh-TW")
             zh = first_line(run("debug-frame", "-t", "toolbar", "--text"))
-            assert "說明" in zh and "新視窗" in zh, zh
+            assert "隱藏" in zh and "新視窗" in zh, zh
             assert "F12 離開" in zh and "…" not in zh, zh
             run("set", "lang", "en")
-            assert first_line(run("debug-frame", "-t", "toolbar", "--text")).startswith("F1 help")
-            print("ok set lang zh-TW shows 說明 新視窗 (all twelve fit in 120 columns); en restored",
+            assert first_line(run("debug-frame", "-t", "toolbar", "--text")).startswith("F1 hide")
+            print("ok set lang zh-TW shows 隱藏 新視窗 (all twelve fit in 120 columns); en restored",
                   flush=True)
 
             # 4. ASCII glyphs: box-drawing labels swap to split| / split- and the row is pure ASCII.
@@ -200,7 +201,7 @@ def run_smoke(binary):
                 client.send({"Hello": {"Attach": {"session": "toolbar", "create": False, "cols": 120,
                                                   "rows": 30, "cwd": None, "detached": False}}})
                 client.start()
-                wait_for(lambda: "help" in client.since(0), "the attached client's first frame")
+                wait_for(lambda: "hide" in client.since(0), "the attached client's first frame")
                 assert window_count() == 1
                 client.click(10, 0)  # F2 new spans columns 8..13 of row 0
                 wait_for(lambda: window_count() == 2, "F2 new to create a window")
@@ -210,11 +211,26 @@ def run_smoke(binary):
                 assert window_count() == 2, "close waits for the answer"
                 client.key({"Char": "y"})
                 wait_for(lambda: window_count() == 1, "y to close the new window")
+                client.click(2, 0)  # F1 hides toolbar and divider.
+                wait_for(lambda: api("pane", "get", pane)["pane"]["rows"] == 28,
+                         "F1 click to hide toolbar and divider")
+                client.key({"F": 1})  # Plain F1 restores it even when toolbar-fkeys is off.
+                wait_for(lambda: api("pane", "get", pane)["pane"]["rows"] == 26,
+                         "plain F1 to restore toolbar and divider")
                 mark = client.mark()
-                client.click(2, 0)  # F1 help opens the key list popup
-                wait_for(lambda: "keys" in client.since(mark) and "split-window" in client.since(mark),
-                         "F1 help to open the key list")
+                client.key({"Char": "b"}, "CONTROL")
+                client.key({"Char": "?"})
+                wait_for(lambda: "split-window" in client.since(mark), "prefix ? to open help")
                 client.key({"Char": "q"})
+                client.send({"Event": {"Resize": [60, 30]}})
+                wait_for(lambda: api("pane", "get", pane)["pane"]["cols"] == 60,
+                         "attached client narrow resize")
+                narrow = first_line(run("debug-frame", "-t", "toolbar", "--text"))
+                assert narrow.startswith("F1 hide"), narrow
+                assert sum(f"F{n} " in narrow for n in range(1, 13)) <= 6, narrow
+                client.send({"Event": {"Resize": [120, 30]}})
+                wait_for(lambda: api("pane", "get", pane)["pane"]["cols"] == 120,
+                         "attached client width restored")
                 run("set", "toolbar-fkeys", "on")
                 client.key({"F": 2})
                 wait_for(lambda: window_count() == 2, "plain F2 with toolbar-fkeys on")
@@ -225,7 +241,8 @@ def run_smoke(binary):
             finally:
                 client.close()
             print("ok attached client: F2 click creates a window, F10 asks y/n then closes, "
-                  "F1 opens keys, plain F2 runs only with toolbar-fkeys", flush=True)
+                  "F1 toggles both rows, prefix ? opens help, narrow width has at most six buttons, "
+                  "plain F2 runs only with toolbar-fkeys", flush=True)
 
             # 6. Custom buttons via source-file; invalid configs are rejected and keep the old row.
             run("source-file", str(custom))

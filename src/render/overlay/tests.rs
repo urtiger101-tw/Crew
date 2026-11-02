@@ -164,7 +164,7 @@ fn row_text_for_session_window_pane() {
     assert_eq!(rows[2].text, "0.0 claude");
     assert_eq!(
         rows[2].word,
-        Some("blocked"),
+        Some("needs input"),
         "state word is its own muted run"
     );
     assert_eq!(rows[2].status, Status::Blocked);
@@ -255,7 +255,7 @@ fn titles_show_active_filter() {
     assert_eq!(chooser_title(Lang::En, Filter::All), "Sessions");
     assert_eq!(
         chooser_title(Lang::En, Filter::Only(Status::Blocked)),
-        "Sessions [blocked]"
+        "Sessions [needs input]"
     );
     assert_eq!(
         empty_note(Lang::En, Filter::Only(Status::Done)),

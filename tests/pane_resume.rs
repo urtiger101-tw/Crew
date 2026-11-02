@@ -200,3 +200,19 @@ fn restored_agent_without_saved_command_remains_visible_and_resume_is_retryable(
         assert_eq!(pane["result"]["pane"]["restore_state"], "not-running");
     }
 }
+
+#[test]
+fn restored_pane_displays_its_state_resume_hint_and_saved_argv() {
+    let server = RestoredServer::new(vec!["claude".into(), "--resume".into(), "abc".into()]);
+    let output = server
+        .command()
+        .args(["debug-frame", "-t", "main", "--text"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let frame = String::from_utf8(output.stdout).unwrap();
+    assert!(frame.contains("restored, not running"), "{frame}");
+    assert!(frame.contains("C-b R"), "{frame}");
+    assert!(frame.contains("claude"), "{frame}");
+    assert!(frame.contains("--resume"), "{frame}");
+}

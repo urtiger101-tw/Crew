@@ -25,6 +25,11 @@ pub fn key_lines(st: &State, lang: Lang) -> Vec<String> {
         String::new(),
     ];
     lines.extend(st.bindings.iter().map(|(k, c)| format!("{k:>10}  {c}")));
+    lines.push(String::new());
+    lines.push(tr(lang, "render.help.toolbar").to_string());
+    lines.push(tr(lang, "render.help.flags").to_string());
+    lines.push(tr(lang, "render.help.states").to_string());
+    lines.push(tr(lang, "render.help.restore").to_string());
     lines
 }
 

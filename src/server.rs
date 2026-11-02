@@ -174,7 +174,7 @@ pub enum TitleMode {
     /// only in split, unzoomed windows, for panes at least 6 rows high that have an agent
     /// report or a label
     Auto,
-    /// every pane of a split, unzoomed window
+    /// every visible pane with room for a title and content row
     Always,
 }
 
@@ -187,13 +187,10 @@ pub fn wants_title(
     rect_h: u16,
     has_info: bool,
 ) -> bool {
-    if !split || zoomed {
-        return false;
-    }
     match mode {
         TitleMode::Off => false,
         TitleMode::Always => rect_h >= 2,
-        TitleMode::Auto => rect_h >= 6 && has_info,
+        TitleMode::Auto => split && !zoomed && rect_h >= 6 && has_info,
     }
 }
 
@@ -212,15 +209,15 @@ impl State {
     }
 
     /// Whether the toolbar row is drawn for `s`: the option is on and the session has at least
-    /// 4 rows (toolbar, 2 pane rows, status bar).
+    /// 5 rows (toolbar, separator, 2 pane rows, status bar).
     pub fn toolbar_shown(&self, s: &Session) -> bool {
-        self.cfg.toolbar && s.rows >= 4
+        self.cfg.toolbar && s.rows >= 5
     }
 
-    /// Columns and rows the panes share: below the toolbar (when shown), above the status
+    /// Columns and rows the panes share: below the toolbar and divider (when shown), above the status
     /// row, left of the sidebar.
     pub fn pane_area(&self, s: &Session) -> Rect {
-        let top = u16::from(self.toolbar_shown(s));
+        let top = 2 * u16::from(self.toolbar_shown(s));
         Rect {
             x: 0,
             y: top,

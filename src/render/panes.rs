@@ -247,9 +247,29 @@ fn draw_titles(g: &mut Grid, cx: &Ctx, covered: &mut [bool]) {
         let word = status_word(cx.lang, state);
         let name = title_name(p.agent.as_ref(), p.label.as_deref(), cx.lang);
         let display = crate::metadata::display::pane(cx.st, pid, cx.lang);
-        let word = display.as_ref().map_or(word, |d| d.state_label.as_str());
+        let word = super::restore_label(p, cx.lang)
+            .unwrap_or_else(|| display.as_ref().map_or(word, |d| d.state_label.as_str()));
         let name = display.as_ref().map_or(name, |d| d.title.as_str());
         let left = title_left(theme, glyph, name, word);
+        let left = if super::restore_label(p, cx.lang).is_some() {
+            let argv = p
+                .agent
+                .as_ref()
+                .map(|a| format!("{:?}", a.resume))
+                .unwrap_or_default();
+            let safe: String = argv
+                .chars()
+                .map(|c| if c.is_control() { ' ' } else { c })
+                .collect();
+            format!("{left}{} R {} {safe}", cx.st.cfg.prefix_name(), theme.g.dot)
+        } else {
+            left
+        };
+        let left = if pid == win.active {
+            format!("{}{}", theme.g.pointer, left)
+        } else {
+            left
+        };
         let right = format!("{} ", pane_id_str(pid));
         let (left, right) = fit_title(&left, &right, r.w, theme.g.ellipsis);
         if pid == win.active {

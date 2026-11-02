@@ -14,6 +14,29 @@ pub const ENTRIES: &[Entry] = &[
         "hjkl 移動  v/V 選取  y 複製  q 結束",
     ),
     ("render.status.help", "? help", "? 說明"),
+    (
+        "render.help.toolbar",
+        "F1: toggle toolbar; prefix ? opens help",
+        "F1：顯示／隱藏工具列；前綴鍵 ? 開啟說明",
+    ),
+    (
+        "render.help.flags",
+        "current: selected window; zoomed: expanded pane; unread: new output",
+        "目前：選取視窗；放大：展開窗格；未讀：有新輸出",
+    ),
+    (
+        "render.help.states",
+        "needs input: waiting; working: active; done: recently finished",
+        "待回應：等待操作；執行中：正在工作；已完成：剛完成",
+    ),
+    (
+        "render.help.restore",
+        "prefix R: request resume for a restored pane",
+        "前綴鍵 R：要求續接已還原的窗格",
+    ),
+    ("render.status.current", "current", "目前"),
+    ("render.status.zoomed", "zoomed", "放大"),
+    ("render.status.unread", "unread", "未讀"),
     ("render.which.new", "new", "新增"),
     ("render.which.win", "win", "視窗"),
     ("render.which.split", "split", "分割"),
@@ -30,7 +53,7 @@ pub const ENTRIES: &[Entry] = &[
         " ? 全部  Esc 取消",
     ),
     // toolbar button labels (F1..F12); `_ascii` variants replace box glyphs in ASCII mode
-    ("render.toolbar.help", "help", "說明"),
+    ("render.toolbar.hide", "hide", "隱藏"),
     ("render.toolbar.new", "new", "新視窗"),
     ("render.toolbar.split_h", "split│", "左右分割"),
     ("render.toolbar.split_h_ascii", "split|", "左右分割"),
@@ -45,8 +68,18 @@ pub const ENTRIES: &[Entry] = &[
     ("render.toolbar.sidebar", "sidebar", "側欄"),
     ("render.toolbar.detach", "detach", "離開"),
     // agent state words (pane titles, chooser rows, filter titles)
+    (
+        "render.restore.not_running",
+        "restored, not running",
+        "已還原，尚未執行",
+    ),
+    (
+        "render.restore.requested",
+        "resume requested, not running",
+        "已要求續接，尚未執行",
+    ),
     ("render.state.working", "working", "執行中"),
-    ("render.state.blocked", "blocked", "待回應"),
+    ("render.state.blocked", "needs input", "待回應"),
     ("render.state.done", "done", "已完成"),
     ("render.state.idle", "idle", "閒置"),
     ("render.state.unknown", "unknown", "未知"),

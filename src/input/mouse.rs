@@ -466,8 +466,8 @@ mod tests {
         let mut st = toolbar_state(true);
         // 120 columns fit all twelve default buttons:
         // Buttons use a single gap; hit ranges include the key and label.
-        assert_eq!(click(&mut st, 0, 0).as_deref(), Some("list-keys"));
-        assert_eq!(click(&mut st, 6, 0).as_deref(), Some("list-keys"));
+        assert_eq!(click(&mut st, 0, 0).as_deref(), Some("set toolbar off"));
+        assert_eq!(click(&mut st, 6, 0).as_deref(), Some("set toolbar off"));
         assert_eq!(click(&mut st, 7, 0), None, "gap between buttons");
         assert_eq!(click(&mut st, 8, 0).as_deref(), Some("new-window"));
         assert_eq!(click(&mut st, 15, 0).as_deref(), Some("split-window -h"));
@@ -477,7 +477,7 @@ mod tests {
         assert_eq!(
             click(&mut st, 0, 1),
             None,
-            "row 1 is the pane, not the toolbar"
+            "row 1 is the separator, not the toolbar"
         );
     }
 
@@ -520,7 +520,7 @@ mod tests {
         }
         assert_eq!(click(&mut st, 0, 0), None);
         assert!(st.clients[&1].popup.is_none());
-        assert_eq!(click(&mut st, 0, 0).as_deref(), Some("list-keys"));
+        assert_eq!(click(&mut st, 0, 0).as_deref(), Some("set toolbar off"));
     }
 
     #[test]

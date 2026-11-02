@@ -173,9 +173,9 @@ fn pane_area_leaves_row_zero_to_the_toolbar() {
         st.pane_area(&s),
         Rect {
             x: 0,
-            y: 1,
+            y: 2,
             w: 80,
-            h: 22
+            h: 21
         }
     );
     let rects = st.visible_rects(&s, &s.windows[0]);
@@ -185,9 +185,9 @@ fn pane_area_leaves_row_zero_to_the_toolbar() {
             7,
             Rect {
                 x: 0,
-                y: 1,
+                y: 3,
                 w: 80,
-                h: 22
+                h: 20
             }
         )]
     );
@@ -198,29 +198,29 @@ fn pane_area_leaves_row_zero_to_the_toolbar() {
         st.pane_area(&side),
         Rect {
             x: 0,
-            y: 1,
+            y: 2,
             w: 52,
-            h: 22
+            h: 21
         }
     );
 }
 
 #[test]
-fn toolbar_needs_four_rows() {
+fn toolbar_needs_five_rows() {
     use crate::layout::Rect;
     let mut st = super::test_state();
     st.cfg.toolbar = true;
-    let s = super::test_session("t", 40, 4, 1);
+    let s = super::test_session("t", 40, 5, 1);
     assert_eq!(
         st.pane_area(&s),
         Rect {
             x: 0,
-            y: 1,
+            y: 2,
             w: 40,
             h: 2
         }
     );
-    let s = super::test_session("t", 40, 3, 1);
+    let s = super::test_session("t", 40, 4, 1);
     assert!(!st.toolbar_shown(&s));
     assert_eq!(
         st.pane_area(&s),
@@ -228,7 +228,7 @@ fn toolbar_needs_four_rows() {
             x: 0,
             y: 0,
             w: 40,
-            h: 2
+            h: 3
         }
     );
 }
@@ -252,9 +252,9 @@ fn split_layout_starts_below_the_toolbar() {
             1,
             Rect {
                 x: 0,
-                y: 1,
+                y: 3,
                 w: 80,
-                h: 11
+                h: 9
             }
         )
     );
@@ -264,9 +264,9 @@ fn split_layout_starts_below_the_toolbar() {
             2,
             Rect {
                 x: 0,
-                y: 13,
+                y: 14,
                 w: 80,
-                h: 10
+                h: 9
             }
         )
     );
@@ -302,7 +302,8 @@ fn title_policy_always_and_off() {
         !wants_title(TitleMode::Always, true, false, 1, true),
         "no room for content"
     );
-    assert!(!wants_title(TitleMode::Always, false, false, 20, true));
+    assert!(wants_title(TitleMode::Always, false, false, 20, true));
+    assert!(wants_title(TitleMode::Always, true, true, 20, false));
     assert!(!wants_title(TitleMode::Off, true, false, 20, true));
 }
 

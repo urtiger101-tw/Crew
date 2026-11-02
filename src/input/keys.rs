@@ -47,6 +47,12 @@ impl State {
             self.mark_dirty();
             return;
         }
+        // F1 is reserved for restoring or hiding the toolbar, even while hidden.
+        if plain_key(&k) && k.code == KeyCode::F(1) {
+            let value = if self.cfg.toolbar { "off" } else { "on" };
+            let _ = self.exec(shared, cid, Cmd::Set("toolbar".into(), value.into()));
+            return;
+        }
         // `toolbar_fkeys`: a plain F1..F12 runs its toolbar button instead of reaching the pane
         if self.cfg.toolbar_fkeys
             && let Some(line) = self.toolbar_fkey_line(si, &k)
@@ -762,7 +768,9 @@ mod tests {
     fn direct_fkeys_run_toolbar_buttons_when_enabled() {
         let (mut st, shared) = fkey_state(true, true);
         press(&mut st, &shared, plain(KeyCode::F(1)));
-        assert!(st.clients[&1].popup.is_some(), "F1 runs list-keys");
+        assert!(!st.cfg.toolbar, "F1 hides toolbar");
+        press(&mut st, &shared, plain(KeyCode::F(1)));
+        assert!(st.cfg.toolbar, "F1 restores toolbar");
         // F13 has no button and reaches the pane (there is none here): nothing happens
         let (mut st, shared) = fkey_state(true, true);
         press(&mut st, &shared, plain(KeyCode::F(13)));
@@ -773,7 +781,7 @@ mod tests {
     fn direct_fkeys_pass_through_when_off() {
         for (toolbar, fkeys) in [(true, false), (false, true)] {
             let (mut st, shared) = fkey_state(toolbar, fkeys);
-            press(&mut st, &shared, plain(KeyCode::F(1)));
+            press(&mut st, &shared, plain(KeyCode::F(2)));
             let c = &st.clients[&1];
             assert!(c.popup.is_none(), "toolbar={toolbar} fkeys={fkeys}");
         }
@@ -785,7 +793,7 @@ mod tests {
         press(&mut st, &shared, ctrl('b'));
         assert!(st.clients[&1].prefix);
         press(&mut st, &shared, plain(KeyCode::F(1)));
-        assert!(st.clients[&1].popup.is_some());
+        assert!(!st.cfg.toolbar, "prefix F1 runs first toolbar action");
         // with the toolbar off the key is unbound, as before
         let (mut st, shared) = fkey_state(false, false);
         press(&mut st, &shared, ctrl('b'));
@@ -822,7 +830,10 @@ mod tests {
         let (mut st, shared) = fkey_state(true, true);
         st.sessions[0].rows = 3;
         press(&mut st, &shared, plain(KeyCode::F(1)));
-        assert!(st.clients[&1].popup.is_none(), "plain F1 reaches the pane");
+        assert!(
+            !st.cfg.toolbar,
+            "plain F1 toggles the option even when the row is too small"
+        );
         press(&mut st, &shared, ctrl('b'));
         press(&mut st, &shared, plain(KeyCode::F(1)));
         let c = &st.clients[&1];

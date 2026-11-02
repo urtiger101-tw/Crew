@@ -387,11 +387,15 @@ fn window_unit(inp: &StatusInput, i: usize, short: bool) -> Unit {
     } else {
         win.name.as_str()
     };
-    let flags: String = [(active, "*"), (win.zoomed, "Z"), (win.attention, "!")]
-        .iter()
-        .filter(|(on, _)| *on)
-        .map(|(_, f)| *f)
-        .collect();
+    let flags = [
+        (active, "render.status.current"),
+        (win.zoomed, "render.status.zoomed"),
+        (win.attention, "render.status.unread"),
+    ]
+    .into_iter()
+    .filter(|(on, _)| *on)
+    .map(|(_, key)| format!(" [{}]", tr(inp.lang, key)))
+    .collect::<String>();
     let tone = if active {
         Tone::Chip
     } else if win.attention {
@@ -407,7 +411,10 @@ fn window_unit(inp: &StatusInput, i: usize, short: bool) -> Unit {
     let mut parts = vec![(label, tone)];
     if let Some((glyph, st)) = win.glyph {
         let glyph_tone = if active { Tone::Chip } else { Tone::Status(st) };
-        parts.push((glyph.to_string(), glyph_tone));
+        parts.push((
+            format!(" {glyph} {}", super::overlay::status_word(inp.lang, st)),
+            glyph_tone,
+        ));
     }
     if active {
         parts.push((" ".to_string(), Tone::Chip));
@@ -508,7 +515,7 @@ fn cut_ok(units: &[Unit], gap: u16, w: u16) -> bool {
 /// otherwise the left side is cut, keeping the first alternative without the help text.
 /// The empty alternative is only used when no key hint fits beside the minimal left side.
 fn bar_right(counts: &[Count], tail: &Tail, w: u16, left_w: u16, lang: Lang) -> (Vec<Unit>, u16) {
-    let alts = bar_alts(counts_unit(counts), tail, lang);
+    let alts = bar_alts(counts_unit(counts, lang), tail, lang);
     let shown = || alts.iter().filter(|a| !a.units.is_empty());
     if let Some(a) = shown().find(|a| fits_uncut(left_w, &a.units, GAP, w)) {
         return (a.units.clone(), GAP);
@@ -549,7 +556,7 @@ fn bar_alts(counts: Option<Unit>, tail: &Tail, lang: Lang) -> Vec<Alt> {
     alts
 }
 
-fn counts_unit(counts: &[Count]) -> Option<Unit> {
+fn counts_unit(counts: &[Count], lang: Lang) -> Option<Unit> {
     if counts.is_empty() {
         return None;
     }
@@ -558,7 +565,15 @@ fn counts_unit(counts: &[Count]) -> Option<Unit> {
         if k > 0 {
             parts.push((" ".to_string(), Tone::Bar));
         }
-        parts.push((format!("{}{}", c.glyph, c.n), Tone::Status(c.status)));
+        parts.push((
+            format!(
+                "{} {} {}",
+                c.glyph,
+                super::overlay::status_word(lang, c.status),
+                c.n
+            ),
+            Tone::Status(c.status),
+        ));
     }
     Some(Unit { parts, win: None })
 }
@@ -710,7 +725,39 @@ fn status_input(st: &State, s: &Session, c: &Client, theme: &Theme) -> StatusInp
         .windows
         .iter()
         .map(|win| WinItem {
-            name: win.name.clone(),
+            name: if win.manual_name {
+                win.name.clone()
+            } else {
+                let mut names = Vec::new();
+                for id in win.panes() {
+                    if let Some(p) = st.panes.get(&id) {
+                        let name = p
+                            .agent
+                            .as_ref()
+                            .map(|a| {
+                                a.name
+                                    .as_deref()
+                                    .filter(|n| !n.is_empty())
+                                    .unwrap_or(&a.agent)
+                            })
+                            .or_else(|| p.detected_agent.as_ref().map(|d| d.agent.as_str()));
+                        if let Some(name) = name.filter(|n| !n.is_empty()) {
+                            let clean: String = name
+                                .chars()
+                                .map(|c| if c.is_control() { ' ' } else { c })
+                                .collect();
+                            if !names.contains(&clean) {
+                                names.push(clean);
+                            }
+                        }
+                    }
+                }
+                if names.is_empty() {
+                    win.name.clone()
+                } else {
+                    names.join("+")
+                }
+            },
             glyph: window_rollup(st, win).map(|r| (theme.status(r).0, r)),
             attention: win
                 .panes()
@@ -767,7 +814,9 @@ fn agent_counts(st: &State, theme: &Theme) -> Vec<Count> {
                 let Some(p) = st.panes.get(&id) else {
                     continue;
                 };
-                if let Some(slot) = count_slot(agent::status(p, &st.cfg)) {
+                if (p.agent.is_some() || p.detected_agent.is_some())
+                    && let Some(slot) = count_slot(agent::status(p, &st.cfg))
+                {
                     n[slot] += 1;
                 }
             }
@@ -799,6 +848,7 @@ fn window_rollup(st: &State, win: &Window) -> Option<Status> {
     win.panes()
         .iter()
         .filter_map(|id| st.panes.get(id))
+        .filter(|p| p.agent.is_some() || p.detected_agent.is_some())
         .map(|p| agent::status(p, &st.cfg))
         .min_by_key(|s| rollup_rank(*s))
         .filter(|s| *s != Status::Idle)

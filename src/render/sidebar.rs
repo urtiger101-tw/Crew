@@ -143,11 +143,16 @@ fn pane_views(st: &State, sess: &Session, open: bool, lang: Lang) -> Vec<PaneVie
                 .and_then(|a| non_empty(a.name.as_deref()).or(non_empty(Some(a.agent.as_str()))))
                 .or(non_empty(p.label.as_deref()))
                 .unwrap_or(wnd.name.as_str());
-            let message = match status {
-                Status::Blocked => agent
-                    .and_then(|a| non_empty(a.message.as_deref()))
-                    .map(clean),
-                _ => None,
+            let restored = super::restore_label(p, lang);
+            let message = if restored.is_some() {
+                agent.map(|a| clean(&format!("{:?}", a.resume)))
+            } else {
+                match status {
+                    Status::Blocked => agent
+                        .and_then(|a| non_empty(a.message.as_deref()))
+                        .map(clean),
+                    _ => None,
+                }
             };
             v.push(PaneView {
                 pid,
@@ -158,7 +163,9 @@ fn pane_views(st: &State, sess: &Session, open: bool, lang: Lang) -> Vec<PaneVie
                 spans: display
                     .as_ref()
                     .map_or_else(Vec::new, |d| d.sidebar_spans.clone()),
-                state_label: display.map(|d| d.state_label),
+                state_label: restored
+                    .map(str::to_string)
+                    .or_else(|| display.map(|d| d.state_label)),
                 message,
                 focused: open && wi == sess.active && pid == wnd.active,
             });

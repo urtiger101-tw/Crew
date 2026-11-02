@@ -119,8 +119,8 @@ impl Grid {
     fn text(&mut self, x: u16, y: u16, max: u16, s: &str, fg: Color, bg: Color, attrs: u8) -> u16 {
         let mut cx = x;
         let limit = (x as u32 + max as u32).min(self.w as u32) as u16;
-        for ch in s.chars() {
-            let cw = ch.width().unwrap_or(0) as u16;
+        for cluster in display_clusters(s) {
+            let cw = cluster.width() as u16;
             if cw == 0 {
                 continue;
             }
@@ -131,7 +131,7 @@ impl Grid {
                 cx,
                 y,
                 Cell {
-                    s: ch.to_string(),
+                    s: cluster.to_string(),
                     fg,
                     bg,
                     attrs,
@@ -174,6 +174,43 @@ struct Ctx<'a> {
     lang: crate::i18n::Lang,
 }
 
+/// Restored panes are not running until an agent reports live again.
+fn restore_label(pane: &crate::server::Pane, lang: crate::i18n::Lang) -> Option<&'static str> {
+    let key = match crate::persist::restore_state(pane)? {
+        "not-running" => "render.restore.not_running",
+        "resume-requested" => "render.restore.requested",
+        _ => return None,
+    };
+    Some(crate::i18n::tr(lang, key))
+}
+
+/// Keep zero-width marks and width-combining emoji sequences in one terminal cell.
+fn display_clusters(s: &str) -> Vec<&str> {
+    let mut result = Vec::new();
+    let mut chars = s.char_indices().peekable();
+    while let Some((start, ch)) = chars.next() {
+        if ch.is_control() {
+            continue;
+        }
+        let mut end = start + ch.len_utf8();
+        while let Some(&(next, ch)) = chars.peek() {
+            if ch.is_control() {
+                break;
+            }
+            let next_end = next + ch.len_utf8();
+            let width = s[start..end].width();
+            let char_width = ch.width().unwrap_or(0);
+            if char_width != 0 && s[start..next_end].width() >= width + char_width {
+                break;
+            }
+            chars.next();
+            end = next_end;
+        }
+        result.push(&s[start..end]);
+    }
+    result
+}
+
 /// Cut `s` to at most `max` display columns, ending in `ell` when cut (use
 /// `theme.g.ellipsis`, so ASCII mode gets `~`). Never splits a wide character.
 pub fn cut(s: &str, max: usize, ell: &str) -> String {
@@ -186,12 +223,12 @@ pub fn cut(s: &str, max: usize, ell: &str) -> String {
     }
     let mut out = String::new();
     let mut w = 0;
-    for ch in s.chars() {
-        let cw = ch.width().unwrap_or(0);
+    for cluster in display_clusters(s) {
+        let cw = cluster.width();
         if w + cw + ew > max {
             break;
         }
-        out.push(ch);
+        out.push_str(cluster);
         w += cw;
     }
     out.push_str(ell);
@@ -439,6 +476,93 @@ mod tests {
         assert!(out.contains("•\x1b[1;2Ha"), "{out:?}");
         // the wide cell clears both columns, returns, prints, and "b" is placed absolutely
         assert!(out.contains("  \x1b[1;3H中\x1b[1;5Hb"), "{out:?}");
+    }
+
+    #[test]
+    fn chrome_text_never_emits_pasted_terminal_controls() {
+        let mut g = grid(40);
+        g.text(
+            0,
+            0,
+            40,
+            "A\x1b[2J\x07B\u{009b}e\u{301}👩‍💻",
+            Color::Reset,
+            Color::Reset,
+            0,
+        );
+        assert!(
+            g.cells
+                .iter()
+                .all(|cell| !cell.s.chars().any(char::is_control))
+        );
+        let out = emit(&mut Frame::default(), g, None);
+        assert!(!out.contains("A\x1b[2J"));
+        assert!(out.contains("e\u{301}"));
+        assert!(out.contains("👩‍💻"));
+    }
+
+    #[test]
+    fn cjk_and_emoji_zwj_do_not_emit_continuation_cells() {
+        let mut g = grid(12);
+        g.text(0, 0, 12, "說明👩‍💻A", Color::Reset, Color::Reset, 0);
+        assert_eq!(g.cells[0].s, "說");
+        assert!(g.cells[1].skip);
+        assert_eq!(g.cells[2].s, "明");
+        assert!(g.cells[3].skip);
+        assert_eq!(g.cells[4].s, "👩‍💻");
+        assert!(g.cells[5].skip);
+        assert_eq!(g.cells[6].s, "A");
+        let out = emit(&mut Frame::default(), g, None);
+        assert!(out.contains("👩‍💻"), "{out:?}");
+        assert!(out.contains("明\x1b[1;5H"), "{out:?}");
+    }
+
+    #[test]
+    fn cjk_columns_are_preserved_with_ascii_chrome() {
+        let t = crate::theme::Theme::resolve(
+            &crate::theme::ThemeCfg::default(),
+            &crate::theme::ClientEnv {
+                ascii: true,
+                ..Default::default()
+            },
+        );
+        let mut g = grid(6);
+        g.text(0, 0, 6, "中文A", Color::Reset, Color::Reset, 0);
+        assert_eq!(t.g.vline, "|");
+        assert_eq!(row(&g), "中_文_A ");
+        let out = emit(&mut Frame::default(), g, None);
+        assert!(out.contains("中\x1b[1;3H"), "{out:?}");
+        assert!(out.contains("文\x1b[1;5HA"), "{out:?}");
+    }
+
+    #[test]
+    fn truncation_keeps_combining_emoji_intact() {
+        assert_eq!(cut("👩‍💻A", 2, "…"), "…");
+        assert_eq!(cut("👩‍💻ABC", 3, "…"), "👩‍💻…");
+    }
+
+    #[test]
+    fn incremental_composer_cjk_edits_replay_to_expected_cells() {
+        let mut frame = Frame::default();
+        let mut terminal = vt100::Parser::new(1, 28, 0);
+        for (text, cursor) in [
+            ("❯ 中文測試甲乙丙丁", 18),
+            ("❯ 中文測試甲乙丙丁", 14),
+            ("❯ 中文測試甲丙丁", 12),
+            ("❯ 中文測試甲新丙丁", 14),
+        ] {
+            let mut g = grid(28);
+            g.text(0, 0, 28, text, Color::Reset, Color::Reset, 0);
+            let ansi = emit(&mut frame, g, Some((cursor, 0)));
+            terminal.process(ansi.as_bytes());
+            let row = terminal.screen().contents();
+            assert_eq!(
+                row.trim_end(),
+                text,
+                "replay failed after {text:?}: {ansi:?}"
+            );
+            assert_eq!(terminal.screen().cursor_position(), (0, cursor));
+        }
     }
 
     #[test]
