@@ -105,7 +105,9 @@ def main():
                 '"$$" "$CREW_TRANSFER_MARKER" "$WORKSPACE_MARKER"'
             )
             api("pane", "run", pid, command)
-            fields = [output(pid, f"^{nonce}:{field}={pattern};$").split("=", 1)[1][:-1]
+            # ConPTY can retain padding after a short line. Keep the complete
+            # nonce/value/terminator match, but allow that display-only padding.
+            fields = [output(pid, f"^{nonce}:{field}={pattern};\\s*$").rstrip().split("=", 1)[1][:-1]
                       for field, pattern in (("P", "[0-9]+"), ("M", "(?:[0-9a-f]{32})?"),
                                              ("E", "(?:origin|destination)"))]
             print(f"probe {phase} {pid}: {':'.join(fields)}", flush=True)

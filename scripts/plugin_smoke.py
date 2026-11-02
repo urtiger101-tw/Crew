@@ -55,7 +55,7 @@ def main():
                 + "\nmin_crew_version=" + json.dumps(minimum) + "\nplatforms=['linux','windows','macos']\n"
                 + "[[build]]\ncommand=" + json.dumps([sys.executable, str(fixture / "build.py")]) + "\n"
                 + "[[actions]]\nid='list'\ntitle='Inspect literal argv and context'\ncommand="
-                + json.dumps([sys.executable, str(fixture / "action.py"), "literal ; $(touch INJECTED) ' \" 中文", "{cwd}"]) + "\n"
+                + json.dumps([sys.executable, "-X", "utf8", str(fixture / "action.py"), "literal ; $(touch INJECTED) ' \" 中文", "{cwd}"]) + "\n"
                 + "[[actions]]\nid='fail'\ntitle='Exit failure fixture'\ncommand="
                 + json.dumps([sys.executable, "-c", "import sys; print('FAILURE_EVIDENCE'); sys.exit(7)"]) + "\n"
                 + "[[actions]]\nid='slow'\ntitle='Timeout fixture'\ncommand="
