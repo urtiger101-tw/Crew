@@ -82,7 +82,8 @@ impl Drop for InstallStage {
 }
 
 /// Remove only named temporary artifacts contained directly in a verified stage.
-fn remove_build_artifacts(stage: &Path) -> Result<()> {
+fn remove_build_artifacts(stage: &Path) -> Vec<String> {
+    let mut warnings = Vec::new();
     for name in [
         "source",
         "source.tar",
@@ -92,28 +93,33 @@ fn remove_build_artifacts(stage: &Path) -> Result<()> {
         "empty-template",
     ] {
         let path = stage.join(name);
-        let metadata = match fs::symlink_metadata(&path) {
-            Ok(metadata) => metadata,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(error) => return Err(error.into()),
-        };
-        ensure!(
-            !metadata.file_type().is_symlink(),
-            "refusing symlinked build artifact: {}",
-            path.display()
-        );
-        let resolved = path.canonicalize()?;
-        ensure!(
-            resolved.parent() == Some(stage),
-            "build artifact escapes installation stage"
-        );
-        if metadata.is_dir() {
-            fs::remove_dir_all(&resolved)?;
-        } else {
-            fs::remove_file(&resolved)?;
+        let result = (|| -> Result<()> {
+            let metadata = match fs::symlink_metadata(&path) {
+                Ok(metadata) => metadata,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+                Err(error) => return Err(error.into()),
+            };
+            ensure!(
+                !metadata.file_type().is_symlink(),
+                "refusing symlinked build artifact"
+            );
+            let resolved = path.canonicalize()?;
+            ensure!(
+                resolved.parent() == Some(stage),
+                "build artifact escapes installation stage"
+            );
+            if metadata.is_dir() {
+                fs::remove_dir_all(&resolved)?;
+            } else {
+                fs::remove_file(&resolved)?;
+            }
+            Ok(())
+        })();
+        if let Err(error) = result {
+            warnings.push(format!("{}: {error:#}", path.display()));
         }
     }
-    Ok(())
+    warnings
 }
 
 fn clean_old_build_artifacts(home: &Path, current: &Path) -> Vec<String> {
@@ -147,13 +153,12 @@ fn clean_old_build_artifacts(home: &Path, current: &Path) -> Vec<String> {
         let Ok(marker) = serde_json::from_str::<Value>(&raw) else {
             continue;
         };
-        if marker["kind"] == "crew-managed-agentcmd"
-            && let Err(error) = remove_build_artifacts(&stage)
-        {
-            warnings.push(format!(
-                "cannot clean old stage {}: {error:#}",
-                stage.display()
-            ));
+        if marker["kind"] == "crew-managed-agentcmd" {
+            warnings.extend(
+                remove_build_artifacts(&stage)
+                    .into_iter()
+                    .map(|warning| format!("cannot clean old stage {warning}")),
+            );
         }
     }
     warnings
@@ -391,9 +396,8 @@ fn register_modules(
     *registry = next;
     stage.registered = true;
     let cleanup_warnings = remove_build_artifacts(&root_stage)
-        .err()
-        .map(|error| format!("cannot clean new stage {}: {error:#}", root_stage.display()))
         .into_iter()
+        .map(|warning| format!("cannot clean new stage {warning}"))
         .collect();
     Ok((result, cleanup_warnings))
 }
@@ -444,8 +448,12 @@ pub fn install(home: &Path, source: Option<&Path>, offline: bool, yes: bool) -> 
         !offline || source.is_some(),
         "--offline requires --source PATH to a local Git repository"
     );
-    let cargo_version = Command::new("cargo")
-        .arg("--version")
+    let mut cargo_version = Command::new("cargo");
+    cargo_version.arg("--version");
+    if offline {
+        cargo_version.env("RUSTUP_AUTO_INSTALL", "0");
+    }
+    let cargo_version = cargo_version
         .output()
         .context("cargo is required to build agentcmd; install Rust and Cargo and try again")?;
     ensure!(
@@ -576,28 +584,6 @@ pub fn install(home: &Path, source: Option<&Path>, offline: bool, yes: bool) -> 
     )?)?;
     let enabled = preflight(home, &registry, &utilities)?;
     let target = stage_path.join("target");
-    let rustc = Command::new(std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into()))
-        .current_dir(child_path(&checkout)?)
-        .arg("-vV")
-        .output()
-        .context("rustc is required to determine the agentcmd build target")?;
-    ensure!(
-        rustc.status.success(),
-        "rustc -vV failed: {}",
-        String::from_utf8_lossy(&rustc.stderr)
-    );
-    let rustc_output = std::str::from_utf8(&rustc.stdout).context("rustc output is not UTF-8")?;
-    let host = rustc_output
-        .lines()
-        .find_map(|line| line.strip_prefix("host: "))
-        .context("rustc -vV did not report a host target")?;
-    ensure!(
-        !host.is_empty()
-            && host
-                .bytes()
-                .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_' | b'.')),
-        "rustc reported an invalid host target"
-    );
     let mut build_arguments = vec![
         "cargo".to_owned(),
         "build".to_owned(),
@@ -606,7 +592,7 @@ pub fn install(home: &Path, source: Option<&Path>, offline: bool, yes: bool) -> 
         "--bin".to_owned(),
         "agentcmd".to_owned(),
         "--target".to_owned(),
-        host.to_owned(),
+        "<host>".to_owned(),
         "--target-dir".to_owned(),
         child_path(&target)?.to_string_lossy().into_owned(),
     ];
@@ -638,6 +624,30 @@ pub fn install(home: &Path, source: Option<&Path>, offline: bool, yes: bool) -> 
             "agentcmd installation cancelled"
         );
     }
+    let mut rustc = Command::new(std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into()));
+    rustc.current_dir(child_path(&checkout)?).arg("-vV");
+    if offline {
+        rustc.env("RUSTUP_AUTO_INSTALL", "0");
+    }
+    let rustc = process::capture(rustc, Duration::from_secs(30), 16 * 1024)
+        .context("rustc is required to determine the agentcmd build target")?;
+    ensure!(
+        rustc.success() && !rustc.truncated,
+        "rustc -vV failed: {}",
+        serde_json::to_string(&rustc)?
+    );
+    let host = rustc
+        .stdout
+        .lines()
+        .find_map(|line| line.strip_prefix("host: "))
+        .context("rustc -vV did not report a host target")?;
+    ensure!(
+        !host.is_empty()
+            && host
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_' | b'.')),
+        "rustc reported an invalid host target"
+    );
     let mut build = Command::new("cargo");
     build
         .current_dir(child_path(&checkout)?)
@@ -648,7 +658,7 @@ pub fn install(home: &Path, source: Option<&Path>, offline: bool, yes: bool) -> 
         .arg(child_path(&target)?)
         .env_remove("CARGO_BUILD_TARGET");
     if offline {
-        build.arg("--offline");
+        build.arg("--offline").env("RUSTUP_AUTO_INSTALL", "0");
     }
     for (key, _) in std::env::vars_os() {
         let name = key.to_string_lossy().to_ascii_uppercase();
@@ -863,18 +873,24 @@ mod tests {
         let utilities = parse_registry(UPSTREAM).unwrap();
         let (mut stage, binary) = fixture.stage();
         let blocked = stage.root.join("source.tar");
+        let blocked_config = stage.root.join("gitconfig");
+        fs::create_dir_all(stage.root.join("target")).unwrap();
+        fs::write(stage.root.join("target/temporary"), b"build cache").unwrap();
+        fs::create_dir(stage.root.join("empty-template")).unwrap();
         #[cfg(windows)]
-        let locked = {
+        let locked = [blocked.as_path(), blocked_config.as_path()].map(|path| {
             use std::os::windows::fs::OpenOptionsExt;
-            fs::write(&blocked, b"temporary archive").unwrap();
+            fs::write(path, b"temporary artifact").unwrap();
             fs::OpenOptions::new()
                 .read(true)
                 .share_mode(0)
-                .open(&blocked)
+                .open(path)
                 .unwrap()
-        };
+        });
         #[cfg(unix)]
-        std::os::unix::fs::symlink("unrelated", &blocked).unwrap();
+        for path in [&blocked, &blocked_config] {
+            std::os::unix::fs::symlink("unrelated", path).unwrap();
+        }
         let mut registry = store::Registry::default();
         let result = register_modules(
             &fixture.0,
@@ -886,8 +902,12 @@ mod tests {
         );
         let (modules, warnings) = result.expect("cleanup failure must not abort registration");
         assert_eq!(modules.len(), 46);
-        assert_eq!(warnings.len(), 1);
+        assert_eq!(warnings.len(), 2);
         assert!(warnings[0].contains("cannot clean new stage"));
+        assert!(warnings[0].contains("source.tar"));
+        assert!(warnings[1].contains("gitconfig"));
+        assert!(!stage.root.join("target").exists());
+        assert!(!stage.root.join("empty-template").exists());
         assert_eq!(registry.plugins.len(), 46);
         assert_eq!(store::read(&fixture.0).unwrap().plugins.len(), 46);
         assert!(stage.registered);

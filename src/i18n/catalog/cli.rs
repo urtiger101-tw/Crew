@@ -21,7 +21,10 @@ USAGE:
   crew capture-pane -p [-t S] print the active pane of a session
   crew send-keys [-t S] KEYS  type text / keys (Enter, C-c, ...) into it
   crew source-file [PATH]    reload config in the running server
+  crew split-window [-h] [--command COMMAND]  split the active pane (-h: left/right)
   crew <command> [args]      run any server command, e.g. `crew set mouse off`
+
+Use --help for command help; -h also shows help except for split-window/splitw.
 
 AUTOMATION (herdr-style, JSON output; see `crew pane --help`):
   crew pane list|get|split|read|send-text|send-keys|run|wait-output|...
@@ -42,7 +45,10 @@ Config: $CREW_CONFIG or <config_dir>/crew/config.toml"#,
   crew capture-pane -p [-t S] 印出工作階段的使用中窗格
   crew send-keys [-t S] KEYS  將文字或按鍵（Enter、C-c 等）輸入到窗格
   crew source-file [PATH]    在執行中的伺服器重新載入設定
+  crew split-window [-h] [--command COMMAND]  分割使用中窗格（-h：左右分割）
   crew <command> [args]      執行任何伺服器指令，例如 `crew set mouse off`
+
+使用 --help 查看指令說明；除 split-window/splitw 外，-h 也會顯示說明。
 
 自動化 AUTOMATION（herdr 風格，JSON 輸出；見 `crew pane --help`）：
   crew pane list|get|split|read|send-text|send-keys|run|wait-output|...

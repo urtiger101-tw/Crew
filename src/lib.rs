@@ -49,8 +49,76 @@ fn flag(args: &[String], f: &str) -> Option<String> {
         .and_then(|i| args.get(i + 1).cloned())
 }
 
+/// Resolve CLI help before any command can attach, start a server or mutate state.
+fn help_args(args: &[String]) -> Option<Vec<String>> {
+    let sub = args.first()?.as_str();
+    if sub.starts_with("__") {
+        return None;
+    }
+    let split = matches!(sub, "split-window" | "splitw");
+    let binding = matches!(sub, "bind-key" | "bind");
+    let confirm = matches!(sub, "confirm-before" | "confirm");
+    let mut tail = args.iter().skip(1);
+    while let Some(arg) = tail.next() {
+        if arg == "--" {
+            break;
+        }
+        if matches!(
+            arg.as_str(),
+            "--command"
+                | "--message"
+                | "--source"
+                | "--pane"
+                | "--seq"
+                | "--label"
+                | "--binary"
+                | "--socket"
+                | "--ssh-config"
+                | "--workspace"
+                | "--timeout-ms"
+                | "--ref"
+                | "--plugin"
+                | "--limit"
+                | "--prompt"
+                | "--lang"
+                | "-t"
+                | "-s"
+                | "-x"
+                | "-y"
+        ) || (!binding && arg == "-n")
+            || (confirm && arg == "-p")
+        {
+            tail.next(); // option values may be literal help flags.
+            continue;
+        }
+        if arg == "--help" || (arg == "-h" && !split) {
+            let group = if sub == "--machine" {
+                Some("machine")
+            } else if api::cli::API_COMMANDS.contains(&sub)
+                || matches!(sub, "plugin" | "integration" | "machine" | "federation")
+            {
+                Some(sub)
+            } else {
+                None
+            };
+            return Some(
+                group
+                    .into_iter()
+                    .chain(std::iter::once("--help"))
+                    .map(str::to_owned)
+                    .collect(),
+            );
+        }
+        if (binding || confirm) && !arg.starts_with('-') {
+            break; // the binding key or wrapped command begins the payload.
+        }
+    }
+    None
+}
+
 pub fn run() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    let args = help_args(&args).unwrap_or(args);
     let sub = args.first().map(|s| s.as_str()).unwrap_or("");
     let lang = client::lang();
     let res = match sub {
@@ -184,6 +252,56 @@ mod tests {
     use crate::i18n::{Lang, tr};
 
     const HELP_KEYS: [&str; 3] = ["cli.help", "cli.keys", "cli.api_help"];
+
+    #[test]
+    fn help_respects_split_direction_and_command_payloads() {
+        for args in [
+            vec!["split-window", "-h"],
+            vec!["splitw", "--command", "--help"],
+            vec!["new-window", "--command", "-h"],
+            vec!["pane", "send-text", "p1", "--", "--help"],
+            vec![
+                "integration",
+                "report",
+                "codex",
+                "start",
+                "--",
+                "codex",
+                "--help",
+            ],
+            vec!["bind-key", "v", "split-window", "-h"],
+            vec!["confirm-before", "-p", "--help", "split-window", "-h"],
+            vec!["__pane_utf8", "powershell.exe", "--help"],
+        ] {
+            let args: Vec<String> = args.into_iter().map(str::to_owned).collect();
+            assert_eq!(super::help_args(&args), None, "{args:?}");
+        }
+        let args = ["split-window", "-h", "--help"].map(str::to_owned);
+        assert_eq!(super::help_args(&args), Some(vec!["--help".into()]));
+        for flag in ["--help", "-h"] {
+            for args in [
+                vec![
+                    "integration",
+                    "report",
+                    "codex",
+                    "start",
+                    "--source",
+                    "s",
+                    "--pane",
+                    "p1",
+                    "--message",
+                    flag,
+                ],
+                vec!["machine", "rename", "m1", "--label", flag],
+                vec!["new", "-d", "-s", flag],
+                vec!["new-window", "-n", flag],
+                vec!["debug-frame", "--message", flag],
+            ] {
+                let args: Vec<String> = args.into_iter().map(str::to_owned).collect();
+                assert_eq!(super::help_args(&args), None, "{args:?}");
+            }
+        }
+    }
 
     /// Command, option and key names that the help texts must keep in zh-TW.
     const NAMES: [&str; 14] = [

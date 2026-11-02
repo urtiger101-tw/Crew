@@ -246,6 +246,268 @@ impl Drop for Server {
 }
 
 #[test]
+fn help_does_not_change_the_server_and_split_h_still_splits() {
+    let server = Server::new();
+    server.run(&["workspace", "create", "help-check"]);
+    let snapshot = || {
+        let list = server.run(&["pane", "list"]);
+        list["result"]["panes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|pane| {
+                json!([
+                    pane["pane_id"],
+                    pane["session"],
+                    pane["window"],
+                    pane["focused"],
+                    pane["zoomed"]
+                ])
+            })
+            .collect::<Vec<_>>()
+    };
+    let before = snapshot();
+    // Include aliases and nested command groups; every invocation uses this isolated server.
+    let commands = [
+        "split-window",
+        "splitw",
+        "new-window",
+        "neww",
+        "new",
+        "new-session",
+        "attach",
+        "a",
+        "attach-session",
+        "attach-workspace",
+        "ls",
+        "list-sessions",
+        "kill-session",
+        "kill-server",
+        "keys",
+        "list-keys",
+        "version",
+        "-V",
+        "--version",
+        "rename-window",
+        "renamew",
+        "rename-session",
+        "rename",
+        "kill-pane",
+        "killp",
+        "kill-window",
+        "killw",
+        "select-pane",
+        "selectp",
+        "next-pane",
+        "resize-pane",
+        "resizep",
+        "next-window",
+        "next",
+        "previous-window",
+        "prev",
+        "select-window",
+        "selectw",
+        "copy-mode",
+        "paste-buffer",
+        "pasteb",
+        "detach-client",
+        "detach",
+        "choose-tree",
+        "choose-session",
+        "choose-window",
+        "toggle-sidebar",
+        "sidebar",
+        "source-file",
+        "source",
+        "set-option",
+        "set",
+        "set-window-option",
+        "setw",
+        "bind-key",
+        "bind",
+        "unbind-key",
+        "unbind",
+        "command-prompt",
+        "switch-client",
+        "switchc",
+        "send-prefix",
+        "lsk",
+        "display-message",
+        "display",
+        "debug-frame",
+        "next-attention",
+        "confirm-before",
+        "confirm",
+        "capture-pane",
+        "capturep",
+        "send-keys",
+        "send",
+        "pane",
+        "agent",
+        "session",
+        "server",
+        "workspace",
+        "tab",
+        "worktree",
+        "events",
+        "api",
+        "pane list",
+        "pane get",
+        "pane current",
+        "pane split",
+        "pane focus",
+        "pane zoom",
+        "pane rename",
+        "pane close",
+        "pane read",
+        "pane send-text",
+        "pane send-keys",
+        "pane run",
+        "pane wait-output",
+        "pane report-agent",
+        "pane release-agent",
+        "pane report-metadata",
+        "agent list",
+        "agent get",
+        "agent read",
+        "agent send-keys",
+        "agent focus",
+        "agent prompt",
+        "agent wait",
+        "agent rename",
+        "session list",
+        "server stop",
+        "workspace list",
+        "workspace get",
+        "workspace current",
+        "workspace create",
+        "workspace rename",
+        "workspace move",
+        "workspace focus",
+        "workspace close",
+        "workspace report-metadata",
+        "tab list",
+        "tab get",
+        "tab current",
+        "tab create",
+        "tab rename",
+        "tab move",
+        "tab focus",
+        "tab close",
+        "worktree list",
+        "worktree create",
+        "worktree open",
+        "worktree remove",
+        "events list",
+        "events wait",
+        "api serve",
+        "api schema",
+        "api snapshot",
+        "plugin",
+        "plugin marketplace",
+        "plugin marketplace list",
+        "plugin marketplace search",
+        "plugin marketplace show",
+        "plugin agentcmd install",
+        "plugin inspect",
+        "plugin install",
+        "plugin link",
+        "plugin update",
+        "plugin list",
+        "plugin enable",
+        "plugin disable",
+        "plugin unlink",
+        "plugin uninstall",
+        "plugin config-dir",
+        "plugin state-dir",
+        "plugin action list",
+        "plugin action invoke",
+        "plugin log list",
+        "integration",
+        "integration list",
+        "integration doctor",
+        "integration explain",
+        "integration report",
+        "machine",
+        "machine add",
+        "machine list",
+        "machine rename",
+        "machine remove",
+        "machine probe",
+        "machine enable",
+        "machine disable",
+        "machine status",
+        "machine reconnect",
+        "machine attach",
+        "federation",
+        "federation list",
+        "federation watch",
+        "federation workspaces",
+        "federation agents",
+        "--machine fixture pane list",
+    ];
+    for command in commands {
+        for flag in ["--help", "-h"] {
+            if flag == "-h" && matches!(command, "split-window" | "splitw") {
+                continue; // tmux-compatible horizontal split, not a help flag.
+            }
+            let output = server
+                .command()
+                .args(command.split_whitespace())
+                .arg(flag)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{command} {flag}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let text = String::from_utf8_lossy(&output.stdout);
+            assert!(
+                text.contains("crew "),
+                "{command} {flag} did not print usage: {text}"
+            );
+            assert_eq!(snapshot(), before, "{command} {flag} changed the server");
+        }
+    }
+    // Help-looking text remains a value when the option owns the next argument.
+    let pane = server.newest_pane();
+    for message in ["--help", "-h"] {
+        let report = server.run(&[
+            "integration",
+            "report",
+            "codex",
+            "start",
+            "--source",
+            "help-value-check",
+            "--pane",
+            &pane,
+            "--message",
+            message,
+        ]);
+        assert!(report.get("result").is_some(), "{report}");
+        assert_eq!(server.pane(&pane)["agent"]["message"], message);
+    }
+    let output = server
+        .command()
+        .args(["split-window", "-h"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        server.run(&["pane", "list"])["result"]["panes"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+}
+
+#[test]
 fn confirm_before_bindings_prepare_paths_when_confirmation_is_disabled() {
     let server = Server::new();
     let config = fs::read_to_string(&server.config).unwrap();

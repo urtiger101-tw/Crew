@@ -94,6 +94,8 @@ assuming that every module is disabled afterward.
 Older agentcmd installation stages remain on disk so open panes keep their
 commands. Remove an old stage manually only after no pane still uses it.
 Interrupting or killing the installer can leave an unregistered stage behind.
+An interrupted cleanup or a cleanup warning can also leave `source/` and `target/`
+in a registered stage; the next install retries removing those build artifacts.
 
 Enabling a module adds its executable directory only to newly spawned panes,
 including workspace-created, tab-created and split panes. Running panes keep
