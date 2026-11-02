@@ -40,6 +40,7 @@ const METHODS: &[&str] = &[
     "worktree.remove",
     "pane.list",
     "pane.get",
+    "pane.resume",
     "pane.current",
     "pane.split",
     "pane.focus",

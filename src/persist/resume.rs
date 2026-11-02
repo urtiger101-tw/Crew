@@ -9,7 +9,7 @@
 /// `~` is always quoted, because PowerShell and POSIX shells expand those prefixes. Rejected: an
 /// empty or path-like first argument, any apostrophe (including PowerShell's typographic ones),
 /// and control characters.
-pub(super) fn quote_resume(args: &[String]) -> Option<String> {
+pub(crate) fn quote_resume(args: &[String]) -> Option<String> {
     let first = args.first()?;
     if first.is_empty() || first.contains(['/', '\\']) {
         return None;

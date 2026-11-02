@@ -31,6 +31,13 @@ fn tokenize_quotes() {
 }
 
 #[test]
+fn resume_binding_uses_the_focused_pane_action() {
+    assert!(DEFAULT_BINDINGS.contains(&("R", "resume-pane")));
+    assert_eq!(parse("resume-pane").unwrap(), Cmd::ResumePane);
+    assert!(parse("resume-pane p2").is_err());
+}
+
+#[test]
 fn cli_values_survive_command_transport_as_literal_arguments() {
     for value in [
         "",

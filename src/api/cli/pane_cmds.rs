@@ -13,6 +13,7 @@ use crate::api::{Direction, Pattern, Request, ZoomMode};
 const PANE_SUBS: &[&str] = &[
     "list",
     "get",
+    "resume",
     "current",
     "split",
     "focus",
@@ -36,6 +37,12 @@ pub(super) fn dispatch(
     match sub {
         "list" => pane_list(rest),
         "get" => pane_get(rest),
+        "resume" => {
+            let words = no_opts(rest)?;
+            Ok(Request::PaneResume {
+                pane: one_id(&words, "pane resume <id>")?,
+            })
+        }
         "current" => pane_current(rest, current),
         "split" => pane_split(rest, current),
         "focus" => pane_focus(rest, current),

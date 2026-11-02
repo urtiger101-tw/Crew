@@ -57,6 +57,9 @@ pub struct Pane {
     pub copy: Option<CopyState>,
     /// reported agent state (herdr-style `pane report-agent`)
     pub agent: Option<crate::api::AgentInfo>,
+    /// A saved agent command was submitted in this daemon lifetime; repeated resume
+    /// actions must not submit it again while waiting for a live agent report.
+    pub resume_requested: bool,
     /// Inferred process identity; never substitutes for a reported lifecycle authority.
     pub detected_agent: Option<crate::agent_detection::Detection>,
     /// user label (`pane rename`)

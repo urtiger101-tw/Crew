@@ -56,6 +56,7 @@ pub enum Cmd {
         page_up: bool,
     },
     PasteBuffer,
+    ResumePane,
     Detach,
     ChooseTree,
     /// Window switcher: the chooser with window rows only, on the previously used window.
@@ -116,6 +117,7 @@ impl Cmd {
             Cmd::SelectWindow(_) => "select-window",
             Cmd::CopyMode { .. } => "copy-mode",
             Cmd::PasteBuffer => "paste-buffer",
+            Cmd::ResumePane => "resume-pane",
             Cmd::Detach => "detach-client",
             Cmd::ChooseTree => "choose-tree",
             Cmd::ChooseWindow => "choose-window",
@@ -403,6 +405,12 @@ pub fn parse(line: &str) -> Result<Cmd, String> {
         }
         "copy-mode" => Cmd::CopyMode { page_up: has("-u") },
         "paste-buffer" | "pasteb" => Cmd::PasteBuffer,
+        "resume-pane" if args.is_empty() => Cmd::ResumePane,
+        "resume-pane" => {
+            return Err(
+                "resume-pane takes no arguments; use crew pane resume <id> outside the TUI".into(),
+            );
+        }
         "detach-client" | "detach" => Cmd::Detach,
         "choose-tree" | "choose-session" => Cmd::ChooseTree,
         "choose-window" => Cmd::ChooseWindow,
@@ -710,6 +718,7 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     (",", "rename-window"),
     ("$", "rename-session"),
     ("r", "source-file"),
+    ("R", "resume-pane"),
     ("?", "list-keys"),
 ];
 

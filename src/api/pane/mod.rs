@@ -16,12 +16,14 @@ mod keys;
 mod layout;
 mod query;
 mod read;
+mod resume;
 
 // Kept public path for `super::pane::key_bytes`; no caller outside this module uses it yet.
 #[allow(unused_imports)]
 pub use keys::key_bytes;
 pub use keys::{send_keys, submit};
 pub use read::read_text;
+pub use resume::{resume, resume_pane};
 
 use read::{Matcher, find_line};
 
@@ -48,6 +50,7 @@ fn run_enter_delay(shared: &Shared, pid: usize) -> u64 {
 
 pub fn handle(shared: &Shared, req: Request) -> ApiResult {
     match req {
+        Request::PaneResume { pane } => resume(shared, pane),
         Request::ApiSnapshot
         | Request::SessionList
         | Request::PaneList { .. }

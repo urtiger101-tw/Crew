@@ -11,6 +11,7 @@ mod tests;
 use crate::api::{AgentInfo, Status};
 use crate::ipc;
 use crate::server::{Session, Shared, State, Window};
+pub(crate) use resume::quote_resume;
 use snapshot::{LeafSnap, SessionSnap};
 use std::collections::HashSet;
 use std::fs;
@@ -548,7 +549,22 @@ fn build_windows(
     Ok(out)
 }
 
-/// Apply saved label and agent data to a freshly spawned pane, and type its resume command.
+/// Restored metadata is visible until a live reporter claims the pane. A requested
+/// command is not proof that the saved agent has started.
+pub(crate) fn restore_state(pane: &crate::server::Pane) -> Option<&'static str> {
+    pane.agent
+        .as_ref()
+        .filter(|agent| agent.source == crate::api::RESTORE_SOURCE)
+        .map(|_| {
+            if pane.resume_requested {
+                "resume-requested"
+            } else {
+                "not-running"
+            }
+        })
+}
+
+/// Apply saved label and agent data without executing a saved command. Resume is explicit.
 fn apply_leaf(st: &mut State, id: usize, leaf: &LeafSnap, names: &mut HashSet<String>) {
     let Some(p) = st.panes.get_mut(&id) else {
         return;
@@ -562,18 +578,11 @@ fn apply_leaf(st: &mut State, id: usize, leaf: &LeafSnap, names: &mut HashSet<St
         source: crate::api::RESTORE_SOURCE.into(),
         agent: kind,
         state: Status::Unknown,
-        message: None,
+        message: Some("restored, not running".into()),
         seq: None,
         name: snapshot::keep_agent_name(leaf.agent_name.as_deref(), names),
         resume: leaf.resume.clone(),
     });
-    if leaf.resume.is_empty() {
-        return;
-    }
-    match resume::quote_resume(&leaf.resume) {
-        Some(line) => st.write_pane(id, format!("{line}\r").as_bytes()),
-        None => crate::log!("restore: pane {id}: resume command rejected"),
-    }
 }
 
 /// Write to `<path>.tmp`, fsync it, then rename over `path`.

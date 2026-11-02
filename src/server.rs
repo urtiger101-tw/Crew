@@ -493,6 +493,7 @@ impl State {
             started: Instant::now(),
             copy: None,
             agent: None,
+            resume_requested: false,
             detected_agent: None,
             label: None,
             cwd: start_dir,
@@ -622,7 +623,10 @@ impl State {
         let name = match name {
             Some(n) => {
                 if self.sidx(&n).is_some() {
-                    return Err(anyhow!("duplicate session: {n}"));
+                    return Err(anyhow!(
+                        "duplicate session: {n}; attach to it with: crew attach -t {}",
+                        commands::quote(&n)
+                    ));
                 }
                 n
             }
@@ -1420,6 +1424,17 @@ impl State {
                 } else {
                     return Err("no buffer".into());
                 }
+            }
+            Cmd::ResumePane => {
+                let pid = self.active_pane(si);
+                let requested =
+                    crate::api::pane::resume_pane(self, pid).map_err(|error| error.message)?;
+                let key = if requested {
+                    "messages.resume_requested"
+                } else {
+                    "messages.resume_already_requested"
+                };
+                self.message(cid, crate::i18n::tr(self.client_lang(cid), key));
             }
             Cmd::Detach => {
                 let lang = self.client_lang(cid);

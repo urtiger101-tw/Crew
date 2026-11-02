@@ -114,6 +114,9 @@ pub enum Request {
     PaneGet {
         pane: usize,
     },
+    PaneResume {
+        pane: usize,
+    },
     PaneCurrent {
         pane: Option<usize>,
     },
@@ -342,6 +345,7 @@ pub fn pane_json(st: &State, pid: usize) -> Option<Value> {
             "state": a.state.as_str(),
             "message": a.message,
             "name": a.name,
+            "resume": a.resume,
         })
     });
     Some(json!({
@@ -362,6 +366,7 @@ pub fn pane_json(st: &State, pid: usize) -> Option<Value> {
         "rows": p.rect.h,
         "status": agent::status(p, &st.cfg).as_str(),
         "agent": agent,
+        "restore_state": crate::persist::restore_state(p),
         "detected_agent": p.detected_agent,
         "host_lost": p.host_lost.as_ref().map(|l| json!({
             "processes": crate::server::host::processes_json(&l.survivors),

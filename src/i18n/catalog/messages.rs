@@ -8,6 +8,16 @@
 use super::super::Entry;
 
 pub const ENTRIES: &[Entry] = &[
+    (
+        "messages.resume_requested",
+        "saved resume command requested; waiting for an agent report",
+        "已送出保存的續接指令，等待代理回報",
+    ),
+    (
+        "messages.resume_already_requested",
+        "resume was already requested; no command was sent again",
+        "已要求續接，未重複送出指令",
+    ),
     ("messages.cancelled", "cancelled", "已取消"),
     (
         "messages.target_changed",
