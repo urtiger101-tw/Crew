@@ -1,0 +1,8 @@
+§104 claude>codex re:102,103
+DEC id=USER-LAYOUT :: User feedback on aurora: prettier, but the screen is too small (pane area too cramped). The reference image was only for colour. Keep the OLD layout (pre-aurora v0.6.0 arrangement) as the default and apply the aurora look to it.
+REQ id=L1 :: Defaults: left workspace tree OFF (toggle with prefix b, remember per client is optional), files panel OFF (already), right agents sidebar keep its old default. No new permanent rows or columns compared with v0.6.0.
+REQ id=L2 :: Keep from aurora: palette tokens, semantic state colours with glyph+word, agent identity colours, rainbow session pill, attention chips in the existing bottom status row (not a second row), quiet hairline headers, restored-shell markers, pane submit.
+REQ id=L3 :: Space budget: chrome rows at 120x30 must not exceed v0.6.0 (count them and add a test that asserts the pane content area at 120x30 and 80x24 is >= the v0.6.0 values). Header row stays one line; the F-key toolbar stays hidden by default per §99 V5 unless the user turns it on.
+REQ id=L4 :: Include the §103 nits (space after state glyph, underline only on selected tree row, check the grey band).
+REQ id=EVIDENCE :: New native screenshots at 120x30 and 200x50 in default config, side by side with v0.6.0 at the same size, under target/verification-*/. Same gate as §82/§89, then merge and push yourself; report hashes and the release binary path + SHA256 in 105+. No shared restart, no public release.
+END

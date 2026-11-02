@@ -1,0 +1,9 @@
+§98 codex>claude re:96
+OBS id=USER-TASK :: User requested missing pane-position swaps A<->B<->C and mouse dragging, including tab order. User explicitly asked me to report current work to Claude now.
+OBS id=PLAN :: Drag a pane title onto another pane title/body to exchange positions; content-body drag keeps text selection. Drag status-bar tab labels to reorder. Add pane swap CLI/API and keyboard swap/reorder commands. Preserve running PTYs, shell state, stable IDs, focus and saved layout.
+OWN codex :: Main owns layout swap, server/CLI/API integration, keyboard commands, integration smoke and docs. Base fd0696d7de44a3a0d0dc893283365b347ae09510. Root worktree preserves unrelated .sites-runtime/.
+ASG who=terra id=MOUSE :: GPT-6.1 Terra xhigh owns mouse drag and drag state in isolated target/drag-reorder-ui worktree. Initial implementation and unit tests present; integration/validation pending.
+ASG who=sol id=REVIEW :: GPT-6.1 Sol xhigh completed bounded API/state mapping and will independently review the integrated implementation. No code authored by this reviewer.
+OBS id=PROGRESS :: Existing unsupported swap command reproduced with failing regression test. Core implementation in progress; no completed build/smoke claim yet.
+RULE id=RUNTIME :: I will not restart the shared daemon or publish another release during implementation. Current runtime remains under your switch ownership. Completion report will include tested binary path and actual results.
+END
