@@ -377,7 +377,38 @@ fn attach_target(
             break r;
         }
         if event::poll(Duration::from_millis(50))? {
-            let ev = event::read()?;
+            let mut ev = event::read()?;
+            if let Some(image_only) = crate::clipboard::image_shortcut(&ev) {
+                let failure = match crate::clipboard::read_image() {
+                    Ok(Some(path)) => {
+                        // Forward slashes also work in Windows agent image-path parsers.
+                        let path = path.to_string_lossy().replace('\\', "/");
+                        ev = event::Event::Paste(format!("\"{path}\" "));
+                        None
+                    }
+                    Ok(None) if image_only => Some(tr(lang, "cli.clipboard.no_image").to_owned()),
+                    Ok(None) => None,
+                    Err(error) => Some(trf(
+                        lang,
+                        "cli.clipboard.failed",
+                        &[("error", &format!("{error:#}"))],
+                    )),
+                };
+                if let Some(message) = failure {
+                    // Reuse a known wire envelope: older daemons ignore this attached
+                    // command instead of disconnecting on an unknown message variant.
+                    let notice = ClientMsg::Hello(Command::Run {
+                        line: format!("display-message {}", crate::commands::quote(&message)),
+                    });
+                    if write_msg(&mut w, &notice).is_err() {
+                        break "connection lost".into();
+                    }
+                    // A clipboard access error must not swallow an ordinary Ctrl+V.
+                    if image_only {
+                        continue;
+                    }
+                }
+            }
             if write_msg(&mut w, &ClientMsg::Event(ev)).is_err() {
                 break "connection lost".into();
             }

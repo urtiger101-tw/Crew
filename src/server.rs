@@ -1812,10 +1812,19 @@ fn handle_conn(shared: Shared, cid: usize, stream: interprocess::local_socket::S
             drop(st);
             drop(_plugin_paths);
             while let Ok(msg) = read_msg::<ClientMsg>(&mut r) {
-                if let ClientMsg::Event(ev) = msg
-                    && !handle_client_event(&shared, cid, ev)
-                {
-                    break;
+                match msg {
+                    ClientMsg::Event(ev) => {
+                        if !handle_client_event(&shared, cid, ev) {
+                            break;
+                        }
+                    }
+                    ClientMsg::Hello(Command::Run { line }) => {
+                        // Only local UI notices are accepted on the attached stream.
+                        if let Ok(Cmd::DisplayMessage(text)) = commands::parse(&line) {
+                            crate::api::lock(&shared).message(cid, text);
+                        }
+                    }
+                    ClientMsg::Hello(_) => {}
                 }
             }
             crate::api::lock(&shared).clients.remove(&cid);

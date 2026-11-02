@@ -16,6 +16,7 @@ mod api;
 mod brand;
 mod bridge;
 mod client;
+mod clipboard;
 mod commands;
 mod config;
 mod copy;

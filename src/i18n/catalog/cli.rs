@@ -218,6 +218,16 @@ agent rename <target> <name>  |  agent rename <target> --clear
         "detached (from session {session})",
         "已離開（工作階段 {session}）",
     ),
+    (
+        "cli.clipboard.no_image",
+        "No image in the clipboard",
+        "剪貼簿中沒有圖片",
+    ),
+    (
+        "cli.clipboard.failed",
+        "Could not paste clipboard image: {error}",
+        "無法貼上剪貼簿圖片：{error}",
+    ),
     ("cli.exit.exited", "exited", "已結束"),
     ("cli.exit.connection_lost", "connection lost", "連線中斷"),
     ("cli.exit.server_exited", "server exited", "伺服器已結束"),

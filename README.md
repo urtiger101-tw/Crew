@@ -278,6 +278,16 @@ Browse earlier output without the prefix: `Shift+Up`/`Shift+Down` scroll the act
 滑鼠：在窗格內拖曳即選取，放開時自動複製（含 OSC 52 系統剪貼簿）。
 Mouse: drag inside a pane to select; releasing copies (also to the system clipboard via OSC 52).
 
+### 剪貼簿圖片 Clipboard images
+
+在 Windows 本機附加的 Crew 視窗按 **Ctrl+Alt+V**，即可將系統剪貼簿中的圖片保存成 PNG，並把帶引號的完整路徑貼入目前窗格，不會自動送出 Enter。若外層終端機有把 **Ctrl+V** 傳給 Crew，也支援直接貼圖；Windows Terminal 可能先攔截 Ctrl+V，此時使用 Ctrl+Alt+V。純文字貼上與 `prefix ]` 的文字緩衝區功能維持不變。
+
+Press **Ctrl+Alt+V** in a locally attached Windows Crew client to save the clipboard image as a PNG and paste its quoted absolute path into the focused pane, without submitting Enter. **Ctrl+V** also handles images when the terminal delivers that key to Crew. If Windows Terminal intercepts it, use Ctrl+Alt+V. Ordinary text paste and `prefix ]` keep their existing behavior.
+
+圖片保留在 Windows `%LOCALAPPDATA%\crew\clipboard`；使用完畢後可自行清理。CLI agent 能否顯示附件預覽由該 agent 決定，Crew 負責保存與貼入路徑。遠端 SSH 主機無法直接讀取這些本機檔案，須另外傳送圖片。剪貼簿為空或讀取失敗會顯示提示，不會中斷 Crew。
+
+Images are retained under `%LOCALAPPDATA%\crew\clipboard` on Windows. Native PNG data is preserved directly, including transparency; Bitmap conversion uses built-in Windows PowerShell and .NET. No additional package is required. Linux/macOS image paste is not implemented. Attachment previews depend on the receiving CLI agent. Remote SSH hosts need a separate file transfer. An empty clipboard or read failure displays a notice without ending Crew.
+
 ### 選單 Chooser（`prefix s` / `w` / `g`）
 
 `prefix w` 開啟同一個選單，但只列視窗、預設選上一個用過的視窗（Alt+Tab 會被 Windows 攔截，終端機收不到，故以此替代）；在其中按 `w` 也會前進一列、按 `a` 回到完整樹狀。
