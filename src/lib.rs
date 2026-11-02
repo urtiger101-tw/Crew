@@ -21,6 +21,7 @@ mod config;
 mod copy;
 mod events;
 mod i18n;
+mod inbox;
 mod input;
 mod integrations;
 mod ipc;
@@ -223,15 +224,23 @@ pub fn run() {
                 Err(help) if help == api::cli::HELP => {
                     println!("{}", tr(lang, "cli.api_help"));
                     println!(
-                        "\n{}\n{}\n{}\n{}",
+                        "\n{}\n{}\n{}\n{}\n{}",
                         workspace::HELP,
                         worktree::HELP,
                         bridge::HELP,
-                        metadata::HELP
+                        metadata::HELP,
+                        inbox::cli::HELP
                     );
                     Ok(())
                 }
                 Err(usage) => {
+                    if matches!(g, "peer" | "msg") {
+                        eprintln!(
+                            "{}",
+                            serde_json::json!({"error":api::ApiError::invalid(usage)})
+                        );
+                        std::process::exit(2);
+                    }
                     eprintln!("crew: {usage}");
                     std::process::exit(2);
                 }

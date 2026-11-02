@@ -101,6 +101,7 @@ pub enum Request {
     Workspace(crate::workspace::Request),
     Worktree(crate::worktree::Request),
     Events(crate::events::Request),
+    Inbox(crate::inbox::Request),
     Metadata(Box<crate::metadata::Request>),
     ApiSnapshot,
     /// Internal federation view: resource IDs and daemon identity share one lock.
@@ -368,6 +369,7 @@ pub fn handle(shared: &Shared, req: Request) -> ApiResult {
         Request::Workspace(req) => crate::workspace::handle(shared, req),
         Request::Worktree(req) => crate::worktree::handle(shared, req),
         Request::Events(req) => crate::events::handle(shared, req),
+        Request::Inbox(req) => crate::inbox::handle(shared, req),
         Request::Metadata(req) => crate::metadata::handle(shared, *req),
         Request::FederationSnapshot => {
             let st = lock(shared);

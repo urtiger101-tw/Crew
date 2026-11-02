@@ -64,6 +64,11 @@ const METHODS: &[&str] = &[
     "agent.focus",
     "events.list",
     "events.wait",
+    "peer.list",
+    "msg.send",
+    "msg.list",
+    "msg.read",
+    "msg.ack",
 ];
 
 pub fn schema() -> Value {

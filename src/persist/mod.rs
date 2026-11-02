@@ -25,7 +25,7 @@ const MIN_COLS: u16 = 10;
 const MIN_ROWS: u16 = 3;
 
 /// Path of the state file: `$CREW_STATE`, else a per-socket file in the local data dir.
-fn state_path() -> Option<PathBuf> {
+pub(crate) fn state_path() -> Option<PathBuf> {
     if let Some(p) = crate::brand::env_os("STATE").filter(|p| !p.is_empty()) {
         return Some(PathBuf::from(p));
     }

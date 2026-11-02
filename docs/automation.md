@@ -1,5 +1,7 @@
 # Crew automation
 
+For named agents exchanging persistent handoffs, see [durable peer messages](inbox.md).
+
 ## Workspace and Git isolation
 
 ```sh

@@ -24,6 +24,8 @@ pub const API_COMMANDS: &[&str] = &[
     "tab",
     "worktree",
     "events",
+    "peer",
+    "msg",
 ];
 
 /// Sentinel error returned for every help request (`pane --help`, `pane` alone, ...). The
@@ -50,6 +52,7 @@ pub fn parse(args: &[String], current: Option<usize>) -> Result<Request, String>
         "workspace" | "tab" => crate::workspace::parse(group, sub, rest, current),
         "worktree" => crate::worktree::parse(sub, rest),
         "events" => crate::events::parse(sub, rest),
+        "peer" | "msg" => crate::inbox::cli::parse(group, sub, rest, current),
         "pane" => pane_cmds::dispatch(sub, rest, current),
         "agent" => agent_cmds::dispatch(sub, rest),
         "api" => api(sub, rest),
