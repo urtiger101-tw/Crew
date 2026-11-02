@@ -809,12 +809,32 @@ impl State {
         opts: SplitOptions,
     ) -> Result<usize> {
         let (si, wi) = self.locate(pid).ok_or_else(|| anyhow!("pane not found"))?;
-        let cur = self.panes.get(&pid).map(|p| p.rect).unwrap_or_default();
-        let (h, wd) = if dir == Dir::H {
-            (cur.h, cur.w / 2)
-        } else {
-            (cur.h / 2, cur.w)
+        let s = &self.sessions[si];
+        let current = &s.windows[wi];
+        let pending_id = self.next_id + 1;
+        let mut layout = current.layout.clone();
+        layout.split_with(
+            pid,
+            pending_id,
+            dir,
+            opts.ratio.unwrap_or(0.5).clamp(0.05, 0.95),
+        );
+        let preview = Window {
+            id: current.id,
+            name: current.name.clone(),
+            manual_name: current.manual_name,
+            layout,
+            active: current.active,
+            zoomed: false,
         };
+        // ConPTY can retain its creation width through shell startup even after an
+        // immediate resize. Start at the final body size so wrapping matches the parser.
+        let body = self
+            .visible_rects(s, &preview)
+            .into_iter()
+            .find(|(id, _)| *id == pending_id)
+            .unwrap()
+            .1;
         let cwd = opts
             .cwd
             .or_else(|| self.panes.get(&pid).and_then(|p| p.cwd.clone()))
@@ -824,11 +844,16 @@ impl State {
             .get(&pid)
             .map(|p| p.env.clone())
             .unwrap_or_default();
-        let id =
-            self.spawn_pane_with_shell(shared, h, wd, cwd.as_deref(), &env, opts.shell.as_deref())?;
+        let id = self.spawn_pane_with_shell(
+            shared,
+            body.h,
+            body.w,
+            cwd.as_deref(),
+            &env,
+            opts.shell.as_deref(),
+        )?;
         let w = &mut self.sessions[si].windows[wi];
-        w.layout
-            .split_with(pid, id, dir, opts.ratio.unwrap_or(0.5).clamp(0.05, 0.95));
+        w.layout = preview.layout;
         w.zoomed = false;
         if opts.focus {
             self.focus_pane(id);
