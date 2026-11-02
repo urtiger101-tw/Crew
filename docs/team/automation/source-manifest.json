@@ -1,0 +1,46 @@
+{
+  "files": [
+    {
+      "path": "docs/team/automation/example-orchestrator.windows.json",
+      "sha256": "2e60f92bacd8ceed95180d8fdcea454133941ecf94f37830afaf878e7fe8874d"
+    },
+    {
+      "path": "README.md",
+      "sha256": "a04b0745594be345c61f210684821c9cd098279d96586246f89203f140ddcfa1"
+    },
+    {
+      "path": "src/automation/mod.rs",
+      "sha256": "dab05654a9a0b8b87246ffceed793adfb4aa53561dc4636414b6a26a6f883c6c"
+    },
+    {
+      "path": "src/automation/orchestrator.rs",
+      "sha256": "df48325a10d70537c93aff5c51da7cf4115f2d748f8d91504556157f379fbc6f"
+    },
+    {
+      "path": "src/automation/orchestrator/tests.rs",
+      "sha256": "086fab556748aaec189ec471eba188b186f6dca9818163e4daa4e97519beff2e"
+    },
+    {
+      "path": "src/automation/process.rs",
+      "sha256": "062c1d2e0ab1f6e49581273de132c550c58a821550267b7dac98b82410171ae0"
+    },
+    {
+      "path": "src/automation/router.rs",
+      "sha256": "589640844b13870ec8de3c56b14d7fdaad5eb60636cea0bb9e1552b91193b648"
+    },
+    {
+      "path": "src/automation/workflow.rs",
+      "sha256": "df0816a84a0421493ee33e1535cc324a513579cb1492ed6a9a9c9060cdcd1961"
+    },
+    {
+      "path": "src/automation/workflow/tests.rs",
+      "sha256": "48ca8111973453556a0a87d99879f1e5c27e1fedbdde943be7f0c07c8ebda993"
+    },
+    {
+      "path": "src/lib.rs",
+      "sha256": "ce6cf582f0f1cd3f89c03d95b191519510b0f229463422d4f44b4d746e08ea8f"
+    }
+  ],
+  "head_sha": "105a90b946e70a20c601e8908253f6656b2959ae",
+  "dirty": true
+}

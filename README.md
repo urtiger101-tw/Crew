@@ -15,6 +15,13 @@ U4 submit 與 U5 狀態語意整合延後。附 portable ZIP 與 unsigned instal
 完整安裝生命週期仍受既有 Windows App Control 阻擋，不能宣稱已完成驗收。
 詳細範圍見 [0.6.0 發行說明](docs/releases/v0.6.0.md)。
 
+## Agent 自動化（開發版）
+
+新增可獨立執行的自動化 CLI：`crew orchestrator plan|run|status` 依任務依賴、
+能力、檔案範圍與預算派工；透過 JSON adapter 整合外部模型路由器。
+`crew workflow plan|advance|run` 推進 PR、獨立 review 與 CI，將證據綁定目前 head。
+設定、可執行範例及限制見 [Agent 自動化](docs/team/automation/README.md)。
+
 ## Crew 0.5.0：任務呈現、跨工作區分頁與多機協作
 
 後續 PR、CI 與 GitHub Release 位於

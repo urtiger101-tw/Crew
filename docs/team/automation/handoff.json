@@ -1,0 +1,134 @@
+{
+  "base_sha": "e534f96a923eff43b60ba43b38a9f0ff7df31701",
+  "next_action": "Use the documented adapters and explicit configuration; commit/push requires authorization for this task.",
+  "receiver_instance": "user-and-claude",
+  "simulation": false,
+  "task_id": "CREW-AUTOMATION",
+  "checks": [
+    {
+      "ignored": 4,
+      "result": "PASS",
+      "passed": 640,
+      "name": "full-native-suite-before-final-local-guard",
+      "exit_code": 0,
+      "evidence": "target/verification/automation/cargo-test.log",
+      "cwd": "D:\\Crew",
+      "platform": "windows",
+      "argv": [
+        "cargo",
+        "test",
+        "--locked"
+      ]
+    },
+    {
+      "evidence": "target/verification/automation/automation-final-tests.log",
+      "result": "PASS",
+      "name": "affected-final-automation-tests",
+      "cwd": "D:\\Crew",
+      "argv": [
+        "cargo",
+        "test",
+        "--locked",
+        "--lib",
+        "automation"
+      ],
+      "exit_code": 0,
+      "passed": 29,
+      "platform": "windows"
+    },
+    {
+      "cwd": "D:\\Crew",
+      "result": "PASS",
+      "platform": "windows",
+      "name": "clippy",
+      "argv": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "evidence": "target/verification/automation/clippy.log"
+    },
+    {
+      "cwd": "D:\\Crew",
+      "result": "PASS",
+      "platform": "windows",
+      "name": "format-and-diff",
+      "argv": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--check"
+      ],
+      "exit_code": 0
+    },
+    {
+      "evidence": "target/verification/automation/demo-run.json",
+      "result": "PASS",
+      "name": "cli-plan-run-resume-status",
+      "cwd": "D:\\Crew",
+      "argv": [
+        "target/debug/crew.exe",
+        "orchestrator",
+        "run",
+        "docs/team/automation/example-orchestrator.windows.json",
+        "--execute"
+      ],
+      "exit_code": 0,
+      "platform": "windows",
+      "simulation": true
+    },
+    {
+      "cwd": "D:\\Crew",
+      "result": "PASS",
+      "platform": "windows",
+      "name": "debug-build",
+      "argv": [
+        "cargo",
+        "build",
+        "--locked"
+      ],
+      "exit_code": 0,
+      "evidence": "target/verification/automation/build.log"
+    }
+  ],
+  "reviewers": {
+    "workflow": "codex-root",
+    "evidence": "docs/team/automation/review.md",
+    "router": "gpt-6.1-terra xhigh",
+    "result": "PASS",
+    "orchestrator_process_cli": "gpt-6.1-sol xhigh"
+  },
+  "unresolved": [
+    "Paid model/provider execution NOT_RUN",
+    "Remote PR/review-request/CI mutations and hosted CI NOT_RUN",
+    "Linux/macOS execution NOT_RUN",
+    "Release build and shared restart NOT_RUN",
+    "Automatic natural-language task decomposition not in scope; supplied DAG required",
+    "Budget is estimate admission, not provider-enforced hard spending cap"
+  ],
+  "observed_at": "2026-11-03T00:00:07.7649684+08:00",
+  "kind": "handoff",
+  "external_side_effects": {
+    "performed": false,
+    "authorized": false
+  },
+  "head_sha": "105a90b946e70a20c601e8908253f6656b2959ae",
+  "actor_instance": "codex-root",
+  "result": "PASS",
+  "artifact": {
+    "path": "docs/team/automation/source-manifest.json",
+    "sha256": "b67dc57f6b3d4ca0de5afc381bd377ad91447c3cc3ef17068947ab27bbc731b1"
+  },
+  "task_revision": 1,
+  "acceptance_ids": [
+    "AC1",
+    "AC2",
+    "AC3",
+    "AC4"
+  ]
+}

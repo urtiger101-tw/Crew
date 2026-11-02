@@ -1,0 +1,18 @@
+{
+  "state_file": "../../../target/verification/automation/demo-state.json",
+  "max_parallel": 2,
+  "budget_microusd": 0,
+  "router": {
+    "command": ["powershell.exe", "-NoLogo", "-NoProfile", "-Command", "[Console]::In.ReadToEnd() | Out-Null; [Console]::Out.Write('{\"model\":\"local-fixture\"}')"],
+    "timeout_ms": 10000,
+    "models": [{"id":"local-fixture","input_microusd_per_million":0,"output_microusd_per_million":0}]
+  },
+  "agents": [
+    {"id":"local-worker","capabilities":["code"],"command":["powershell.exe","-NoLogo","-NoProfile","-Command","[Console]::In.ReadToEnd() | Out-Null; [Console]::Out.Write('{\"usage\":{\"input_tokens\":0,\"output_tokens\":0},\"summary\":\"local adapter demonstration completed\"}')"]},
+    {"id":"local-reviewer","capabilities":["review"],"command":["powershell.exe","-NoLogo","-NoProfile","-Command","[Console]::In.ReadToEnd() | Out-Null; [Console]::Out.Write('{\"usage\":{\"input_tokens\":0,\"output_tokens\":0},\"summary\":\"local review adapter demonstration completed\"}')"]}
+  ],
+  "tasks": [
+    {"id":"implement","capability":"code","prompt":"Run local adapter demonstration","cwd":"../../..","write_scopes":["target/verification/automation/demo"],"depends_on":[],"priority":10,"input_tokens":0,"output_tokens":0,"timeout_ms":10000},
+    {"id":"review","capability":"review","prompt":"Run local review adapter demonstration","cwd":"../../..","write_scopes":["target/verification/automation/demo"],"depends_on":["implement"],"priority":0,"input_tokens":0,"output_tokens":0,"timeout_ms":10000}
+  ]
+}

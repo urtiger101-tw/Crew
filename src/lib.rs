@@ -13,6 +13,7 @@ macro_rules! log {
 
 mod agent_detection;
 mod api;
+pub mod automation;
 mod brand;
 mod bridge;
 mod client;
@@ -58,6 +59,9 @@ fn help_args(args: &[String]) -> Option<Vec<String>> {
     let sub = args.first()?.as_str();
     if sub.starts_with("__") {
         return None;
+    }
+    if matches!(sub, "orchestrator" | "workflow") {
+        return None; // Automation parsers own their option/value boundaries.
     }
     // API option scanners own their value boundaries and the help sentinel.
     if api::cli::API_COMMANDS.contains(&sub) && sub != "api" {
@@ -193,6 +197,8 @@ pub fn run() {
         },
         "server" if args.len() == 1 => server::run(),
         "doctor" => doctor::run(&args[1..]),
+        "orchestrator" => automation::orchestrator::run(&args[1..]),
+        "workflow" => automation::workflow::run(&args[1..]),
         "integration" => match integrations::run(&args[1..]) {
             Ok(code) => std::process::exit(code),
             Err(e) => Err(e),
@@ -296,6 +302,7 @@ pub fn run() {
                 bridge::HELP
             );
             println!("\n{}", remote::HELP);
+            println!("\n{}", automation::HELP);
             Ok(())
         }
         _ => {
