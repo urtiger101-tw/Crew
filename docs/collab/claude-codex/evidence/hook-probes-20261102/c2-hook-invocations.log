@@ -1,0 +1,2 @@
+2026-11-02T03:40:40.787Z pid=31392 mode=block action=block pending=true stop_hook_active=false marker=cleared
+2026-11-02T03:40:42.185Z pid=13200 mode=block action=allow pending=false stop_hook_active=true
