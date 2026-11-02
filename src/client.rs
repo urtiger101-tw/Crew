@@ -207,6 +207,70 @@ pub fn attach_workspace_epoch(workspace: &str, epoch: &str) -> Result<()> {
     attach_target(None, Some(workspace_id(workspace)?), Some(epoch), false)
 }
 
+fn nested_session() -> Result<bool> {
+    if crate::brand::env_os("").is_none() {
+        return Ok(false);
+    }
+    #[cfg(windows)]
+    {
+        // A restarted server cannot clear markers inherited by an outside shell. Only
+        // reject a process that actually descends from the server (or a legacy pane).
+        let root = match crate::brand::env_var("SERVER_PID")
+            .ok()
+            .and_then(|value| value.parse::<u32>().ok())
+            .filter(|pid| *pid > 0)
+        {
+            Some(pid) => Some(pid),
+            None => {
+                let pane = crate::brand::env_var("PANE_ID")
+                    .ok()
+                    .and_then(|value| crate::api::parse_pane_id(&value))
+                    .or_else(|| {
+                        crate::brand::env_var("")
+                            .ok()
+                            .and_then(|value| value.parse::<usize>().ok())
+                            .filter(|id| *id > 0)
+                    });
+                let Some(pane) = pane else {
+                    return Ok(true);
+                };
+                match request(crate::api::Request::PaneGet { pane }) {
+                    Ok(crate::api::Reply::Json(value)) => {
+                        #[derive(serde::Deserialize)]
+                        struct PaneReply {
+                            pane: PaneProcess,
+                        }
+                        #[derive(serde::Deserialize)]
+                        struct PaneProcess {
+                            root_process_id: Option<u32>,
+                        }
+                        serde_json::from_value::<PaneReply>(value)?
+                            .pane
+                            .root_process_id
+                    }
+                    Ok(_) => return Err(anyhow!("unexpected pane reply from server")),
+                    Err(error)
+                        if matches!(
+                            error.code.as_str(),
+                            "pane_not_found" | "server_not_running"
+                        ) =>
+                    {
+                        return Ok(false);
+                    }
+                    Err(error) => return Err(error.into()),
+                }
+            }
+        };
+        // Older daemons lack the process field; retain their guard. A failed process
+        // snapshot also keeps the guard instead of silently permitting real nesting.
+        Ok(root.is_none_or(|root| {
+            crate::agent_detection::process_descends_from(root, std::process::id()).unwrap_or(true)
+        }))
+    }
+    #[cfg(not(windows))]
+    Ok(true)
+}
+
 fn attach_target(
     session: Option<String>,
     workspace_id: Option<usize>,
@@ -214,7 +278,7 @@ fn attach_target(
     create: bool,
 ) -> Result<()> {
     let lang = lang();
-    if crate::brand::env_os("").is_some() {
+    if nested_session()? {
         return Err(anyhow!(tr(lang, "cli.err.nested")));
     }
     let s = connect(create, lang)?;

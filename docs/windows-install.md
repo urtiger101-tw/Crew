@@ -54,6 +54,13 @@ crew --version
 如要主動停止 Crew server，可以在確認工作已保存後自行執行 `crew server stop`；
 這會停止該 server 及其正在執行的程式，不能當成不中斷工作的升級方式。
 
+重啟請在獨立的 PowerShell 視窗執行 `crew server stop`，待指令完成後再執行 `crew`。
+新版 Windows client 會核對目前程序是否仍屬於 Crew 的子程序，外部 shell 遺留的
+`CREW`／`CREW_PANE_ID` 不會在 server 重啟後誤擋連線；仍在使用中的 Crew 窗格內
+執行 attach 則會保留巢狀保護。若仍使用舊版 client 並遇到
+`sessions should be nested with care`，可在獨立 PowerShell 視窗先執行
+`Remove-Item Env:CREW -ErrorAction SilentlyContinue` 再啟動 Crew。
+
 升級保留使用者設定與狀態，包括 `CREW_CONFIG`、`CREW_STATE` 指向的檔案、
 Crew 的 AppData 資料，以及仍會被讀取的舊版 `tmuxlike/` 設定目錄。安裝包只處理列明的
 程式、README、LICENSE、package manifest 與自己的卸載資料，不刪除工作樹或專案。若安裝目錄中有舊版遺留的 `tmuxlike.exe`，升級與卸載時會一併移除。

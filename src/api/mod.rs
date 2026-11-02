@@ -346,6 +346,7 @@ pub fn pane_json(st: &State, pid: usize) -> Option<Value> {
     });
     Some(json!({
         "pane_id": pane_id_str(pid),
+        "root_process_id": p.child.process_id(),
         "workspace_id": crate::workspace::workspace_id_str(s.id),
         "tab_id": crate::workspace::tab_id_str(w.id),
         "session": s.name,

@@ -441,6 +441,7 @@ impl State {
         cmd.env("CREW", format!("{id}"));
         cmd.env("CREW_PANE_ID", crate::api::pane_id_str(id));
         cmd.env("CREW_SOCKET", ipc::base_name());
+        cmd.env("CREW_SERVER_PID", std::process::id().to_string());
         let start_dir = match cwd {
             Some(d) if std::path::Path::new(d).is_dir() => Some(d.to_string()),
             Some(d) => return Err(anyhow!("cwd is not a directory: {d}")),

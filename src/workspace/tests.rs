@@ -213,6 +213,7 @@ fn environment_validation_is_portable_and_keeps_identity() {
         "CREW",
         "CREW_PANE_ID",
         "crew_socket",
+        "crew_server_pid",
         "TMUXLIKE",
         "TMUXLIKE_PANE_ID",
         "tmuxlike_socket",

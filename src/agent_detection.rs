@@ -291,6 +291,19 @@ pub(crate) fn live_tree_with(root: u32, known: &[(u32, String)]) -> Vec<(u32, St
     }
 }
 
+/// A live root and candidate share a real Windows parent chain. None means the
+/// process table could not be read, so callers can retain their nesting guard.
+#[cfg(windows)]
+pub(crate) fn process_descends_from(root: u32, candidate: u32) -> Option<bool> {
+    let processes = windows_processes()?;
+    Some(
+        processes.iter().any(|process| process.pid == root)
+            && tree_from(root, &[], &processes)
+                .iter()
+                .any(|(pid, _)| *pid == candidate),
+    )
+}
+
 #[cfg(test)]
 fn tree_of(root: u32, processes: &[Process]) -> Vec<(u32, String)> {
     tree_from(root, &[], processes)

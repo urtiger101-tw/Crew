@@ -178,7 +178,7 @@ pub(crate) fn validate_env(env: &BTreeMap<String, String>) -> Result<(), ApiErro
         if crate::brand::is_legacy_env_name(key)
             || matches!(
                 key.to_ascii_uppercase().as_str(),
-                "CREW" | "CREW_PANE_ID" | "CREW_SOCKET"
+                "CREW" | "CREW_PANE_ID" | "CREW_SOCKET" | "CREW_SERVER_PID"
             )
         {
             return Err(ApiError::invalid(format!(
