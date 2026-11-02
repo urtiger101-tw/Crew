@@ -46,6 +46,8 @@
 | `cargo clippy --all-targets --locked --offline -- -D warnings` | PASS，exit 0 | final-clippy.log |
 | `cargo fmt --all -- --check`、`git diff --check` | PASS，exit 0 | 本機工具回傳 |
 | 隔離 sidebar daemon / debug-frame smoke | PASS，新session120欄→pane92；off→120；換主題仍120 | sidebar-smoke/result.json、default-on.txt |
+| `RUSTFLAGS='-C target-feature=+crt-static' cargo build --release --locked --offline --bin crew --target-dir D:/Crew/target/release-upf-d66ac1f` | PASS，2m25s | release-build.log |
+| release version/task validate/隔離daemon | PASS，實際模組列表確認載入同目錄conpty.dll，pane92欄 | release-task-smoke.json、release-smoke/result.json |
 | Windows Terminal 真實 GUI、實際 Claude/Codex 對話捲動 | NOT_RUN | 工具未暴露測試視窗；純render不是截圖驗收 |
 | Linux/macOS、hosted CI、安裝程式生命週期 | NOT_RUN | 未執行／未授權hosted CI |
 | paid API、真實模型品質改善、自動V/R scheduler | NOT_RUN | MVP不實作 |
@@ -80,3 +82,11 @@ vt100 沒保存過去 alternate-screen 重繪，不能重建它；可看已保�
 本文件隨實作提交；最終 SHA、PR URL、release候選執行檔與雜湊由
 `docs/collab/claude-codex/log/110-codex.crl` 及本機release manifest記錄。
 既有 hosted workflows 只有手動授權入口，未 dispatch。
+
+實作 commit：`d66ac1ff824929019159eeaafdce7bc92bb3ba60`，已 push。
+[Draft PR #4](https://github.com/urtiger101-tw/Crew/pull/4)，未合併。
+本機release：`D:/Crew/target/releases/crew-0.6.0-d66ac1f-windows-x64/crew.exe`，
+SHA-256 `ECB5AEEB4DD23E97066E7864AA18B2A1FEE856DDED65AA592783C567FB5FAD07`。
+同目錄包含 ConPTY pair、授權／來源、manifest、SHA256SUMS 與測試logs。
+這是 release build，不是已通過完整 installer/native-platform 驗收的正式發行包。
+最後僅報告文件追加在另一個 commit，執行檔仍對應上述實作 SHA。

@@ -2,6 +2,7 @@
 IMP id=SIDEBAR-DEFAULT ev=f:src/config.rs :: Config::default.sidebar=true；新workspace/session沿既有cfg.sidebar初始化，Aurora亦同。明確TOML sidebar=false、runtime off、手動toggle與snapshot/restore狀態保留，切theme不重開。
 OBS tests=PASS ev=f:target/verification/sidebar-lib.log :: cargo test --locked --offline --lib：589 passed/0 failed/3 ignored。80x24與120x30的studio/Aurora pane_area扣28欄、toolbar扣2列；48欄門檻自動隱藏，手動關閉還原全寬。
 REV PASS reviewer=gpt-6.1-terra_xhigh :: 非作者限定審查，未發現具體阻斷；README預設與關閉方式已更新。
+OBS native_daemon=PASS ev=f:target/verification/sidebar-smoke/result.json :: 獨立socket new -d於120欄，pane.cols=92；set sidebar off後120；切studio仍120。debug-frame純文字已保存default-on.txt，非GUI截圖。初次harness誤設80欄、toggle需attached已修正測試方式。
 NR screenshots=NOT_RUN live_attach=NOT_RUN shared_daemon=NOT_RUN :: 未重啟共用daemon，原始碼/純render測試不宣稱GUI驗收。
 DONE id=SIDEBAR-DEFAULT :: 111與113已完成修正，109 UPF已通過7組CLI測試，正整理交付/提交/push/本機release。
 END
