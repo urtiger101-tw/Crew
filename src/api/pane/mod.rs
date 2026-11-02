@@ -17,6 +17,7 @@ mod layout;
 mod query;
 mod read;
 mod resume;
+mod submit;
 
 // Kept public path for `super::pane::key_bytes`; no caller outside this module uses it yet.
 #[allow(unused_imports)]
@@ -67,6 +68,7 @@ pub fn handle(shared: &Shared, req: Request) -> ApiResult {
         | Request::PaneSendText { .. }
         | Request::PaneSendKeys { .. }
         | Request::PaneRun { .. }
+        | Request::PaneSubmit { .. }
         | Request::PaneWaitOutput { .. } => io_op(shared, req),
         other => Err(unexpected(&other)),
     }
@@ -127,6 +129,11 @@ fn io_op(shared: &Shared, req: Request) -> ApiResult {
             submit(shared, pane, &command, delay)?;
             Ok(sent())
         }
+        Request::PaneSubmit {
+            pane,
+            text,
+            settle_ms,
+        } => submit::submit_checked(shared, pane, &text, settle_ms),
         Request::PaneWaitOutput {
             pane,
             pattern,

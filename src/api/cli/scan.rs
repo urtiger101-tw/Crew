@@ -42,6 +42,7 @@ pub(super) const SPLIT_OPTS: &[Spec] = &[
     flag("focus"),
     flag("no-focus"),
 ];
+pub(super) const SUBMIT_OPTS: &[Spec] = &[val("settle-ms")];
 pub(super) const READ_OPTS: &[Spec] = &[val("source"), val("lines")];
 pub(super) const WAIT_OUTPUT_OPTS: &[Spec] = &[
     val("match"),

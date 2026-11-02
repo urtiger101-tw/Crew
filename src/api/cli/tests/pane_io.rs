@@ -55,6 +55,54 @@ fn send_text_and_run_keep_text_byte_for_byte() {
 }
 
 #[test]
+fn submit_settle_bounds_and_literal_text() {
+    assert_eq!(
+        run(&["pane", "submit", "p1", "hello"]),
+        Ok(Request::PaneSubmit {
+            pane: 1,
+            text: "hello".into(),
+            settle_ms: None
+        })
+    );
+    assert_eq!(
+        run(&[
+            "pane",
+            "submit",
+            "p2",
+            "--settle-ms",
+            "0",
+            "--",
+            "--literal"
+        ]),
+        Ok(Request::PaneSubmit {
+            pane: 2,
+            text: "--literal".into(),
+            settle_ms: Some(0)
+        })
+    );
+    assert_eq!(
+        run(&["pane", "submit", "p2", "hello", "--settle-ms=10000"]),
+        Ok(Request::PaneSubmit {
+            pane: 2,
+            text: "hello".into(),
+            settle_ms: Some(10000)
+        })
+    );
+    for bad in ["10001", "-1", "no", "18446744073709551616"] {
+        assert!(is_err(&[
+            "pane",
+            "submit",
+            "p1",
+            "hello",
+            "--settle-ms",
+            bad
+        ]));
+    }
+    assert!(is_err(&["pane", "submit", "p1"]));
+    assert!(is_err(&["pane", "submit", "p1", "hello", "--settle-ms"]));
+}
+
+#[test]
 fn send_keys_needs_at_least_one_key() {
     assert_eq!(
         run(&["pane", "send-keys", "p1", "Enter", "C-c"]),

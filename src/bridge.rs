@@ -52,6 +52,7 @@ const METHODS: &[&str] = &[
     "pane.send-text",
     "pane.send-keys",
     "pane.run",
+    "pane.submit",
     "pane.wait-output",
     "pane.report-agent",
     "pane.report-metadata",

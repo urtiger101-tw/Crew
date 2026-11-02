@@ -1099,19 +1099,42 @@ impl State {
         }
     }
 
-    pub(crate) fn paste(&mut self, pid: usize, text: &str) {
+    fn paste_data(&self, pid: usize, text: &str) -> String {
         let bp = self
             .panes
             .get(&pid)
-            .map(|p| p.parser.screen().bracketed_paste())
-            .unwrap_or(false);
+            .is_some_and(|p| p.parser.screen().bracketed_paste());
         let text = text.replace("\r\n", "\r").replace('\n', "\r");
-        let data = if bp {
+        if bp {
             format!("\x1b[200~{text}\x1b[201~")
         } else {
             text
-        };
+        }
+    }
+
+    pub(crate) fn paste(&mut self, pid: usize, text: &str) {
+        let data = self.paste_data(pid, text);
         self.write_pane(pid, data.as_bytes());
+    }
+
+    /// Checked writes for pane submit, which must distinguish partial delivery from success.
+    pub(crate) fn write_pane_checked(&mut self, pid: usize, bytes: &[u8]) -> std::io::Result<()> {
+        let p = self
+            .panes
+            .get_mut(&pid)
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "pane closed"))?;
+        if p.copy.is_some() {
+            p.copy = None;
+            p.parser.screen_mut().set_scrollback(0);
+            self.dirty = true;
+        }
+        p.writer.write_all(bytes)?;
+        p.writer.flush()
+    }
+
+    pub(crate) fn paste_checked(&mut self, pid: usize, text: &str) -> std::io::Result<()> {
+        let data = self.paste_data(pid, text);
+        self.write_pane_checked(pid, data.as_bytes())
     }
 
     pub(crate) fn set_clipboard(&mut self, cid: usize, text: String) {

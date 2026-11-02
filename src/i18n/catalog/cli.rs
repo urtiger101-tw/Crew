@@ -27,7 +27,7 @@ USAGE:
 Use --help for command help; -h also shows help except for split-window/splitw.
 
 AUTOMATION (herdr-style, JSON output; see `crew pane --help`):
-  crew pane list|get|split|read|send-text|send-keys|run|wait-output|...
+  crew pane list|get|split|read|send-text|send-keys|run|submit|wait-output|...
   crew agent list|get|read|prompt|wait|rename|focus|send-keys
   crew session list   crew api snapshot   crew server [stop]
 
@@ -51,7 +51,7 @@ Config: $CREW_CONFIG or <config_dir>/crew/config.toml"#,
 使用 --help 查看指令說明；除 split-window/splitw 外，-h 也會顯示說明。
 
 自動化 AUTOMATION（herdr 風格，JSON 輸出；見 `crew pane --help`）：
-  crew pane list|get|split|read|send-text|send-keys|run|wait-output|...
+  crew pane list|get|split|read|send-text|send-keys|run|submit|wait-output|...
   crew agent list|get|read|prompt|wait|rename|focus|send-keys
   crew session list   crew api snapshot   crew server [stop]
 
@@ -136,6 +136,7 @@ pane read <id> [--source visible|recent] [--lines N]
 pane send-text <id> <text>        (no Enter is added)
 pane send-keys <id> <key>...      (e.g. Enter C-c Up)
 pane run <id> <command>           (command + Enter)
+pane submit <id> <text> [--settle-ms N] (default 2000, range 0..10000)
 pane wait-output <id> (--match TEXT | --regex PAT) [--source S] [--lines N] [--timeout MS]
 pane report-agent <id> --source ID --agent LABEL --state idle|working|blocked|unknown
                   [--message TEXT] [--seq N] [-- RESUME_CMD...]
@@ -178,6 +179,7 @@ pane read <id> [--source visible|recent] [--lines N]
 pane send-text <id> <text>        （不會加上 Enter）
 pane send-keys <id> <key>...      （例如 Enter C-c Up）
 pane run <id> <command>           （指令加上 Enter）
+pane submit <id> <text> [--settle-ms N] (default 2000, range 0..10000)
 pane wait-output <id> (--match TEXT | --regex PAT) [--source S] [--lines N] [--timeout MS]
 pane report-agent <id> --source ID --agent LABEL --state idle|working|blocked|unknown
                   [--message TEXT] [--seq N] [-- RESUME_CMD...]

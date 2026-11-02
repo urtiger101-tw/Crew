@@ -169,6 +169,11 @@ pub enum Request {
         pane: usize,
         command: String,
     },
+    PaneSubmit {
+        pane: usize,
+        text: String,
+        settle_ms: Option<u64>,
+    },
     PaneWaitOutput {
         pane: usize,
         pattern: Pattern,

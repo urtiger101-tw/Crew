@@ -5,8 +5,8 @@ use super::args::{
     regex_arg, report_state, required, resume_cmd, source_id, unknown_sub,
 };
 use super::scan::{
-    Args, READ_OPTS, RELEASE_OPTS, REPORT_OPTS, SPLIT_OPTS, WAIT_OUTPUT_OPTS, flag, no_opts, scan,
-    val,
+    Args, READ_OPTS, RELEASE_OPTS, REPORT_OPTS, SPLIT_OPTS, SUBMIT_OPTS, WAIT_OUTPUT_OPTS, flag,
+    no_opts, scan, val,
 };
 use crate::api::{Direction, Pattern, Request, ZoomMode};
 
@@ -25,6 +25,7 @@ const PANE_SUBS: &[&str] = &[
     "send-text",
     "send-keys",
     "run",
+    "submit",
     "wait-output",
     "report-agent",
     "release-agent",
@@ -62,6 +63,7 @@ pub(super) fn dispatch(
         "send-text" => pane_send_text(rest),
         "send-keys" => pane_send_keys(rest),
         "run" => pane_run(rest),
+        "submit" => pane_submit(rest),
         "wait-output" => pane_wait_output(rest),
         "report-agent" => pane_report_agent(rest),
         "release-agent" => pane_release_agent(rest),
@@ -270,6 +272,22 @@ fn pane_run(rest: &[String]) -> Result<Request, String> {
     Ok(Request::PaneRun {
         pane: pane_id(&words[0])?,
         command: words[1].clone(),
+    })
+}
+
+fn pane_submit(rest: &[String]) -> Result<Request, String> {
+    const USAGE: &str = "pane submit <id> <text> [--settle-ms N]";
+    let a = scan(rest, SUBMIT_OPTS)?;
+    let words = a.words();
+    check_count(&words, 2, 2, USAGE)?;
+    let settle_ms = opt_num::<u64>(&a, "settle-ms")?;
+    if settle_ms.is_some_and(|ms| ms > 10_000) {
+        return Err("--settle-ms must be in 0..=10000".into());
+    }
+    Ok(Request::PaneSubmit {
+        pane: pane_id(&words[0])?,
+        text: words[1].clone(),
+        settle_ms,
     })
 }
 
