@@ -56,6 +56,8 @@ pub enum Cmd {
         backward: bool,
     },
     ResizePane(Move, u16),
+    SelectLayout(crate::layout::Preset),
+    NextLayout,
     Zoom,
     NextWindow,
     PrevWindow,
@@ -123,6 +125,8 @@ impl Cmd {
             Cmd::SwapPane { .. } => "swap-pane",
             Cmd::MoveWindow { .. } => "move-window",
             Cmd::ResizePane(..) | Cmd::Zoom => "resize-pane",
+            Cmd::SelectLayout(_) => "select-layout",
+            Cmd::NextLayout => "next-layout",
             Cmd::NextWindow => "next-window",
             Cmd::PrevWindow => "previous-window",
             Cmd::SelectWindow(_) => "select-window",
@@ -433,6 +437,14 @@ pub fn parse(line: &str) -> Result<Cmd, String> {
             None => Cmd::NextPane,
         },
         "next-pane" => Cmd::NextPane,
+        "select-layout" => {
+            if args.len() != 1 {
+                return Err("usage: select-layout <name>".into());
+            }
+            Cmd::SelectLayout(args[0].parse()?)
+        }
+        "next-layout" if args.is_empty() => Cmd::NextLayout,
+        "next-layout" => return Err("usage: next-layout".into()),
         "resize-pane" | "resizep" => {
             if has("-Z") {
                 Cmd::Zoom
@@ -761,6 +773,12 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     ("K", "resize-pane -U 3"),
     ("J", "resize-pane -D 3"),
     ("z", "resize-pane -Z"),
+    ("Space", "next-layout"),
+    ("M-1", "select-layout even-horizontal"),
+    ("M-2", "select-layout even-vertical"),
+    ("M-3", "select-layout main-horizontal"),
+    ("M-4", "select-layout main-vertical"),
+    ("M-5", "select-layout tiled"),
     ("x", "confirm-before kill-pane"),
     ("&", "confirm-before kill-window"),
     ("Tab", "next-attention"),

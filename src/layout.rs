@@ -1,4 +1,9 @@
 //! Binary split layout tree for panes.
+mod presets;
+pub use presets::Preset;
+
+/// Maximum persisted tree depth, including the root leaf.
+pub const MAX_DEPTH: usize = 64;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Dir {
@@ -30,7 +35,7 @@ pub enum Move {
     Down,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Node {
     Leaf(usize),
     Split {
@@ -42,6 +47,21 @@ pub enum Node {
 }
 
 impl Node {
+    /// Cells required by leaves when separators are omitted on constrained axes.
+    fn minimum_size(&self) -> (u16, u16) {
+        match self {
+            Self::Leaf(_) => (1, 1),
+            Self::Split { dir, a, b, .. } => {
+                let (aw, ah) = a.minimum_size();
+                let (bw, bh) = b.minimum_size();
+                match dir {
+                    Dir::H => (aw.saturating_add(bw), ah.max(bh)),
+                    Dir::V => (aw.max(bw), ah.saturating_add(bh)),
+                }
+            }
+        }
+    }
+
     /// Exchange occupants of two existing slots without altering split geometry.
     pub fn swapped(&self, first: usize, second: usize) -> Self {
         match self {
@@ -66,19 +86,27 @@ impl Node {
             Node::Leaf(id) => out.push((*id, r)),
             Node::Split { dir, ratio, a, b } => {
                 let total = if *dir == Dir::H { r.w } else { r.h };
-                if total < 3 {
+                if total < 2 {
                     a.layout(r, out);
                     b.layout(Rect { w: 0, h: 0, ..r }, out);
                     return;
                 }
-                let avail = total - 1;
-                let first = ((avail as f32 * ratio).round() as u16).clamp(1, avail - 1);
+                let (aw, ah) = a.minimum_size();
+                let (bw, bh) = b.minimum_size();
+                let (amin, bmin) = if *dir == Dir::H { (aw, bw) } else { (ah, bh) };
+                // Six rows need eleven cells with all five separators. When only
+                // ten are available, sacrifice borders before sacrificing panes.
+                let gap = u16::from(total > amin.saturating_add(bmin));
+                let avail = total - gap;
+                let lower = amin.min(avail - 1).max(1);
+                let upper = avail.saturating_sub(bmin).max(lower).min(avail - 1);
+                let first = ((avail as f32 * ratio).round() as u16).clamp(lower, upper);
                 let second = avail - first;
                 if *dir == Dir::H {
                     a.layout(Rect { w: first, ..r }, out);
                     b.layout(
                         Rect {
-                            x: r.x + first + 1,
+                            x: r.x + first + gap,
                             w: second,
                             ..r
                         },
@@ -88,7 +116,7 @@ impl Node {
                     a.layout(Rect { h: first, ..r }, out);
                     b.layout(
                         Rect {
-                            y: r.y + first + 1,
+                            y: r.y + first + gap,
                             h: second,
                             ..r
                         },

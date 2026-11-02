@@ -541,6 +541,7 @@ fn build_windows(
             layout,
             active,
             zoomed: w.zoomed,
+            layout_preset: w.layout_preset,
         });
     }
     if out.is_empty() {

@@ -21,6 +21,7 @@ pub(super) fn fixture() -> Shared {
                         layout: Node::Leaf(tid * 10),
                         active: tid * 10,
                         zoomed: n == 2,
+                        layout_preset: None,
                     }
                 })
                 .collect(),

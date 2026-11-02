@@ -145,6 +145,12 @@ pub enum Request {
         pane: Option<usize>,
         mode: ZoomMode,
     },
+    PaneLayout {
+        layout: crate::layout::Preset,
+        pane: Option<usize>,
+        window: Option<usize>,
+        session: Option<String>,
+    },
     PaneRename {
         pane: usize,
         label: Option<String>,
@@ -339,6 +345,19 @@ pub fn pane_id_str(id: usize) -> String {
     format!("p{id}")
 }
 
+/// Readable cwd only; never use this representation for process or filesystem operations.
+pub(crate) fn display_cwd(path: &str) -> std::borrow::Cow<'_, str> {
+    if let Some(unc) = path.strip_prefix(r"\\?\UNC\") {
+        return std::borrow::Cow::Owned(format!(r"\\{unc}"));
+    }
+    if let Some(drive) = path.strip_prefix(r"\\?\")
+        && drive.as_bytes().get(1) == Some(&b':')
+    {
+        return std::borrow::Cow::Borrowed(drive);
+    }
+    std::borrow::Cow::Borrowed(path)
+}
+
 /// Canonical JSON for one pane. Shared by `pane list/get`, `agent list/get` and snapshots.
 /// Fields: pane_id, session, window, window_name, focused, zoomed, label, cwd, cols, rows,
 /// status, agent (null or {source, agent, state, message, name}).
@@ -369,7 +388,7 @@ pub fn pane_json(st: &State, pid: usize) -> Option<Value> {
         "focused": s.active == wi && w.active == pid,
         "zoomed": w.zoomed && w.active == pid,
         "label": p.label,
-        "cwd": p.cwd,
+        "cwd": p.cwd.as_deref().map(display_cwd),
         "plugin_path_dirs": p.plugin_path_dirs,
         "plugin_path_diagnostics": p.plugin_path_diagnostics,
         "cols": p.rect.w,
@@ -433,6 +452,20 @@ pub fn handle(shared: &Shared, req: Request) -> ApiResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cwd_display_handles_windows_drive_and_unc_without_changing_other_paths() {
+        for (raw, expected) in [
+            (r"\\?\D:\Crew", r"D:\Crew"),
+            (r"\\?\UNC\server\share\中文", r"\\server\share\中文"),
+            (r"D:\Crew", r"D:\Crew"),
+            (r"\\server\share", r"\\server\share"),
+            ("/home/worker/project", "/home/worker/project"),
+            (r"\\?\Volume{test}\folder", r"\\?\Volume{test}\folder"),
+        ] {
+            assert_eq!(display_cwd(raw), expected);
+        }
+    }
 
     #[test]
     fn federation_snapshot_carries_daemon_epoch_with_its_workspace_rows() {

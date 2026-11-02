@@ -31,6 +31,45 @@ pub(super) fn layout_op(shared: &Shared, req: Request) -> ApiResult {
         Request::PaneFocus { pane } => focus(shared, pane),
         Request::PaneFocusDirection { pane, direction } => focus_direction(shared, pane, direction),
         Request::PaneZoom { pane, mode } => zoom(shared, pane, mode),
+        Request::PaneLayout {
+            layout,
+            pane,
+            window,
+            session,
+        } => {
+            let mut st = lock(shared);
+            let caller = if session.is_none() {
+                pane.map(|pid| st.locate(pid).ok_or_else(|| ApiError::pane_not_found(pid)))
+                    .transpose()?
+            } else {
+                None
+            };
+            let si = match session.as_deref() {
+                Some(name) => st.sidx(name).ok_or_else(|| {
+                    ApiError::new("session_not_found", format!("session not found: {name}"))
+                })?,
+                None => match caller {
+                    Some((si, _)) => si,
+                    None => st.target_session(None).map_err(ApiError::invalid)?,
+                },
+            };
+            let wi = window
+                .or(caller.map(|(_, wi)| wi))
+                .unwrap_or(st.sessions[si].active);
+            if wi >= st.sessions[si].windows.len() {
+                return Err(ApiError::new(
+                    "window_not_found",
+                    format!("window not found: {wi}"),
+                ));
+            }
+            let changed = st.select_layout(si, wi, layout);
+            let w = &st.sessions[si].windows[wi];
+            Ok(Reply::Json(json!({
+                "session": st.sessions[si].name, "window": wi, "layout": layout.name(),
+                "changed": changed, "active_pane": pane_id_str(w.active), "zoomed": w.zoomed,
+                "panes": w.panes().into_iter().filter_map(|id| crate::api::pane_json(&st, id)).collect::<Vec<_>>(),
+            })))
+        }
         Request::PaneRename { pane, label } => rename(shared, pane, label),
         Request::PaneClose { pane } => close(shared, pane),
         other => Err(unexpected(&other)),
@@ -347,6 +386,7 @@ mod tests {
             },
             active: 1,
             zoomed: false,
+            layout_preset: None,
         };
         apply_zoom(&mut w, 2, ZoomMode::On);
         assert!(w.zoomed);
@@ -367,6 +407,7 @@ mod tests {
             layout: Node::Leaf(7),
             active: 7,
             zoomed: false,
+            layout_preset: None,
         };
         apply_zoom(&mut w, 7, ZoomMode::On);
         assert!(!w.zoomed);

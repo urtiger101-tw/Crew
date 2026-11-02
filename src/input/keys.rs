@@ -901,6 +901,7 @@ mod tests {
                 layout: crate::layout::Node::Leaf(20 + i),
                 active: 20 + i,
                 zoomed: false,
+                layout_preset: None,
             });
         }
         st.track_window_mru();
@@ -933,6 +934,7 @@ mod tests {
             layout: crate::layout::Node::Leaf(30),
             active: 30,
             zoomed: false,
+            layout_preset: None,
         });
         st.clients.get_mut(&1).unwrap().chooser = Some(pack_chooser(0, Filter::Windows));
         press(&mut st, &shared, plain(KeyCode::Char('w')));

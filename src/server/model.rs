@@ -166,6 +166,8 @@ pub struct Window {
     pub layout: Node,
     pub active: usize,
     pub zoomed: bool,
+    /// Last explicitly selected preset; retained for deterministic next-layout.
+    pub layout_preset: Option<crate::layout::Preset>,
 }
 
 impl Window {

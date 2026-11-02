@@ -65,6 +65,7 @@ Config: $CREW_CONFIG or <config_dir>/crew/config.toml"#,
   "  or -     split top/bottom     arrows/hjkl move focus
   Ctrl/Alt+arrows, H J K L  resize pane
   o          next pane            z          zoom pane
+  Space      next layout          M-1..M-5   select layout preset
   x          kill pane (y/n)      &          kill window (y/n)
   Tab        next pane needing you (blocked first, then done)
   BTab       previous such pane   g          tree chooser (like s)
@@ -89,6 +90,7 @@ Custom bindings: [bind] in config.toml, or `bind-key KEY COMMAND` at the : promp
   "  或 -     上下分割              方向鍵／hjkl  移動焦點
   Ctrl/Alt+方向鍵、H J K L  調整窗格大小
   o          下一個窗格            z          放大窗格
+  Space      下一種版面            M-1..M-5   選擇版面預設
   x          關閉窗格（y/n）       &          關閉視窗（y/n）
   Tab        下一個需要你處理的窗格（待回應優先，其次已完成）
   BTab       上一個需要你處理的窗格  g          選單（同 s）
@@ -130,6 +132,7 @@ pane swap <source-id> <target-id>  (same tab; keeps processes and focus)
 pane focus <id>
 pane focus --direction left|right|up|down [--pane ID | --current]
 pane zoom [TARGET] [--toggle | --on | --off]
+pane layout <name> [--window N] [--session NAME]
 pane rename <id> <label>  |  pane rename <id> --clear
 pane close <id>
 pane read <id> [--source visible|recent] [--lines N]
@@ -173,6 +176,7 @@ pane swap <source-id> <target-id>  （同一分頁內交換位置，保留程序
 pane focus <id>
 pane focus --direction left|right|up|down [--pane ID | --current]
 pane zoom [TARGET] [--toggle | --on | --off]
+pane layout <name> [--window N] [--session NAME]
 pane rename <id> <label>  |  pane rename <id> --clear
 pane close <id>
 pane read <id> [--source visible|recent] [--lines N]

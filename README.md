@@ -246,6 +246,8 @@ crew set mouse off          # 任何伺服器指令皆可從命令列執行 / ru
 | `Shift+Left` / `Shift+Right` | 將目前分頁往左／右移一格 Move current tab left / right |
 | `Tab` / `BTab` | 下一個／上一個需要處理的窗格（blocked 優先，再 done，跨 session）Next / previous pane needing you (blocked first, then done; across sessions) |
 | `z` | 縮放（最大化）窗格 Zoom pane |
+| `Space` | 輪換五種版面 Cycle five layouts (`next-layout`) |
+| `M-1`…`M-5` | 等寬直欄、等高橫列、主橫列、主直欄、方格 Equal columns, equal rows, main row, main column, tiled |
 | `x` | 關閉窗格（y/n 確認）Kill pane (asks y/n) |
 | `&` | 關閉視窗（y/n 確認）Kill window (asks y/n) |
 | `[` / `PgUp` | 複製模式 Copy mode（見下 see below）|
@@ -343,6 +345,8 @@ Usable from `prefix :`, key bindings, `commands = [...]`, plain command files, o
 split-window [-h|-v] [--command TEXT]   new-window [-n NAME] [--command TEXT]   rename-window [NAME]
 rename-session [NAME]         kill-pane   kill-window     kill-session   kill-server
 select-pane -L|-R|-U|-D|-t :.+                            resize-pane -L|-R|-U|-D [N] | -Z
+select-layout even-horizontal|even-vertical|main-horizontal|main-vertical|tiled
+next-layout
 next-window  previous-window  select-window -t N          copy-mode [-u]   paste-buffer
 choose-tree  switch-client -n|-p  detach-client           toggle-sidebar   command-prompt
 source-file [PATH]            set OPTION VALUE            display-message TEXT   list-keys
@@ -410,6 +414,7 @@ A JSON command interface over the same local socket, so scripts and coding agent
 | pane | `pane swap SOURCE TARGET` | 交換同分頁兩窗格的位置，保留程序與焦點 Swap positions within one tab, preserving processes and focus |
 | pane | `pane focus <id>` / `pane focus --direction D` | 移動焦點 Move focus |
 | pane | `pane zoom [ID] [--toggle\|--on\|--off]` | 縮放 Zoom |
+| pane | `pane layout NAME [--window N] [--session S]` | 套用五種版面，保留窗格／程序／焦點，解除多窗格 zoom Apply a preset without replacing panes/processes/focus; unzoom split windows |
 | pane | `pane rename <id> <label>` / `--clear` | 設定窗格標籤 Pane label |
 | pane | `pane close <id>` | 關閉窗格 Close pane |
 | pane | `pane read <id> [--source visible\|recent] [--lines N]` | 讀取文字 Read text |
@@ -430,6 +435,18 @@ A JSON command interface over the same local socket, so scripts and coding agent
 | session / server | `kill-server` | 關閉所有 session 並刪除保存的版面 Close everything and delete the saved layout |
 
 `<target>` 可以是窗格 ID 或唯一的 agent 名稱。`<target>` is a pane ID or a unique agent name.
+
+`pane layout` 的 `NAME` 為 `even-horizontal`（並排直欄）、`even-vertical`（上下橫列）、
+`main-horizontal`（第一窗格在上方占 60%，其餘並排）、`main-vertical`（第一窗格在左側占 60%，其餘上下排列）或 `tiled`。
+維持目前 leaf 順序；多窗格套用版面時解除 zoom，單窗格完全不變。`--window` 是從 0 起算的視窗 index；
+省略目標時使用呼叫窗格的視窗，否則使用最近 session 的目前視窗。`--session` 指定精確 session 名稱。
+窄尺寸會省略必要分隔線，優先保留每個窗格的內容格。自訂 `bind` 仍優先於新增預設鍵。
+
+Layouts retain leaf order. Main layouts reserve 60% for the first pane; tiled uses near-square rows.
+Selection unzooms split windows and leaves a single-pane window unchanged. `--window` is a zero-based
+index; omitted targets use the caller's window, else the most recently used session's active window.
+`--session` is an exact name. Tight dimensions omit necessary separators before sacrificing pane cells.
+Custom bindings override the new defaults. See [snapshot and layout details](docs/automation.md#layout-selection-and-snapshots).
 
 ### Agent 狀態 Agent status
 

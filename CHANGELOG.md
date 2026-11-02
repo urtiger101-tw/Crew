@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Add five tmux layout presets, `select-layout`, `next-layout`, prefix Space and
+  M-1..M-5, plus JSON `pane layout NAME [--window N] [--session NAME]` and
+  `pane.layout` bridge requests. Preserve pane IDs, processes, focus and history;
+  multi-pane layout selection unzooms the window. Persist the selected tree and
+  cycle position in backward-compatible version-1 snapshots.
+- Keep pane bodies nonzero at constrained sizes by omitting only necessary split
+  separators. A single-pane layout request is a complete no-op.
+- Remove Windows verbatim drive/UNC prefixes from displayed pane cwd values and
+  their JSON representation, while retaining native paths for process/file I/O.
+
 ## 0.6.0 — Agent recovery and terminal UX (2026-11-02)
 
 - Add the studio theme, native Windows clipboard image paste, UTF-8 pane console

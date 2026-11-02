@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, HashSet};
 
 pub(super) const VERSION: u32 = 1;
 /// Maximum tree depth (root leaf = 1). Deeper snapshots are rejected.
-pub(super) const MAX_DEPTH: usize = 64;
+pub(super) use crate::layout::MAX_DEPTH;
 const RATIO_MIN: f32 = 0.05;
 const RATIO_MAX: f32 = 0.95;
 
@@ -48,6 +48,8 @@ pub struct WindowSnap {
     pub name: String,
     pub manual_name: bool,
     pub zoomed: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layout_preset: Option<crate::layout::Preset>,
     /// index of the focused pane in leaf order
     pub active: usize,
     pub layout: LayoutSnap,
@@ -297,6 +299,7 @@ fn window_snap(w: &Window, leaf: &impl Fn(usize) -> LeafSnap) -> WindowSnap {
         name: w.name.clone(),
         manual_name: w.manual_name,
         zoomed: w.zoomed,
+        layout_preset: w.layout_preset,
         active: ids.iter().position(|&id| id == w.active).unwrap_or(0),
         layout: layout_snap(&w.layout, leaf),
     }

@@ -51,6 +51,7 @@ fn three_pane_session() -> Session {
             layout,
             active: 3,
             zoomed: true,
+            layout_preset: None,
         }],
         active: 0,
         cols: 120,
@@ -63,6 +64,37 @@ fn three_pane_session() -> Session {
 
 fn sample() -> Snapshot {
     snapshot_of(&[three_pane_session()], &lookup)
+}
+
+#[test]
+fn every_layout_roundtrips_tree_focus_and_cycle_for_one_to_six_panes() {
+    for preset in crate::layout::Preset::ALL {
+        for count in 1..=6 {
+            let ids: Vec<_> = (1..=count).collect();
+            let mut session = three_pane_session();
+            session.windows[0].layout = preset.build(&ids).unwrap();
+            session.windows[0].active = count;
+            session.windows[0].layout_preset = Some(preset);
+            let snap = snapshot_of(&[session], &lookup);
+            let restored = parse_snapshot(&serialize(&snap).unwrap()).unwrap();
+            assert_eq!(restored, snap);
+            assert_eq!(restored.sessions[0].windows[0].active, count - 1);
+            assert_eq!(restored.sessions[0].windows[0].layout_preset, Some(preset));
+            let mut id = 0;
+            let tree = rebuild(&restored.sessions[0].windows[0].layout, &mut |_| {
+                id += 1;
+                Ok(id)
+            })
+            .unwrap();
+            assert_eq!(tree, preset.build(&ids).unwrap());
+        }
+    }
+    let legacy = sample();
+    assert!(!serialize(&legacy).unwrap().contains("layout_preset"));
+    assert_eq!(
+        parse_snapshot(&serialize(&legacy).unwrap()).unwrap(),
+        legacy
+    );
 }
 
 fn set_first_window(snap: &mut Snapshot, f: impl FnOnce(&mut WindowSnap)) {

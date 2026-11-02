@@ -3,6 +3,48 @@ use super::{is_err, run, run_at};
 use crate::api::{Direction, ReadSource, Request, Target, ZoomMode};
 
 #[test]
+fn pane_layout_validates_names_and_window_session_targets() {
+    for layout in crate::layout::Preset::ALL {
+        let request = run_at(
+            &[
+                "pane",
+                "layout",
+                layout.name(),
+                "--window",
+                "2",
+                "--session",
+                "work",
+            ],
+            Some(7),
+        )
+        .unwrap();
+        assert_eq!(
+            request,
+            Request::PaneLayout {
+                layout,
+                pane: Some(7),
+                window: Some(2),
+                session: Some("work".into())
+            }
+        );
+        assert_eq!(
+            serde_json::from_value::<Request>(serde_json::to_value(&request).unwrap()).unwrap(),
+            request
+        );
+    }
+    for bad in [
+        vec!["pane", "layout"],
+        vec!["pane", "layout", "nope"],
+        vec!["pane", "layout", "tiled", "extra"],
+        vec!["pane", "layout", "tiled", "--window", "-1"],
+        vec!["pane", "layout", "tiled", "--session", ""],
+        vec!["pane", "layout", "tiled", "--pane", "p1"],
+    ] {
+        assert!(is_err(&bad), "{bad:?}");
+    }
+}
+
+#[test]
 fn current_flag_uses_caller_pane_or_fails() {
     assert_eq!(
         run_at(&["pane", "current", "--current"], Some(4)),

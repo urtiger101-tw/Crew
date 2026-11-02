@@ -170,6 +170,7 @@ fn session_with(name: &str, windows: &[&str]) -> Session {
                 layout: Node::Leaf(0),
                 active: 0,
                 zoomed: false,
+                layout_preset: None,
             })
             .collect(),
         active: 0,

@@ -5,6 +5,25 @@ use crate::theme::{ClientEnv, Theme, ThemeCfg};
 use std::fmt::Display;
 use unicode_width::UnicodeWidthStr;
 
+#[test]
+fn named_layout_commands_validate_their_usage() {
+    for preset in crate::layout::Preset::ALL {
+        assert_eq!(
+            parse(&format!("select-layout {}", preset.name())),
+            Ok(Cmd::SelectLayout(preset))
+        );
+    }
+    assert_eq!(parse("next-layout"), Ok(Cmd::NextLayout));
+    for bad in [
+        "select-layout",
+        "select-layout bogus",
+        "select-layout tiled extra",
+        "next-layout tiled",
+    ] {
+        assert!(parse(bad).is_err());
+    }
+}
+
 fn ascii_theme() -> Theme {
     let cfg = ThemeCfg {
         ascii_glyphs: "true".into(),

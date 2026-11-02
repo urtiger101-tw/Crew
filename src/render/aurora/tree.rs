@@ -250,7 +250,7 @@ pub(super) fn draw_files(g: &mut Grid, cx: &Ctx) {
         2,
         text_width,
         &cut(
-            cwd.map_or("?", String::as_str),
+            &crate::api::display_cwd(cwd.map_or("?", String::as_str)),
             usize::from(text_width),
             t.g.ellipsis,
         ),

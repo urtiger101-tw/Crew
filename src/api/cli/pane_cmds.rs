@@ -19,6 +19,7 @@ const PANE_SUBS: &[&str] = &[
     "swap",
     "focus",
     "zoom",
+    "layout",
     "rename",
     "close",
     "read",
@@ -57,6 +58,26 @@ pub(super) fn dispatch(
         "split" => pane_split(rest, current),
         "focus" => pane_focus(rest, current),
         "zoom" => pane_zoom(rest, current),
+        "layout" => {
+            let a = scan(rest, &[val("window"), val("session")])?;
+            let words = a.words();
+            check_count(
+                &words,
+                1,
+                1,
+                "pane layout <name> [--window N] [--session NAME]",
+            )?;
+            let layout = words[0].parse()?;
+            if a.get("session") == Some("") {
+                return Err("--session needs a non-empty name".into());
+            }
+            Ok(Request::PaneLayout {
+                layout,
+                pane: current,
+                window: opt_num(&a, "window")?,
+                session: a.get("session").map(str::to_owned),
+            })
+        }
         "rename" => pane_rename(rest),
         "close" => pane_close(rest),
         "read" => pane_read(rest),

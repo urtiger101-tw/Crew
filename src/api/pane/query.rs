@@ -71,6 +71,7 @@ fn window_snapshot(st: &State, wi: usize, w: &Window) -> Value {
         "name": w.name,
         "active_pane": pane_id_str(w.active),
         "zoomed": w.zoomed,
+        "layout_name": w.layout_preset.map(crate::layout::Preset::name),
         "panes": panes_json(st, &w.panes()),
         "layout": tree_json(&w.layout),
     })

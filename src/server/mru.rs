@@ -75,6 +75,7 @@ mod tests {
                 layout: Node::Leaf(10 + i),
                 active: 10 + i,
                 zoomed: false,
+                layout_preset: None,
             });
         }
         st.sessions.push(s);

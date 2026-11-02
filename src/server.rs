@@ -16,6 +16,7 @@ use std::io::Read;
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
+mod arrangements;
 pub(crate) mod chrome;
 pub(crate) mod host;
 mod model;
@@ -145,6 +146,7 @@ pub(crate) fn test_session(name: &str, cols: u16, rows: u16, pane: usize) -> Ses
             layout: Node::Leaf(pane),
             active: pane,
             zoomed: false,
+            layout_preset: None,
         }],
         active: 0,
         cols,
@@ -785,6 +787,7 @@ impl State {
             layout: Node::Leaf(id),
             active: id,
             zoomed: false,
+            layout_preset: None,
         });
         if focus {
             s.active = s.windows.len() - 1;
@@ -865,6 +868,7 @@ impl State {
             layout,
             active: current.active,
             zoomed: false,
+            layout_preset: None,
         };
         // ConPTY can retain its creation width through shell startup even after an
         // immediate resize. Start at the final body size so wrapping matches the parser.
@@ -1368,6 +1372,18 @@ impl State {
             Cmd::NextAttention { backward } => {
                 commands::headless_attention(self, backward)?;
             }
+            Cmd::SelectLayout(_) | Cmd::NextLayout => {
+                let si = self.target_session(None)?;
+                let wi = self.sessions[si].active;
+                let preset = match cmd {
+                    Cmd::SelectLayout(preset) => preset,
+                    _ => self.sessions[si].windows[wi]
+                        .layout_preset
+                        .map(crate::layout::Preset::next)
+                        .unwrap_or(crate::layout::Preset::EvenHorizontal),
+                };
+                self.select_layout(si, wi, preset);
+            }
             Cmd::ConfirmBefore { command, .. } => {
                 // no client to ask: run the command as typed
                 self.exec_global(commands::parse(&command)?)?;
@@ -1541,6 +1557,17 @@ impl State {
                 let w = &mut s.windows[s.active];
                 w.zoomed = !w.zoomed && w.panes().len() > 1;
                 self.relayout(si);
+            }
+            Cmd::SelectLayout(_) | Cmd::NextLayout => {
+                let wi = self.sessions[si].active;
+                let preset = match cmd {
+                    Cmd::SelectLayout(preset) => preset,
+                    _ => self.sessions[si].windows[wi]
+                        .layout_preset
+                        .map(crate::layout::Preset::next)
+                        .unwrap_or(crate::layout::Preset::EvenHorizontal),
+                };
+                self.select_layout(si, wi, preset);
             }
             Cmd::NextWindow | Cmd::PrevWindow | Cmd::SelectWindow(_) => {
                 let s = &mut self.sessions[si];

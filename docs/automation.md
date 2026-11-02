@@ -32,6 +32,47 @@ untracked and ignored files and does not delete the branch. A failed terminal la
 the created worktree and reports its path. Check `git status` and preserve desired files before
 retrying; there is no force removal option.
 
+## Layout selection and snapshots
+
+```sh
+crew pane layout even-horizontal --session main --window 0
+crew pane layout tiled
+```
+
+The five names are `even-horizontal` (equal side-by-side columns), `even-vertical`
+(equal rows), `main-horizontal` (first pane above a row of other panes),
+`main-vertical` (first pane left of a column of other panes), and `tiled` (near-square
+rows, longest rows first). Main layouts give the first pane a 60% share. Existing
+leaf order is retained. `--window` is a zero-based index and `--session` an exact
+session name. With no explicit target, the caller's `CREW_PANE_ID` selects its
+window; otherwise the most recently used session's current window is selected.
+An explicit session overrides the caller pane without moving focus.
+
+The JSON reply contains `session`, `window`, `layout`, `changed`, `active_pane`,
+`zoomed` and `panes`. The JSON-lines bridge accepts method `pane.layout` with
+the same CLI arguments in `params.args`. A one-pane window returns `changed:false`
+without changing zoom or cycle state. Unknown names fail as usage errors before
+connecting. Multi-pane selection unzooms once, then runs the existing PTY resize
+path at most once per affected pane. No pane is respawned and no input is sent.
+Pane identity, root PID, active pane and the parser/history stay owned by the
+same objects. Tight dimensions may omit separators so six rows still have
+nonzero pane bodies in a 40x10 pane area; dimensions too small even for the pane
+cells cannot show every pane simultaneously.
+
+`api snapshot` keeps its existing `layout` binary tree (`pane` leaves;
+`split:"right"|"down"`, `ratio`, `a`, `b` branches). Windows additionally expose
+`layout_name`, the last selected preset or null. `select-layout NAME` and prefix
+M-1..M-5 choose presets in the order above; prefix Space / `next-layout` advances
+in that order and wraps. New windows start with no selected preset, so their first
+cycle chooses `even-horizontal`. Custom bindings still take precedence.
+
+State snapshots remain version 1. Their optional `layout_preset` field preserves
+the cycle position; old snapshots omit it and remain readable. Trees use balanced
+strips and retain the existing depth limit of 64. Cold restore rebuilds shells as
+before: persistence does not preserve processes across a server restart. Live
+relayout does preserve them. Installing a new binary does not update an already
+running daemon; restart remains an explicitly authorized operation.
+
 ## Explicit agent lifecycle
 
 Workspace and tab ordering is available through `workspace move TARGET --index N`
