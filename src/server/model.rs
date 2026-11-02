@@ -15,8 +15,37 @@ pub(crate) struct Launch {
     pub shell: Option<Vec<String>>,
 }
 
+/// Terminal titles are untrusted display hints, not agent identity or lifecycle reports.
+#[derive(Default)]
+pub struct PaneCallbacks {
+    pub terminal_title: Option<String>,
+}
+
+impl vt100::Callbacks for PaneCallbacks {
+    fn set_window_title(&mut self, _: &mut vt100::Screen, title: &[u8]) {
+        let title: String = String::from_utf8_lossy(title)
+            .chars()
+            .filter(|c| {
+                !c.is_control() && !matches!(*c, '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
+            })
+            .take(80)
+            .collect();
+        let title = title.trim();
+        self.terminal_title = (!title.is_empty()).then(|| title.to_owned());
+    }
+
+    fn unhandled_osc(&mut self, screen: &mut vt100::Screen, params: &[&[u8]]) {
+        // vt100 splits OSC text on semicolons and only dispatches two-part titles itself.
+        if let [b"0" | b"2", title @ ..] = params {
+            self.set_window_title(screen, &title.join(&b';'));
+        }
+    }
+}
+
+pub type PaneParser = vt100::Parser<PaneCallbacks>;
+
 pub struct Pane {
-    pub parser: vt100::Parser,
+    pub parser: PaneParser,
     pub master: Box<dyn MasterPty + Send>,
     pub writer: Box<dyn Write + Send>,
     pub child: Box<dyn Child + Send + Sync>,
@@ -49,11 +78,7 @@ pub struct Pane {
 
 impl Pane {
     /// Run a vt100 operation on this pane, containing its panics (see [`contain_vt`]).
-    pub fn vt<R>(
-        &mut self,
-        scrollback: usize,
-        f: impl FnOnce(&mut vt100::Parser) -> R,
-    ) -> Option<R> {
+    pub fn vt<R>(&mut self, scrollback: usize, f: impl FnOnce(&mut PaneParser) -> R) -> Option<R> {
         let (rows, cols) = (self.rect.h, self.rect.w);
         let r = contain_vt(&mut self.parser, rows, cols, scrollback, f);
         if r.is_none() {
@@ -104,18 +129,23 @@ impl Pane {
 /// vt100 0.16.2 can panic on wide characters at the last column after a resize. Without
 /// containment the panic would poison the server lock and every later request would fail.
 /// On panic the terminal state is reset to an empty `rows`x`cols` screen; the shell keeps running.
-pub fn contain_vt<R>(
-    parser: &mut vt100::Parser,
+pub fn contain_vt<CB: vt100::Callbacks + Default, R>(
+    parser: &mut vt100::Parser<CB>,
     rows: u16,
     cols: u16,
     scrollback: usize,
-    f: impl FnOnce(&mut vt100::Parser) -> R,
+    f: impl FnOnce(&mut vt100::Parser<CB>) -> R,
 ) -> Option<R> {
     match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f(parser))) {
         Ok(r) => Some(r),
         Err(_) => {
             crate::log!("vt100 panic contained; terminal reset to {cols}x{rows}");
-            *parser = vt100::Parser::new(rows.max(2), cols.max(2), scrollback);
+            *parser = vt100::Parser::new_with_callbacks(
+                rows.max(2),
+                cols.max(2),
+                scrollback,
+                CB::default(),
+            );
             None
         }
     }

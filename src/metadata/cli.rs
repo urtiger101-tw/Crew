@@ -19,6 +19,9 @@ pub fn parse(group: &str, args: &[String]) -> Result<ApiRequest, String> {
             positional.extend_from_slice(&args[i..]);
             break;
         }
+        if crate::api::cli::is_help_flag(item) {
+            return Err(crate::api::cli::HELP.into());
+        }
         if !item.starts_with('-') {
             positional.push(item.clone());
             continue;

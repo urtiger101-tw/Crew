@@ -1,6 +1,7 @@
 //! Explicit, provider-independent hooks. These commands never install hooks into another
 //! product's configuration, start an agent, or infer a running agent from a PATH entry.
 //! `report` translates our documented events to the existing pane report/release API.
+mod codex_progress;
 use crate::api::{ApiError, Reply, Request, Status, Target};
 use crate::proto::{ClientMsg, Command, ServerMsg, read_msg, write_msg};
 use anyhow::Result;
@@ -15,6 +16,8 @@ const HELP: &str = "Crew explicit integration hooks
   crew integration explain TARGET|--current [--json]
   crew integration report AGENT EVENT --source ID [--pane pN|--current]
                           [--seq N] [--message TEXT] [-- RESUME_ARG...]
+  crew integration codex-progress --session-file PATH --pane pN --source ID
+                                  [--title TEXT] [--once]
 
 Events: start/working -> working, blocked -> blocked, idle/done -> idle,
         unknown -> unknown, exit -> release-agent.
@@ -25,6 +28,8 @@ Arguments after -- are saved as resume argv, not executed by this command.
 explain distinguishes explicit reports, live process-kind hints and PTY activity.
 Kind hints never provide lifecycle completion or create an agent wait identity.
 doctor checks executable files on PATH only; it does not prove hooks are installed.
+codex-progress reads only the specified local rollout's assistant commentary and updates
+display metadata. It never changes agent lifecycle, reports completion or sends input.
 This is Crew's generic event contract, not a Claude/Codex official hook format.";
 
 struct Descriptor {
@@ -139,6 +144,7 @@ enum Action {
     Doctor(Option<String>),
     Explain(Target),
     Report(Request),
+    CodexProgress(codex_progress::Options),
 }
 
 /// CLI entry point. The caller passes arguments after the `integration` group word.
@@ -207,6 +213,7 @@ pub fn run(args: &[String]) -> Result<i32> {
             }
         },
         Action::Report(request) => crate::client::api(request),
+        Action::CodexProgress(options) => codex_progress::run(options),
     }
 }
 
@@ -283,6 +290,8 @@ fn parse(args: &[String], current: Option<usize>) -> std::result::Result<Action,
             Ok(Action::Explain(target))
         }
         "report" => parse_report(rest, current).map(Action::Report),
+        "codex-progress" => codex_progress::parse(rest)
+            .map(|options| options.map_or(Action::Help, Action::CodexProgress)),
         _ => Err(format!(
             "unknown integration command or arguments: {sub}; use integration --help"
         )),

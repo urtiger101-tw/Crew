@@ -472,7 +472,12 @@ impl State {
         let mut reader = pair.master.try_clone_reader().map_err(|e| anyhow!("{e}"))?;
         let writer = pair.master.take_writer().map_err(|e| anyhow!("{e}"))?;
         let pane = Pane {
-            parser: vt100::Parser::new(size.rows, size.cols, self.cfg.scrollback),
+            parser: PaneParser::new_with_callbacks(
+                size.rows,
+                size.cols,
+                self.cfg.scrollback,
+                PaneCallbacks::default(),
+            ),
             master: pair.master,
             writer,
             child,

@@ -207,6 +207,9 @@ fn with_fallback(pattern: &str, values: &BTreeMap<String, String>, fallback: &st
 #[derive(Debug, Clone, Serialize)]
 pub struct PaneDisplay {
     pub title: String,
+    /// Sanitized OSC 0/2 hint; never used to determine agent kind or completion.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub terminal_title: Option<String>,
     pub agent: Option<String>,
     pub state_label: String,
     pub sidebar: String,
@@ -214,6 +217,58 @@ pub struct PaneDisplay {
     pub sidebar_spans: Vec<DisplaySpan>,
     pub kind_source: &'static str,
     pub presentation: presentation::Presentation,
+}
+
+fn pane_title<'a>(
+    presentation: &'a presentation::Presentation,
+    agent_name: Option<&'a str>,
+    label: Option<&'a str>,
+    terminal_title: Option<&'a str>,
+    kind: Option<&'a str>,
+    window_name: &'a str,
+) -> &'a str {
+    presentation
+        .title
+        .as_deref()
+        .or(presentation.display_agent.as_deref())
+        .or(agent_name)
+        .or(kind)
+        .or(label)
+        .or(terminal_title)
+        .unwrap_or(window_name)
+}
+
+fn informative_terminal_title<'a>(
+    title: Option<&'a str>,
+    has_agent: bool,
+    window_name: &str,
+) -> Option<&'a str> {
+    title.filter(|title| {
+        if !has_agent || title.eq_ignore_ascii_case(window_name) {
+            return false;
+        }
+        let value = title.trim_matches('"');
+        let lower = value.to_ascii_lowercase();
+        let executable = [".exe", ".com", ".cmd", ".bat"]
+            .iter()
+            .any(|ext| lower.ends_with(ext))
+            && (value.contains(['/', '\\']) || !value.chars().any(char::is_whitespace));
+        !executable
+            && !matches!(
+                lower.rsplit(['/', '\\']).next().unwrap_or(&lower),
+                "crew"
+                    | "tmuxlike"
+                    | "powershell"
+                    | "windows powershell"
+                    | "pwsh"
+                    | "cmd"
+                    | "command prompt"
+                    | "conhost"
+                    | "sh"
+                    | "bash"
+                    | "zsh"
+            )
+    })
 }
 
 pub fn pane(st: &State, pid: usize, lang: Lang) -> Option<PaneDisplay> {
@@ -238,11 +293,19 @@ pub fn pane(st: &State, pid: usize, lang: Lang) -> Option<PaneDisplay> {
         .as_deref()
         .or_else(|| explicit.and_then(|a| a.name.as_deref()))
         .or(kind);
-    let native_name = effective_agent
-        .or(p.label.as_deref())
-        .filter(|s| !s.is_empty())
-        .unwrap_or(&w.name);
-    let title = presentation.title.as_deref().unwrap_or(native_name);
+    let terminal_title = informative_terminal_title(
+        p.parser.callbacks().terminal_title.as_deref(),
+        explicit.is_some() || detected.is_some(),
+        &w.name,
+    );
+    let title = pane_title(
+        &presentation,
+        explicit.and_then(|agent| agent.name.as_deref()),
+        p.label.as_deref(),
+        terminal_title,
+        kind,
+        &w.name,
+    );
     let status = agent::status(p, &st.cfg);
     let default_state = tr(
         lang,
@@ -293,6 +356,7 @@ pub fn pane(st: &State, pid: usize, lang: Lang) -> Option<PaneDisplay> {
     };
     Some(PaneDisplay {
         title: with_fallback(&st.cfg.pane_template, &values, title),
+        terminal_title: terminal_title.map(str::to_owned),
         agent: effective_agent.map(str::to_string),
         state_label: state_label.to_string(),
         sidebar,
@@ -339,6 +403,138 @@ pub fn workspace(st: &State, si: usize) -> WorkspaceDisplay {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn terminal_hints_require_an_agent_and_ignore_host_shell_defaults() {
+        for title in [
+            "Review collaboration task",
+            r"D:\Crew\crew.exe",
+            "Windows PowerShell",
+        ] {
+            assert_eq!(
+                informative_terminal_title(Some(title), false, "powershell"),
+                None
+            );
+        }
+        for title in [
+            r"D:\Crew\crew.exe",
+            r"\\?\D:\Crew\crew.exe",
+            "bin/crew.exe",
+            "crew.exe",
+            "powershell.exe",
+            "Windows PowerShell",
+            "pwsh",
+            "cmd",
+            "conhost",
+            "/bin/bash",
+            "window label",
+        ] {
+            assert_eq!(
+                informative_terminal_title(Some(title), true, "window label"),
+                None,
+                "{title}"
+            );
+        }
+        assert_eq!(
+            informative_terminal_title(Some("Review;中文"), true, "powershell"),
+            Some("Review;中文")
+        );
+        assert_eq!(
+            informative_terminal_title(Some("Fix crew.exe"), true, "powershell"),
+            Some("Fix crew.exe")
+        );
+    }
+
+    #[test]
+    fn terminal_title_preserves_legacy_kind_and_label_precedence() {
+        let mut presentation = presentation::Presentation::default();
+        let title = |presentation: &presentation::Presentation, name, label, terminal| {
+            pane_title(
+                presentation,
+                name,
+                label,
+                terminal,
+                Some("codex"),
+                "powershell",
+            )
+            .to_owned()
+        };
+        assert_eq!(
+            title(&presentation, None, None, Some("Review collaboration task")),
+            "codex"
+        );
+        assert_eq!(
+            title(
+                &presentation,
+                None,
+                Some("Manual label"),
+                Some("Terminal title")
+            ),
+            "codex"
+        );
+        assert_eq!(
+            title(
+                &presentation,
+                Some("Reviewer"),
+                Some("Manual label"),
+                Some("Terminal title")
+            ),
+            "Reviewer"
+        );
+        presentation.display_agent = Some("Custom agent".into());
+        assert_eq!(
+            title(
+                &presentation,
+                Some("Reviewer"),
+                None,
+                Some("Terminal title")
+            ),
+            "Custom agent"
+        );
+        presentation.title = Some("Explicit title".into());
+        assert_eq!(
+            title(
+                &presentation,
+                Some("Reviewer"),
+                None,
+                Some("Terminal title")
+            ),
+            "Explicit title"
+        );
+        presentation.title = Some(String::new());
+        assert_eq!(
+            title(
+                &presentation,
+                Some("Reviewer"),
+                None,
+                Some("Terminal title")
+            ),
+            ""
+        );
+        assert_eq!(
+            pane_title(
+                &presentation::Presentation::default(),
+                None,
+                None,
+                None,
+                Some("codex"),
+                "powershell"
+            ),
+            "codex"
+        );
+        assert_eq!(
+            pane_title(
+                &presentation::Presentation::default(),
+                None,
+                None,
+                None,
+                None,
+                "powershell"
+            ),
+            "powershell"
+        );
+    }
+
     #[test]
     fn substitutions_are_literal_bounded_and_do_not_recurse() {
         let values = BTreeMap::from([

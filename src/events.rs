@@ -119,6 +119,9 @@ pub fn parse(sub: &str, args: &[String]) -> Result<ApiRequest, String> {
     let mut seen = std::collections::HashSet::new();
     let mut i = 0;
     while i < args.len() {
+        if crate::api::cli::is_help_flag(&args[i]) {
+            return Err(crate::api::cli::HELP.into());
+        }
         let (key, inline) = args[i]
             .split_once('=')
             .map_or((args[i].as_str(), None), |(k, v)| (k, Some(v)));

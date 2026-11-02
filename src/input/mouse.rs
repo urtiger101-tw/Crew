@@ -325,8 +325,8 @@ impl State {
 /// On the alternate screen nothing scrolls and `false` is returned; a leftover scroll mode
 /// (copy state without a selection, e.g. the app switched screens while the user was scrolled
 /// back) is dropped there too, so the caller's key reaches the app instead of copy mode.
-pub(crate) fn scroll_view(
-    parser: &mut vt100::Parser,
+pub(crate) fn scroll_view<CB: vt100::Callbacks>(
+    parser: &mut vt100::Parser<CB>,
     copy: &mut Option<CopyState>,
     rows: u16,
     delta: isize,

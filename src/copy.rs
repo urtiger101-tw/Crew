@@ -25,7 +25,12 @@ pub fn in_selection(a: (i64, u16), b: (i64, u16), line: bool, p: (i64, u16)) -> 
 }
 
 /// Extract text between two absolute positions (inclusive).
-pub fn extract(parser: &mut vt100::Parser, a: (i64, u16), b: (i64, u16), line: bool) -> String {
+pub fn extract<CB: vt100::Callbacks>(
+    parser: &mut vt100::Parser<CB>,
+    a: (i64, u16),
+    b: (i64, u16),
+    line: bool,
+) -> String {
     let (s, e) = if a <= b { (a, b) } else { (b, a) };
     let saved = parser.screen().scrollback();
     let (rows, cols) = parser.screen().size();

@@ -91,6 +91,9 @@ fn options(args: &[String], allowed: &[&str]) -> Result<BTreeMap<String, String>
     let mut opts = BTreeMap::new();
     let mut i = 0;
     while let Some(arg) = args.get(i) {
+        if crate::api::cli::is_help_flag(arg) {
+            return Err(crate::api::cli::HELP.into());
+        }
         let body = arg
             .strip_prefix("--")
             .ok_or_else(|| format!("unexpected argument: {arg}"))?;

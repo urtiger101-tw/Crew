@@ -21,6 +21,9 @@ fn scan(args: &[String], allowed: &[&str]) -> Result<Args, String> {
             out.positional.extend(args[i..].iter().cloned());
             break;
         }
+        if crate::api::cli::is_help_flag(item) {
+            return Err(crate::api::cli::HELP.into());
+        }
         if !item.starts_with('-') {
             out.positional.push(item.clone());
             continue;

@@ -34,11 +34,11 @@ impl State {
         let mut off = p.parser.screen().scrollback();
         let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
         let mut cs = p.copy.clone().unwrap();
-        let scroll_to = |n: usize, parser: &mut vt100::Parser| -> usize {
+        let scroll_to = |n: usize, parser: &mut crate::server::PaneParser| -> usize {
             parser.screen_mut().set_scrollback(n);
             parser.screen().scrollback()
         };
-        let row_text = |parser: &vt100::Parser, y: u16| -> String {
+        let row_text = |parser: &crate::server::PaneParser, y: u16| -> String {
             (0..w)
                 .map(|x| {
                     parser

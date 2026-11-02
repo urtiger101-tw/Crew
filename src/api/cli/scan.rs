@@ -120,6 +120,9 @@ pub(super) fn scan(argv: &[String], specs: &[Spec]) -> Result<Args, String> {
             a.tail = Some(argv[i..].to_vec());
             break;
         }
+        if super::is_help_flag(tok) {
+            return Err(super::HELP.into());
+        }
         let Some(body) = tok.strip_prefix("--") else {
             if tok.len() > 1 && tok.starts_with('-') {
                 return Err(format!("unknown option: {tok}"));

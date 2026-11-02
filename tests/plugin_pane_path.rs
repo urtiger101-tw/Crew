@@ -246,6 +246,196 @@ impl Drop for Server {
 }
 
 #[test]
+fn plain_shell_titles_keep_the_window_name() {
+    let server = Server::new();
+    server.run(&["workspace", "create", "plain-shell"]);
+    let pane = server.newest_pane();
+    let ready = if cfg!(windows) {
+        "'ready'"
+    } else {
+        "printf ready"
+    };
+    assert_eq!(server.capture(&pane, ready, "shell-ready"), "ready");
+    let shell = server.pane(&pane);
+    assert!(shell["agent"].is_null());
+    assert!(shell["detected_agent"].is_null());
+    assert_eq!(shell["display"]["title"], shell["window_name"]);
+    assert_eq!(shell["display"]["sidebar"], shell["window_name"]);
+    assert!(shell["display"]["terminal_title"].is_null());
+}
+
+#[test]
+fn codex_terminal_title_and_real_commentary_update_display_only() {
+    let server = Server::new();
+    server.run(&["workspace", "create", "codex-display"]);
+    let pane = server.newest_pane();
+    server.run(&[
+        "integration",
+        "report",
+        "codex",
+        "start",
+        "--source",
+        "fixture.codex",
+        "--pane",
+        &pane,
+    ]);
+    let agent = server.pane(&pane)["agent"].clone();
+    server.run(&["pane", "rename", &pane, "Manual label"]);
+    assert_eq!(server.pane(&pane)["display"]["title"], "codex");
+    assert_eq!(server.pane(&pane)["display"]["agent"], "codex");
+    let title = "Codex session;中文";
+    let line = if cfg!(windows) {
+        format!("[Console]::Write(([string][char]27) + ']2;{title}' + ([string][char]7))")
+    } else {
+        format!("printf '\\033]2;{title}\\007'")
+    };
+    server.run(&["pane", "run", &pane, &line]);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let display = server.pane(&pane)["display"].clone();
+        if display["terminal_title"] == title {
+            assert_eq!(display["title"], "codex");
+            assert_eq!(display["agent"], "codex");
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "terminal title did not arrive: {display}"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    let rollout = server.root.join("selected-session.jsonl");
+    fs::write(
+        &rollout,
+        format!(
+            "{}\n",
+            json!({
+                "type":"response_item", "timestamp":"2026-11-02T03:00:00Z",
+                "payload":{"type":"message", "role":"assistant", "phase":"commentary",
+                    "content":[{"type":"output_text", "text":"正在驗證 help 與 session 標題"}]}
+            })
+        ),
+    )
+    .unwrap();
+    let run = || {
+        server.run(&[
+            "integration",
+            "codex-progress",
+            "--session-file",
+            rollout.to_str().unwrap(),
+            "--pane",
+            &pane,
+            "--source",
+            "fixture.progress",
+            "--title",
+            "Review collaboration task",
+            "--once",
+        ])
+    };
+    assert_eq!(run()["result"]["updates"], 1);
+    let displayed = server.pane(&pane);
+    assert_eq!(displayed["display"]["title"], "Review collaboration task");
+    assert_eq!(
+        displayed["display"]["state_label"],
+        "正在驗證 help 與 session 標題"
+    );
+    assert_eq!(displayed["agent"], agent);
+    fs::write(
+        &rollout,
+        format!(
+            "{}\n",
+            json!({"type":"event_msg", "payload":{"type":"task_complete"}})
+        ),
+    )
+    .unwrap();
+    assert_eq!(run()["result"]["updates"], 1);
+    let cleared = server.pane(&pane);
+    assert_eq!(cleared["display"]["title"], "codex");
+    assert_eq!(cleared["display"]["terminal_title"], title);
+    assert_eq!(cleared["agent"], agent);
+    assert_eq!(
+        cleared["display"]["presentation"]["state_labels"],
+        json!({})
+    );
+}
+
+#[test]
+fn destructive_help_is_recognized_after_unrelated_options_and_separators() {
+    let server = Server::new();
+    server.run(&["workspace", "create", "help-check"]);
+    server.plugin("a.alpha", "crewfixturealpha");
+    let pane = server.newest_pane();
+    let before = server.run(&["pane", "list"]);
+    let tab = before["result"]["panes"][0]["tab_id"].as_str().unwrap();
+    let registry = server.run(&["plugin", "list", "--json"]);
+    for command in [
+        vec!["kill-server"],
+        vec!["kill-session", "-t", "help-check"],
+        vec!["kill-pane"],
+        vec!["killp"],
+        vec!["kill-window"],
+        vec!["killw"],
+        vec!["confirm-before", "kill-server"],
+        vec!["server", "stop"],
+        vec!["pane", "close", &pane],
+        vec!["workspace", "close", "help-check"],
+        vec!["tab", "close", tab],
+        vec!["worktree", "remove", "--path", "nonexistent"],
+        vec!["plugin", "uninstall", "a.alpha"],
+        vec!["plugin", "unlink", "a.alpha"],
+    ] {
+        for option in ["-n", "-s", "-x", "-y", "--message", "--"] {
+            for help in ["--help", "-h"] {
+                let output = server
+                    .command()
+                    .args(&command)
+                    .args([option, help])
+                    .output()
+                    .unwrap();
+                assert!(
+                    output.status.success(),
+                    "{command:?} {option} {help}: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
+                assert!(
+                    String::from_utf8_lossy(&output.stdout).contains("crew "),
+                    "{command:?} {option} {help} did not show help"
+                );
+                let panes = server.run(&["pane", "list"]);
+                assert_eq!(panes["result"]["panes"].as_array().unwrap().len(), 1);
+                assert_eq!(panes["result"]["panes"][0]["pane_id"], pane);
+                assert_eq!(server.run(&["plugin", "list", "--json"]), registry);
+            }
+        }
+    }
+    for command in [
+        ["confirm-before", "kill-session -t help-check --help"],
+        ["confirm", "confirm-before 'kill-window -t help-check:0 -h'"],
+    ] {
+        let output = server.command().args(command).output().unwrap();
+        assert!(
+            output.status.success(),
+            "{command:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).contains("crew "));
+        assert_eq!(server.newest_pane(), pane);
+    }
+    for title in ["-h", "--help"] {
+        server.run(&[
+            "pane",
+            "report-metadata",
+            &pane,
+            "--source",
+            "help-value",
+            "--title",
+            title,
+        ]);
+        assert_eq!(server.pane(&pane)["display"]["title"], title);
+    }
+}
+
+#[test]
 fn help_does_not_change_the_server_and_split_h_still_splits() {
     let server = Server::new();
     server.run(&["workspace", "create", "help-check"]);
@@ -428,6 +618,7 @@ fn help_does_not_change_the_server_and_split_h_still_splits() {
         "integration doctor",
         "integration explain",
         "integration report",
+        "integration codex-progress",
         "machine",
         "machine add",
         "machine list",

@@ -629,7 +629,8 @@ pub fn install(home: &Path, source: Option<&Path>, offline: bool, yes: bool) -> 
     if offline {
         rustc.env("RUSTUP_AUTO_INSTALL", "0");
     }
-    let rustc = process::capture(rustc, Duration::from_secs(30), 16 * 1024)
+    let rustc_timeout = Duration::from_secs(if offline { 30 } else { 600 });
+    let rustc = process::capture(rustc, rustc_timeout, 16 * 1024)
         .context("rustc is required to determine the agentcmd build target")?;
     ensure!(
         rustc.success() && !rustc.truncated,

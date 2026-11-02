@@ -55,9 +55,71 @@ fn help_args(args: &[String]) -> Option<Vec<String>> {
     if sub.starts_with("__") {
         return None;
     }
+    // API option scanners own their value boundaries and the help sentinel.
+    if api::cli::API_COMMANDS.contains(&sub) && sub != "api" {
+        return None;
+    }
+    if sub == "integration" && args.get(1).is_some_and(|arg| arg == "codex-progress") {
+        return None; // this adapter parses its own file/title values and help flags.
+    }
     let split = matches!(sub, "split-window" | "splitw");
     let binding = matches!(sub, "bind-key" | "bind");
     let confirm = matches!(sub, "confirm-before" | "confirm");
+    let normalize = || {
+        let group = if sub == "--machine" {
+            Some("machine")
+        } else if sub == "api" || matches!(sub, "plugin" | "integration" | "machine" | "federation")
+        {
+            Some(sub)
+        } else {
+            None
+        };
+        group
+            .into_iter()
+            .chain(std::iter::once("--help"))
+            .map(str::to_owned)
+            .collect()
+    };
+    let mut has_help = args.iter().skip(1).any(|arg| api::cli::is_help_flag(arg));
+    let mut destructive = matches!(
+        sub,
+        "kill-server" | "kill-session" | "kill-pane" | "killp" | "kill-window" | "killw"
+    ) || (sub == "plugin"
+        && args
+            .get(1)
+            .is_some_and(|arg| matches!(arg.as_str(), "uninstall" | "unlink")))
+        || (sub == "machine" && args.get(1).is_some_and(|arg| arg == "remove"));
+    if confirm {
+        let line = args
+            .iter()
+            .map(|arg| commands::quote(arg))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let mut command = commands::parse(&line);
+        loop {
+            match command {
+                Ok(commands::Cmd::ConfirmBefore { command: inner, .. }) => {
+                    has_help |= commands::tokenize(&inner)
+                        .iter()
+                        .any(|arg| api::cli::is_help_flag(arg));
+                    command = commands::parse(&inner);
+                }
+                Ok(
+                    commands::Cmd::KillServer
+                    | commands::Cmd::KillSession { .. }
+                    | commands::Cmd::KillPane
+                    | commands::Cmd::KillWindow { .. },
+                ) => {
+                    destructive = true;
+                    break;
+                }
+                _ => break,
+            }
+        }
+    }
+    if destructive && has_help {
+        return Some(normalize());
+    }
     let mut tail = args.iter().skip(1);
     while let Some(arg) = tail.next() {
         if arg == "--" {
@@ -82,32 +144,16 @@ fn help_args(args: &[String]) -> Option<Vec<String>> {
                 | "--prompt"
                 | "--lang"
                 | "-t"
-                | "-s"
-                | "-x"
-                | "-y"
-        ) || (!binding && arg == "-n")
+        ) || (matches!(sub, "new-window" | "neww") && arg == "-n")
+            || (matches!(sub, "new" | "new-session") && arg == "-s")
+            || (matches!(sub, "resize-pane" | "resizep") && matches!(arg.as_str(), "-x" | "-y"))
             || (confirm && arg == "-p")
         {
             tail.next(); // option values may be literal help flags.
             continue;
         }
         if arg == "--help" || (arg == "-h" && !split) {
-            let group = if sub == "--machine" {
-                Some("machine")
-            } else if api::cli::API_COMMANDS.contains(&sub)
-                || matches!(sub, "plugin" | "integration" | "machine" | "federation")
-            {
-                Some(sub)
-            } else {
-                None
-            };
-            return Some(
-                group
-                    .into_iter()
-                    .chain(std::iter::once("--help"))
-                    .map(str::to_owned)
-                    .collect(),
-            );
+            return Some(normalize());
         }
         if (binding || confirm) && !arg.starts_with('-') {
             break; // the binding key or wrapped command begins the payload.
@@ -252,6 +298,70 @@ mod tests {
     use crate::i18n::{Lang, tr};
 
     const HELP_KEYS: [&str; 3] = ["cli.help", "cli.keys", "cli.api_help"];
+
+    #[test]
+    fn destructive_help_cannot_be_hidden_by_options_or_a_separator() {
+        for command in [
+            "kill-server",
+            "kill-session",
+            "kill-pane",
+            "killp",
+            "kill-window",
+            "killw",
+        ] {
+            for option in ["-n", "-s", "-x", "-y", "-t", "--message", "--"] {
+                for help in ["--help", "-h"] {
+                    let args = [command, option, help].map(str::to_owned);
+                    assert_eq!(
+                        super::help_args(&args),
+                        Some(vec!["--help".into()]),
+                        "{args:?}"
+                    );
+                }
+            }
+        }
+        for args in [
+            vec!["confirm-before", "kill-server", "--", "--help"],
+            vec!["confirm-before", "kill-session -t main --help"],
+            vec!["confirm", "confirm-before 'kill-window -t main:0 -h'"],
+            vec!["confirm", "confirm-before", "kill-pane", "-n", "-h"],
+        ] {
+            let args: Vec<String> = args.into_iter().map(str::to_owned).collect();
+            assert_eq!(
+                super::help_args(&args),
+                Some(vec!["--help".into()]),
+                "{args:?}"
+            );
+        }
+        for args in [
+            vec!["plugin", "uninstall", "agentcmd.wc", "--", "--help"],
+            vec!["plugin", "unlink", "agentcmd.wc", "--message", "-h"],
+            vec!["machine", "remove", "m1", "--label", "--help"],
+        ] {
+            let args: Vec<String> = args.into_iter().map(str::to_owned).collect();
+            assert_eq!(
+                super::help_args(&args),
+                Some(vec![args[0].clone(), "--help".into()]),
+                "{args:?}"
+            );
+        }
+        for command in ["new", "new-window", "split-window", "resize-pane"] {
+            for option in ["-n", "-s", "-x", "-y"] {
+                if matches!(
+                    (command, option),
+                    ("new", "-s") | ("new-window", "-n") | ("resize-pane", "-x" | "-y")
+                ) {
+                    continue;
+                }
+                let args = [command, option, "--help"].map(str::to_owned);
+                assert_eq!(
+                    super::help_args(&args),
+                    Some(vec!["--help".into()]),
+                    "{args:?}"
+                );
+            }
+        }
+    }
 
     #[test]
     fn help_respects_split_direction_and_command_payloads() {

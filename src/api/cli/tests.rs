@@ -37,6 +37,97 @@ fn help_and_missing_subcommand_return_help_text() {
 }
 
 #[test]
+fn help_flags_are_option_values_when_the_option_owns_them() {
+    for value in ["-h", "--help"] {
+        for group in ["workspace", "tab"] {
+            let request = run(&[group, "create", "--command", value]).unwrap();
+            let Request::Workspace(request) = request else {
+                panic!("wrong request")
+            };
+            let command = match request {
+                crate::workspace::Request::WorkspaceCreate { command, .. }
+                | crate::workspace::Request::TabCreate { command, .. } => command,
+                _ => panic!("wrong workspace request"),
+            };
+            assert_eq!(command.as_deref(), Some(value));
+        }
+        for (group, target) in [("pane", "p1"), ("workspace", "w1")] {
+            let request = run(&[
+                group,
+                "report-metadata",
+                target,
+                "--source",
+                "help-test",
+                "--title",
+                value,
+            ])
+            .unwrap();
+            let Request::Metadata(request) = request else {
+                panic!("wrong request")
+            };
+            assert_eq!(request.title, crate::metadata::TextPatch::set(value.into()));
+        }
+    }
+    assert!(matches!(
+        run(&["pane", "split", "--direction", "right", "--command", "-h"]),
+        Ok(Request::PaneSplit { command: Some(command), .. }) if command == "-h"
+    ));
+    assert!(matches!(
+        run(&["pane", "list", "--session", "-h"]),
+        Ok(Request::PaneList { session: Some(session) }) if session == "-h"
+    ));
+    assert!(matches!(
+        run(&["events", "list", "--epoch", "-h"]),
+        Ok(Request::Events(crate::events::Request::Read { epoch: Some(epoch), .. })) if epoch == "-h"
+    ));
+    assert!(matches!(
+        run(&["worktree", "open", "--branch", "-h"]),
+        Ok(Request::Worktree(crate::worktree::Request::Open { branch: Some(branch), .. })) if branch == "-h"
+    ));
+}
+
+#[test]
+fn actual_help_flags_are_recognized_at_option_boundaries() {
+    for words in [
+        vec!["pane", "list", "--session", "-h", "--help"],
+        vec!["workspace", "create", "--command", "-h", "--help"],
+        vec!["tab", "create", "--command", "--help", "-h"],
+        vec!["pane", "report-metadata", "p1", "--title", "-h", "--help"],
+        vec!["worktree", "open", "--branch", "-h", "--help"],
+        vec!["events", "list", "--epoch", "-h", "--help"],
+        vec!["agent", "wait", "p1", "-h"],
+    ] {
+        assert_eq!(run(&words), Err(HELP.into()), "{words:?}");
+    }
+    assert!(matches!(
+        run(&["pane", "send-text", "p1", "--", "--help"]),
+        Ok(Request::PaneSendText { text, .. }) if text == "--help"
+    ));
+    assert!(matches!(
+        run(&["agent", "prompt", "p1", "--", "-h"]),
+        Ok(Request::AgentPrompt { text, .. }) if text == "-h"
+    ));
+}
+
+#[test]
+fn destructive_api_help_cannot_be_hidden_by_values_or_separator() {
+    for command in [
+        ["pane", "close"],
+        ["workspace", "close"],
+        ["tab", "close"],
+        ["worktree", "remove"],
+        ["server", "stop"],
+    ] {
+        for flag in ["--help", "-h"] {
+            for prefix in ["--", "--path", "--workspace", "-n", "-s", "-x", "-y"] {
+                let words = [command[0], command[1], prefix, flag];
+                assert_eq!(run(&words), Err(HELP.into()), "{words:?}");
+            }
+        }
+    }
+}
+
+#[test]
 fn unknown_group_and_subcommand_are_usage_errors() {
     assert!(run(&["nope", "list"]).unwrap_err().contains("group"));
     let e = run(&["pane", "frob"]).unwrap_err();

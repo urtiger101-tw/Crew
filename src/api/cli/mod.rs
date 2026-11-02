@@ -38,7 +38,11 @@ pub fn parse(args: &[String], current: Option<usize>) -> Result<Request, String>
     let [group, sub, rest @ ..] = args else {
         return Err(HELP.to_string());
     };
-    if is_help_word(sub) || wants_help(rest) {
+    let destructive = matches!(
+        (group.as_str(), sub.as_str()),
+        ("pane" | "workspace" | "tab", "close") | ("worktree", "remove") | ("server", "stop")
+    );
+    if is_help_word(sub) || (destructive && rest.iter().any(|arg| is_help_flag(arg))) {
         return Err(HELP.to_string());
     }
     match group.as_str() {
@@ -58,18 +62,12 @@ pub fn parse(args: &[String], current: Option<usize>) -> Result<Request, String>
     }
 }
 
-fn is_help_flag(s: &str) -> bool {
+pub(crate) fn is_help_flag(s: &str) -> bool {
     matches!(s, "--help" | "-h")
 }
 
 fn is_help_word(s: &str) -> bool {
     is_help_flag(s) || s == "help"
-}
-
-fn wants_help(rest: &[String]) -> bool {
-    rest.iter()
-        .take_while(|s| s.as_str() != "--")
-        .any(|s| is_help_flag(s))
 }
 
 fn api(sub: &str, rest: &[String]) -> Result<Request, String> {

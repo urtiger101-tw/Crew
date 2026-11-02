@@ -323,6 +323,69 @@ fn vt100_wide_char_resize_panic_is_contained() {
 }
 
 #[test]
+fn terminal_title_callbacks_receive_chunked_osc_without_changing_screen_text() {
+    let mut parser =
+        super::PaneParser::new_with_callbacks(4, 80, 0, super::PaneCallbacks::default());
+    parser.process(b"screen text\x1b]2;Review collab");
+    assert_eq!(parser.callbacks().terminal_title, None);
+    parser.process(b"oration task\x07");
+    assert_eq!(
+        parser.callbacks().terminal_title.as_deref(),
+        Some("Review collaboration task")
+    );
+    assert_eq!(parser.screen().contents(), "screen text");
+    parser.process("\x1b]0;協作修正\x1b\\".as_bytes());
+    assert_eq!(
+        parser.callbacks().terminal_title.as_deref(),
+        Some("協作修正")
+    );
+    assert_eq!(parser.screen().contents(), "screen text");
+    parser.process(b"\x1b]2;Review;collab;");
+    assert_eq!(
+        parser.callbacks().terminal_title.as_deref(),
+        Some("協作修正")
+    );
+    parser.process(b"task\x07");
+    assert_eq!(
+        parser.callbacks().terminal_title.as_deref(),
+        Some("Review;collab;task")
+    );
+    parser.process("\x1b]0;修正;;驗證;\x1b\\".as_bytes());
+    assert_eq!(
+        parser.callbacks().terminal_title.as_deref(),
+        Some("修正;;驗證;")
+    );
+    parser.process(b"\x1b]52;c;ignored\x07");
+    assert_eq!(
+        parser.callbacks().terminal_title.as_deref(),
+        Some("修正;;驗證;")
+    );
+    assert_eq!(parser.screen().contents(), "screen text");
+    parser.process(b"\x1b]2;\x07");
+    assert_eq!(parser.callbacks().terminal_title, None);
+}
+
+#[test]
+fn terminal_title_callbacks_sanitize_and_bound_untrusted_display_text() {
+    use vt100::Callbacks;
+    let mut parser =
+        super::PaneParser::new_with_callbacks(4, 80, 0, super::PaneCallbacks::default());
+    let mut callbacks = super::PaneCallbacks::default();
+    callbacks.set_window_title(
+        parser.screen_mut(),
+        "  Review\n\t\u{202e}修正\u{2066}  ".as_bytes(),
+    );
+    assert_eq!(callbacks.terminal_title.as_deref(), Some("Review修正"));
+    callbacks.set_window_title(parser.screen_mut(), "界".repeat(100).as_bytes());
+    assert_eq!(
+        callbacks.terminal_title.as_deref().unwrap().chars().count(),
+        80
+    );
+    callbacks.set_window_title(parser.screen_mut(), b" \t\r\n ");
+    assert_eq!(callbacks.terminal_title, None);
+}
+
+#[test]
 fn agent_session_vars_are_not_inherited_by_panes() {
     for name in [
         "CLAUDECODE",
