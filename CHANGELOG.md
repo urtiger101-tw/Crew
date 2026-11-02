@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Keep restored agent panes visibly pending with their saved argv. Resume explicitly
+  with `crew pane resume pN` or `prefix R`; repeated requests do not send the command
+  again. Duplicate session names include an attach hint.
+- Add read-only `crew doctor [--json]` diagnostics for the connected daemon's version,
+  executable, PID, start time and color-related environment hazards. Pane environment
+  isolation and per-client color behavior retain explicit user overrides.
+- Show titles for all panes by default, including single and zoomed panes. Strengthen
+  focused borders, show agent names in automatic window labels, and spell out status
+  counts. Keep emoji ZWJ sequences together in chrome and exclude terminal controls.
+- The reported Claude Code input-only CJK missing/overlapping-text issue remains
+  unreproduced. Programmatic split-pane wrap/edit and ANSI replay checks pass;
+  Windows IME preedit and native visual acceptance remain unverified.
+
 - Drop the legacy `tmuxlike` name. The `tmuxlike` executable is removed, and
   `TMUXLIKE*` environment variables are no longer read or set for panes. Workspace
   `--env` rejects `TMUXLIKE` keys. The default socket is now `crew-<user>.sock`.
@@ -17,11 +30,14 @@
   An ignored test in `tests/pane_host_lost.rs` records this.
 
 - Add a function-key toolbar on the top row over the pane columns: twelve localized
-  default buttons (help, new, split, zoom, next, copy, paste, tree, close, sidebar,
-  detach) that run on click or `prefix` then `F1`..`F12`; `toolbar_fkeys` lets plain
-  F-keys run them. Kill commands ask through `confirm-before`; clicks are ignored
+  default buttons (hide, new, split, zoom, next, copy, paste, tree, close, sidebar,
+  detach) that run on click or `prefix` then `F1`..`F12`; plain F1 always toggles
+  visibility, while `toolbar_fkeys` enables plain F2..F12. Help remains `prefix ?`.
+  Kill commands ask through `confirm-before`; clicks are ignored
   while a prompt is open. `toolbar` (default on) and `toolbar-fkeys` can be set at
-  runtime; panes move down one row while the toolbar is shown (sessions of 4+ rows).
+  runtime; a thin divider is drawn directly below the toolbar, and panes move down
+  two rows while both are shown (sessions of 5+ rows). Narrow toolbars show at most
+  six buttons.
 - Allow up to 12 custom `[[toolbar_buttons]]` with validated labels (1-24 columns,
   no control, bidi or invisible separator characters) and parsed commands.
 - Add `scripts/toolbar_smoke.py`, which drives the toolbar through a real attached

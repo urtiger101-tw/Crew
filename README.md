@@ -253,8 +253,8 @@ crew set mouse off          # 任何伺服器指令皆可從命令列執行 / ru
 按下前綴鍵後，狀態列改為「按鍵提示列」（which-key bar），列出常用按鍵與用途，內容取自目前的按鍵設定，改綁後會跟著變。沒有逾時：下一個按鍵、`Esc` 或點擊會結束它。未綁定的按鍵會顯示 `C-b X is not bound (C-b ? lists keys)`。`confirm-close` 開啟時，`x` 與 `&` 會詢問 `kill pane p2 (…)? (y/n)`，按 `y` 執行，其他鍵取消。
 After the prefix, the status bar becomes a which-key bar listing the common keys and their uses, taken from your current bindings, so rebinding is reflected. It does not time out: the next key, `Esc` or a click ends it. An unbound key shows `C-b X is not bound (C-b ? lists keys)`. With `confirm-close` on, `x` and `&` ask `kill pane p2 (…)? (y/n)`: `y` runs it, any other key cancels.
 
-工具列按鈕（頂列）：`prefix` 後按 `F1`–`F12` 執行第 n 個按鈕；若該鍵已有自訂綁定（`bind`），以綁定為準。`toolbar_fkeys = true` 時，不加前綴的 `F1`–`F12` 直接執行按鈕，不再送到窗格內的程式。點擊按鈕亦會執行（輸入列開啟時點擊無作用）。`F10`（關閉）與 `x` 相同：`confirm-close` 開啟時先以 y/n 詢問。
-Toolbar buttons: `prefix` then `F1`–`F12` runs button n; a custom binding (`bind`) on that key wins. With `toolbar_fkeys = true`, plain `F1`–`F12` run the buttons directly and no longer reach the program in the pane. Clicking a button runs it too (not while a prompt is open). F10 (close) works like `x`: with `confirm-close` on it asks y/n first.
+工具列按鈕（頂列）：`prefix` 後按 `F1`–`F12` 執行第 n 個按鈕；若該鍵已有自訂綁定（`bind`），以綁定為準。`toolbar_fkeys = true` 時，不加前綴的 `F2`–`F12` 直接執行按鈕，不再送到窗格內的程式。點擊按鈕亦會執行（輸入列開啟時點擊無作用）。`F10`（關閉）與 `x` 相同：`confirm-close` 開啟時先以 y/n 詢問。
+Toolbar buttons: `prefix` then `F1`–`F12` runs button n; a custom binding (`bind`) on that key wins. With `toolbar_fkeys = true`, plain `F2`–`F12` run the buttons directly and no longer reach the program in the pane. Clicking a button runs it too (not while a prompt is open). F10 (close) works like `x`: with `confirm-close` on it asks y/n first.
 
 不按前綴也能回看輸出：`Shift+↑`／`Shift+↓` 逐行捲動目前窗格的先前輸出，`Shift+PgUp`／`Shift+PgDn` 整頁捲動；捲離底部即進入捲動模式（可接著用複製模式按鍵），捲回底部自動結束。不加 Shift 的方向鍵仍交給 shell（指令歷史）。全螢幕程式（alternate screen，如 vim）照常收到按鍵；唯一例外是複製模式中已有選取範圍時，按鍵仍歸複製模式。`scroll_keys = false` 可關閉。
 Browse earlier output without the prefix: `Shift+Up`/`Shift+Down` scroll the active pane one line, `Shift+PgUp`/`Shift+PgDn` one page. Scrolling off the bottom enters scroll mode (copy-mode keys then work); scrolling back to the bottom leaves it. Plain arrows still go to the shell (history). Full-screen apps (alternate screen, e.g. vim) still receive the keys, except while a copy-mode selection is active, which keeps them. Turn off with `scroll_keys = false`.
@@ -466,8 +466,10 @@ crew agent read reviewer --source recent --lines 80
   On Linux, layout persistence and worktree occupancy checks read the pane process's current directory; ordinary pane JSON still reports the directory recorded at startup. Windows and macOS currently use the start directory, so later `cd` commands are not reflected in the saved directory.
 - 不保存：執行中的程式與行程、螢幕內容與捲動回溯、shell 變數與歷程。還原時每個窗格會在保存的 cwd 重新啟動 shell。
   Not saved: running processes, screen contents and scrollback, shell variables and history. On restore each pane starts a new shell in its saved cwd.
-- Resume 指令：`pane report-agent ... -- RESUME...` 給的指令，還原後會在該窗格的 shell 中輸入並送出（Enter）。crew 依 POSIX shell 與 PowerShell 的引號規則組成指令，不支援 cmd.exe。第一個參數必須是程式名稱，不可為路徑（如 `./claude`、`C:\...`）；參數不可含單引號（含 PowerShell 的全形引號）或控制字元。不符合時不送出，並記入除錯紀錄。
-  Resume commands: the command given after `--` in `pane report-agent` is typed and submitted (Enter) in the pane's shell after a restore. crew quotes it by POSIX shell and PowerShell rules; cmd.exe is not supported. The first argument must be a program name, not a path (such as `./claude` or `C:\...`), and arguments may not contain apostrophes (including PowerShell's typographic ones) or control characters. Otherwise nothing is sent and the rejection is logged.
+- Resume 指令：`pane report-agent ... -- RESUME...` 給的指令只會保存，還原時不自動執行。代理窗格會顯示「已還原，尚未執行」與保存的 argv；選取窗格後按 `prefix R`，或執行 `crew pane resume pN`，才會在該窗格的 shell 中送出指令。同一個還原窗格重複要求不會再次送出，`resume-requested` 只代表已要求續接，仍須等待代理的即時回報。`new -s NAME` 遇到已還原的同名 session 會提示使用 `crew attach -t NAME`。
+  Resume commands: argv saved after `--` in `pane report-agent` is retained without execution during restore. Restored agent panes show that the agent is not running and display the saved argv. Focus the pane and press `prefix R`, or run `crew pane resume pN`, to submit it once. Repeated requests do not send another command; `resume-requested` awaits a live agent report. A duplicate `new -s NAME` gives an attach hint.
+  指令依 POSIX shell 與 PowerShell 的引號規則組成，不支援 cmd.exe。第一個參數必須是程式名稱，不可為路徑；參數不可含單引號（含 PowerShell 的全形引號）或控制字元。不符合時回傳 `resume_unavailable`，仍可查看保存的 argv 並手動啟動。
+  Commands use POSIX shell and PowerShell quoting; cmd.exe is unsupported. The first argument must be a program name without a path, and arguments cannot contain apostrophes (including PowerShell's typographic ones) or control characters. Rejected commands return `resume_unavailable`; the saved argv remains available for manual launch.
 - 位置：`$CREW_STATE`；未設定時使用資料目錄。停用：設定檔 `persist = false`，或執行期 `crew set persist off`（會立即刪除保存檔）。
   Location: `$CREW_STATE`, or the data directory if unset. Disable with `persist = false` in the config, or `crew set persist off` at runtime, which deletes the state file immediately.
 - 何時刪除保存檔：關閉最後一個 session（例如 `kill-session`，或 `pane close` 關掉最後一個窗格）時，伺服器會刪除保存檔並結束，因此不會還原。只有 `crew server stop`，或伺服器異常結束／重新開機，會留下可還原的版面。
@@ -498,9 +500,9 @@ osc52 = true            # 複製時寫入系統剪貼簿 / copy to system clipbo
 persist = true          # 保存並還原版面 / save and restore the layout across server restarts
 hints = true            # 狀態列的 "? help"、側邊欄提示與首次連線提示（which-key 不受影響）/ status-bar help, sidebar hint and first-attach tip (not the which-key bar)
 confirm_close = true    # x 與 & 先以 y/n 確認 / ask y/n before x and &
-pane_titles = "auto"    # 窗格標題列：off | auto | always / pane title rows
+pane_titles = "always"    # 窗格標題列：off | auto | always / pane title rows
 toolbar = true          # 頂列功能鍵工具列 / function-key toolbar on the top row
-toolbar_fkeys = false   # F1..F12 直接執行按鈕 / plain F1..F12 run the buttons
+toolbar_fkeys = false   # F2..F12 直接執行按鈕 / plain F1..F12 run the buttons
 scroll_keys = true      # Shift+方向鍵/PgUp/PgDn 捲動先前輸出 / Shift+arrows/PgUp/PgDn scroll back
 
 unbind = ["x"]          # 移除預設按鍵；"all" 移除全部 / remove defaults ("all" = every default)
@@ -537,23 +539,25 @@ A `.toml` file replaces the whole config; any other file is run line by line as 
 
 ### 窗格標題 Pane titles
 
-- `pane-titles`（預設 `auto`）：`auto` 只在分割視窗（≥ 2 個窗格）、未縮放、窗格高度 ≥ 6 列，且該窗格有 agent 回報或標籤時顯示；`always` 在分割且未縮放、高度 ≥ 2 列時一律顯示；`off` 關閉。
-  Default `auto`: shown only in split windows that are not zoomed, for panes at least 6 rows tall that have an agent report or a label. `always` shows them in every unzoomed split pane at least 2 rows tall. `off` hides them.
+- `pane-titles`（預設 `always`）：`auto` 只在分割視窗（≥ 2 個窗格）、未縮放、窗格高度 ≥ 6 列，且該窗格有 agent 回報或標籤時顯示；`always` 在所有高度 ≥ 2 列的窗格顯示（含單一與縮放窗格）；`off` 關閉。
+  Default `always`. `auto` is shown only in split windows that are not zoomed, for panes at least 6 rows tall that have an agent report or a label. `always` shows them in every pane at least 2 rows tall, including single and zoomed panes. `off` hides them.
 - 標題佔用窗格的第一列：有標題的窗格，PTY 少 1 列，`pane list` 的 `rows` 也少 1。標題格式為 `符號 名稱 · 狀態`，窗格 ID 在右側；焦點窗格反白。點擊標題會聚焦該窗格。
   A title takes the pane's first row, so a titled pane has 1 row less: its PTY is 1 row shorter and `pane list` reports `rows` 1 smaller. The title reads `glyph name · state`, with the pane ID on the right; the focused title is highlighted. Clicking a title focuses its pane.
 
+說明按鍵：`prefix ?`。Help: `prefix ?`.
+
 ### 工具列 Toolbar
 
-- `toolbar`（預設 `true`）：在最上一列（第 0 列）顯示功能鍵按鈕，只覆蓋窗格欄位，不覆蓋側邊欄；顯示時窗格從第 1 列開始。
-  Default `true`: function-key buttons on row 0, over the pane columns only (not the sidebar); when shown, panes start at row 1.
-- `toolbar_fkeys`（預設 `false`）：`true` 時不加前綴的 `F1`–`F12` 直接執行按鈕，不再送到窗格內的程式；需同時開啟 `toolbar`。
-  Default `false`: with `true`, plain `F1`–`F12` run their buttons and no longer reach the program in the pane; `toolbar` must be on.
+- `toolbar`（預設 `true`）：在最上一列（第 0 列）顯示功能鍵按鈕，只覆蓋窗格欄位，不覆蓋側邊欄；第 1 列顯示細分隔線，窗格從第 2 列開始。F1 切換工具列與分隔線；不足 5 列時自動隱藏。
+  Default `true`: function-key buttons on row 0, over the pane columns only (not the sidebar); a thin separator occupies row 1, and panes start at row 2. F1 toggles both rows. They hide below 5 terminal rows; narrow layouts show at most six buttons.
+- `toolbar_fkeys`（預設 `false`）：`true` 時不加前綴的 `F2`–`F12` 直接執行按鈕，不再送到窗格內的程式；需同時開啟 `toolbar`。
+  Default `false`: with `true`, plain `F2`–`F12` run their buttons and no longer reach the program in the pane; `toolbar` must be on.
 
 未設定 `[[toolbar_buttons]]` 時的預設按鈕 Default buttons (when no `[[toolbar_buttons]]` is set)：
 
 | 按鍵 Key | 標籤 Label | 繁中標籤 zh-TW | 指令 Command |
 |---|---|---|---|
-| F1 | help | 說明 | `list-keys` |
+| F1 | hide | 隱藏 | `set toolbar off`（再次按 F1 可顯示 / press F1 again to show） |
 | F2 | new | 新視窗 | `new-window` |
 | F3 | split│ | 左右分割 | `split-window -h` |
 | F4 | split─ | 上下分割 | `split-window -v` |
@@ -568,7 +572,7 @@ A `.toml` file replaces the whole config; any other file is run line by line as 
 
 ```toml
 toolbar = true          # 頂列功能鍵工具列 / function-key toolbar on the top row
-toolbar_fkeys = false   # F1..F12 直接執行按鈕 / plain F1..F12 run the buttons
+toolbar_fkeys = false   # F2..F12 直接執行按鈕 / plain F1..F12 run the buttons
 scroll_keys = true      # Shift+方向鍵/PgUp/PgDn 捲動先前輸出 / Shift+arrows/PgUp/PgDn scroll back
 
 [[toolbar_buttons]]     # 依序對應 F1、F2 … / in order: F1, F2 …
@@ -689,3 +693,6 @@ GitHub workflow 只保留明確授權的手動入口，推送、PR 與 tag 不�
 ## License
 
 MIT
+
+`crew doctor`（或 `crew doctor --json`）唯讀查詢目前 socket 的 daemon 版本、執行檔、啟動時間與顏色環境風險；不會啟動或重啟 daemon。啟動時間以 Unix 毫秒表示。舊版 daemon 不支援時會回報錯誤，需更新 daemon。
+`crew doctor [--json]` reports the connected daemon version, executable, start time (Unix milliseconds), and color environment hazards without starting or restarting it. Older daemons report an unsupported-request/transport error until updated.
