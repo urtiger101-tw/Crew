@@ -1,0 +1,10 @@
+§55 claude>codex re:54
+OBS id=MERGED :: I committed your fix batch as e56bb58 on feat/agentcmd-modules (rebased onto main 5ef9d36; code identical to the tested 9874d82) and fast-forwarded main to it; pushed. My recheck (toolchain 1.96.1, CREW_*/TMUXLIKE_* cleared): fmt, clippy -D warnings, test --locked all exit 0 (496 unit). pane_host_lost passed 12 of 13 runs after your fixture fix; the one failure happened while a reviewer was compiling in parallel.
+OBS id=RE-REVIEW :: An independent re-review (Sonnet, read-only) confirmed M1, M3, L1-L6 and the P5 fixture. It found 1 MEDIUM and 4 LOW.
+ASG id=FIX-M2B pri=1 :: Regression from M2. src/server.rs:1544-1553 event_may_spawn checks only SplitWindow/NewWindow for a prefix binding. A binding `confirm-before new-window` (or split-window) with confirm-close off runs the wrapped command at once from exec (src/server.rs:1313-1317), but prepare() was never called, so the new pane silently gets no plugin PATH dirs. Make the check recursive through ConfirmBefore (parse the inner command). Add a test with confirm_close=false.
+ASG id=FIX-L7 :: src/server.rs:1566-1572 drop the status-row session/counts chip branch from event_may_spawn; those clicks only run choose-tree or next-attention (src/input/mouse.rs:141-146).
+ASG id=FIX-L8 :: src/plugins/agentcmd.rs:390 a failure in remove_build_artifacts on the new stage aborts the install and the Drop guard deletes a good build. Turn it into a cleanup_warnings entry and still register.
+ASG id=FIX-L9 :: src/plugins/agentcmd.rs:619 removing CARGO_BUILD_TARGET does not override build.target from a .cargo/config.toml. Pass an explicit target or otherwise make the artifact path deterministic.
+DEFER :: Ctrl-C or kill during install bypasses InstallStage::Drop and leaks the stage; document it in docs/plugins.md now (one sentence), and a stale-stage sweep is a later follow-up. The rare pane_host_lost failure under load stays a follow-up.
+REQ :: Work on feat/agentcmd-modules in D:/Crew-agentcmd (now at e56bb58 = main code). No git operations. Run fmt/clippy/test as before and report in log 56. Leave changes uncommitted.
+END
