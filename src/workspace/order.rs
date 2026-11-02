@@ -35,14 +35,14 @@ fn row_target(st: &State, (si, wi, pi): Entry) -> Option<RowTarget> {
     }
 }
 
-struct ClientTargets {
+pub(crate) struct ClientTargets {
     client: usize,
     chooser: Option<(Filter, Option<RowTarget>)>,
     confirm_tab: Option<usize>,
 }
 
 /// The chooser and close confirmation use display positions, so retain their meaning too.
-fn remember_clients(st: &State) -> Vec<ClientTargets> {
+pub(crate) fn remember_clients(st: &State) -> Vec<ClientTargets> {
     st.clients
         .iter()
         .map(|(&client, c)| {
@@ -76,7 +76,7 @@ fn remember_clients(st: &State) -> Vec<ClientTargets> {
         .collect()
 }
 
-fn restore_clients(st: &mut State, targets: Vec<ClientTargets>) {
+pub(crate) fn restore_clients(st: &mut State, targets: Vec<ClientTargets>) {
     for saved in targets {
         let chooser = saved.chooser.map(|(filter, target)| {
             target.and_then(|target| {
@@ -133,7 +133,7 @@ pub(super) fn workspace(
     }))
 }
 
-pub(super) fn tab(
+pub(crate) fn tab(
     st: &mut State,
     si: usize,
     from: usize,
@@ -240,7 +240,12 @@ pub(super) fn transfer(
     for client in st.clients.values_mut() {
         if client.session == source_name
             || client.session == destination_name
-            || client.drag.is_some_and(|(pid, ..)| panes.contains(&pid))
+            || client.drag.is_some_and(|drag| match drag {
+                crate::server::Drag::Copy { pane, .. } | crate::server::Drag::Pane { pane, .. } => {
+                    panes.contains(&pane)
+                }
+                crate::server::Drag::Tab { tab, .. } => tab == tab_id,
+            })
         {
             // A drag began against the old workspace geometry.
             client.drag = None;

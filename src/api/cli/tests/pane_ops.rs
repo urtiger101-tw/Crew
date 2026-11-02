@@ -368,3 +368,15 @@ fn read_defaults_source_and_lines() {
         "pane", "read", "p1", "--source", "recent", "--source", "visible"
     ]));
 }
+#[test]
+fn pane_swap_requires_two_valid_ids() {
+    assert!(run(&["pane", "swap", "p1", "p2"]).is_ok());
+    for args in [
+        vec!["pane", "swap"],
+        vec!["pane", "swap", "p1"],
+        vec!["pane", "swap", "p1", "bad"],
+        vec!["pane", "swap", "p1", "p2", "p3"],
+    ] {
+        assert!(run(&args).is_err(), "{args:?}");
+    }
+}

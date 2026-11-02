@@ -845,3 +845,28 @@ fn keys() {
         "C-b"
     );
 }
+#[test]
+fn reorder_commands_accept_only_unambiguous_targets() {
+    for line in [
+        "swap-pane -U",
+        "swap-pane -D",
+        "swap-pane -s p1 -t p2",
+        "swap-pane -t p2",
+        "move-window -L",
+        "move-window -R",
+    ] {
+        assert!(super::parse(line).is_ok(), "{line}");
+    }
+    for line in [
+        "swap-pane",
+        "swap-pane -U -D",
+        "swap-pane -t p2 -D",
+        "swap-pane -s bad -t p2",
+        "swap-pane -t p2 -t p3",
+        "move-window",
+        "move-window -U",
+        "move-window -L -R",
+    ] {
+        assert!(super::parse(line).is_err(), "{line}");
+    }
+}

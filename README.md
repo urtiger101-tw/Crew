@@ -235,6 +235,8 @@ crew set mouse off          # 任何伺服器指令皆可從命令列執行 / ru
 | 方向鍵 Arrows / `h j k l` | 移動焦點 Move focus |
 | `Ctrl`/`Alt`+方向鍵, `H J K L` | 調整窗格大小 Resize pane |
 | `o` | 下一個窗格 Next pane |
+| `{` / `}` | 與前一個／下一個窗格交換位置 Swap with previous / next pane |
+| `Shift+Left` / `Shift+Right` | 將目前分頁往左／右移一格 Move current tab left / right |
 | `Tab` / `BTab` | 下一個／上一個需要處理的窗格（blocked 優先，再 done，跨 session）Next / previous pane needing you (blocked first, then done; across sessions) |
 | `z` | 縮放（最大化）窗格 Zoom pane |
 | `x` | 關閉窗格（y/n 確認）Kill pane (asks y/n) |
@@ -280,6 +282,10 @@ Browse earlier output without the prefix: `Shift+Up`/`Shift+Down` scroll the act
 
 滑鼠：在窗格內拖曳即選取，放開時自動複製（含 OSC 52 系統剪貼簿）。
 Mouse: drag inside a pane to select; releasing copies (also to the system clipboard via OSC 52).
+
+拖曳窗格**標題列**到同一分頁的另一個窗格，放開即交換位置；拖曳底部的**分頁標籤**可調整順序（放在目標標籤左半部為插入其前、右半部為插入其後）。移動至少兩個字元格才算拖曳；`Esc` 或放到有效區域外可取消。窗格 ID、執行中的程序與 shell 狀態保留，版面比例不變，焦點跟著原窗格。標題列隱藏時可用 `prefix {`／`prefix }` 或 `crew pane swap p1 p2`。
+
+Drag a pane **title** onto another pane in the same tab to swap their positions on release. Drag a bottom **tab label** to reorder it: the target label's left half inserts before it, and its right half inserts after it. Move at least two cells to start a drag; Escape or dropping outside a valid target cancels it. Pane IDs, running processes, shell state, split ratios and pane focus are preserved. With titles hidden, use `prefix {` / `prefix }` or `crew pane swap p1 p2`.
 
 ### 剪貼簿圖片 Clipboard images
 
@@ -394,6 +400,7 @@ A JSON command interface over the same local socket, so scripts and coding agent
 | pane | `pane get <id>` | 單一窗格資料 One pane |
 | pane | `pane current [--pane ID \| --current]` | 查詢目前窗格 Current pane |
 | pane | `pane split [ID] --direction right\|down [--ratio F] [--cwd P] [--focus\|--no-focus] [--command TEXT]` | 分割窗格，預設不改變焦點；TEXT 為單一 shell 指令字串 Split; focus unchanged by default; TEXT is one shell command string |
+| pane | `pane swap SOURCE TARGET` | 交換同分頁兩窗格的位置，保留程序與焦點 Swap positions within one tab, preserving processes and focus |
 | pane | `pane focus <id>` / `pane focus --direction D` | 移動焦點 Move focus |
 | pane | `pane zoom [ID] [--toggle\|--on\|--off]` | 縮放 Zoom |
 | pane | `pane rename <id> <label>` / `--clear` | 設定窗格標籤 Pane label |

@@ -126,6 +126,7 @@ pane list [--session NAME]
 pane get <id>
 pane current [--pane ID | --current]
 pane split [TARGET] --direction right|down [--ratio F] [--cwd PATH] [--focus | --no-focus] [--command TEXT]
+pane swap <source-id> <target-id>  (same tab; keeps processes and focus)
 pane focus <id>
 pane focus --direction left|right|up|down [--pane ID | --current]
 pane zoom [TARGET] [--toggle | --on | --off]
@@ -167,6 +168,7 @@ pane list [--session NAME]
 pane get <id>
 pane current [--pane ID | --current]
 pane split [TARGET] --direction right|down [--ratio F] [--cwd PATH] [--focus | --no-focus] [--command TEXT]
+pane swap <source-id> <target-id>  （同一分頁內交換位置，保留程序與焦點）
 pane focus <id>
 pane focus --direction left|right|up|down [--pane ID | --current]
 pane zoom [TARGET] [--toggle | --on | --off]

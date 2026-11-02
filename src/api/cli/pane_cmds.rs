@@ -16,6 +16,7 @@ const PANE_SUBS: &[&str] = &[
     "resume",
     "current",
     "split",
+    "swap",
     "focus",
     "zoom",
     "rename",
@@ -35,6 +36,14 @@ pub(super) fn dispatch(
     current: Option<usize>,
 ) -> Result<Request, String> {
     match sub {
+        "swap" => {
+            let words = no_opts(rest)?;
+            check_count(&words, 2, 2, "pane swap <source-id> <target-id>")?;
+            Ok(Request::PaneSwap {
+                pane: pane_id(&words[0])?,
+                target: pane_id(&words[1])?,
+            })
+        }
         "list" => pane_list(rest),
         "get" => pane_get(rest),
         "resume" => {

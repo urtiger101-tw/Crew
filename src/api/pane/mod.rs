@@ -57,6 +57,7 @@ pub fn handle(shared: &Shared, req: Request) -> ApiResult {
         | Request::PaneGet { .. }
         | Request::PaneCurrent { .. } => query::query(shared, req),
         Request::PaneSplit { .. }
+        | Request::PaneSwap { .. }
         | Request::PaneFocus { .. }
         | Request::PaneFocusDirection { .. }
         | Request::PaneZoom { .. }

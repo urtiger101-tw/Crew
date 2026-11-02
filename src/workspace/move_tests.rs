@@ -288,7 +288,12 @@ pub(super) fn add_client(st: &mut State, id: usize, entry: crate::render::Entry,
             chooser: Some(pack_chooser(selection, filter)),
             popup: None,
             message: None,
-            drag: Some((120, 5, 2, true)),
+            drag: Some(crate::server::Drag::Copy {
+                pane: 120,
+                row: 5,
+                col: 2,
+                moved: true,
+            }),
             env: Default::default(),
         },
     );
@@ -321,7 +326,15 @@ fn workspace_move_preserves_attached_clients_and_chooser_targets() {
     ] {
         let c = &st.clients[&cid];
         assert_eq!(c.session, "project.2:中文");
-        assert_eq!(c.drag, Some((120, 5, 2, true)));
+        assert_eq!(
+            c.drag,
+            Some(crate::server::Drag::Copy {
+                pane: 120,
+                row: 5,
+                col: 2,
+                moved: true
+            })
+        );
         let (sel, filter) = unpack_chooser(c.chooser.unwrap());
         assert_eq!(visible_entries(&st, filter)[sel], expected);
         if cid == 3 {

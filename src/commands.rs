@@ -47,6 +47,14 @@ pub enum Cmd {
     KillServer,
     SelectPane(Move),
     NextPane,
+    SwapPane {
+        source: Option<usize>,
+        target: Option<usize>,
+        backward: bool,
+    },
+    MoveWindow {
+        backward: bool,
+    },
     ResizePane(Move, u16),
     Zoom,
     NextWindow,
@@ -111,6 +119,8 @@ impl Cmd {
             Cmd::KillServer => "kill-server",
             Cmd::SelectPane(_) => "select-pane",
             Cmd::NextPane => "next-pane",
+            Cmd::SwapPane { .. } => "swap-pane",
+            Cmd::MoveWindow { .. } => "move-window",
             Cmd::ResizePane(..) | Cmd::Zoom => "resize-pane",
             Cmd::NextWindow => "next-window",
             Cmd::PrevWindow => "previous-window",
@@ -347,6 +357,51 @@ pub fn parse(line: &str) -> Result<Cmd, String> {
     };
     let has = |f: &str| args.iter().any(|a| a == f);
     Ok(match name.as_str() {
+        "swap-pane" => {
+            let usage = "usage: swap-pane [-s pN] (-t pN | -U | -D)";
+            let (mut source, mut target, mut direction) = (None, None, None);
+            let mut i = 0;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "-s" | "-t" => {
+                        let id = args
+                            .get(i + 1)
+                            .and_then(|s| crate::api::parse_pane_id(s))
+                            .ok_or(usage)?;
+                        let slot = if args[i] == "-s" {
+                            &mut source
+                        } else {
+                            &mut target
+                        };
+                        if slot.replace(id).is_some() {
+                            return Err(usage.into());
+                        }
+                        i += 2;
+                    }
+                    "-U" | "-D" if direction.is_none() => {
+                        direction = Some(args[i] == "-U");
+                        i += 1;
+                    }
+                    _ => return Err(usage.into()),
+                }
+            }
+            if target.is_some() == direction.is_some() {
+                return Err(usage.into());
+            }
+            Cmd::SwapPane {
+                source,
+                target,
+                backward: direction.unwrap_or(false),
+            }
+        }
+        "move-window" => {
+            if args.len() != 1 || !matches!(args[0].as_str(), "-L" | "-R") {
+                return Err("usage: move-window -L|-R".into());
+            }
+            Cmd::MoveWindow {
+                backward: args[0] == "-L",
+            }
+        }
         "split-window" | "splitw" => {
             let (options, command) = creation_command(args)?;
             Cmd::SplitWindow {
@@ -686,6 +741,10 @@ pub const DEFAULT_BINDINGS: &[(&str, &str)] = &[
     ("k", "select-pane -U"),
     ("j", "select-pane -D"),
     ("o", "select-pane -t :.+"),
+    ("{", "swap-pane -U"),
+    ("}", "swap-pane -D"),
+    ("S-Left", "move-window -L"),
+    ("S-Right", "move-window -R"),
     ("C-Left", "resize-pane -L 5"),
     ("C-Right", "resize-pane -R 5"),
     ("C-Up", "resize-pane -U 3"),

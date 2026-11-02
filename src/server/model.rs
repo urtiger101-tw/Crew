@@ -252,6 +252,32 @@ impl Message {
     }
 }
 
+/// A left-button gesture, committed only on release for pane and tab moves.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Drag {
+    Copy {
+        pane: usize,
+        row: i64,
+        col: u16,
+        moved: bool,
+    },
+    Pane {
+        workspace: usize,
+        tab: usize,
+        pane: usize,
+        start: (u16, u16),
+        size: (u16, u16),
+        moved: bool,
+    },
+    Tab {
+        workspace: usize,
+        tab: usize,
+        start: (u16, u16),
+        size: (u16, u16),
+        moved: bool,
+    },
+}
+
 pub struct Client {
     pub session: String,
     pub sender: Box<dyn Write + Send>,
@@ -261,8 +287,8 @@ pub struct Client {
     pub chooser: Option<usize>,
     pub popup: Option<(Vec<String>, usize)>,
     pub message: Option<Message>,
-    /// mouse drag start: (pane, abs row, col), and whether we moved
-    pub drag: Option<(usize, i64, u16, bool)>,
+    /// In-progress mouse gesture.
+    pub drag: Option<Drag>,
     /// terminal capabilities reported at attach (theme resolution)
     pub env: crate::theme::ClientEnv,
 }

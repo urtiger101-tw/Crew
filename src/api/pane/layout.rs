@@ -10,6 +10,16 @@ use serde_json::json;
 
 pub(super) fn layout_op(shared: &Shared, req: Request) -> ApiResult {
     match req {
+        Request::PaneSwap { pane, target } => {
+            let mut st = lock(shared);
+            let source = resolve_pane(&st, Some(pane))?;
+            let target = resolve_pane(&st, Some(target))?;
+            let swapped = st.swap_panes(source, target).map_err(ApiError::invalid)?;
+            Ok(Reply::Json(json!({
+                "swapped": swapped,
+                "panes": [crate::api::pane_json(&st, source), crate::api::pane_json(&st, target)],
+            })))
+        }
         Request::PaneSplit {
             pane,
             direction,

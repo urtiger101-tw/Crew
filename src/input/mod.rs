@@ -47,6 +47,7 @@ impl State {
                 self.relayout(si);
                 if let Some(c) = self.clients.get_mut(&cid) {
                     c.frame.invalidate();
+                    c.drag = None;
                 }
             }
             Event::Key(k) if k.kind != KeyEventKind::Release => self.handle_key(shared, cid, si, k),
@@ -62,6 +63,11 @@ impl State {
             Event::Mouse(m) if self.cfg.mouse => {
                 if let Some(line) = self.handle_mouse(cid, si, m) {
                     self.run_line(shared, cid, &line);
+                }
+            }
+            Event::Mouse(_) => {
+                if let Some(c) = self.clients.get_mut(&cid) {
+                    c.drag = None;
                 }
             }
             _ => {}

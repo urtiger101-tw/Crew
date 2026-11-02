@@ -42,6 +42,25 @@ pub enum Node {
 }
 
 impl Node {
+    /// Exchange occupants of two existing slots without altering split geometry.
+    pub fn swapped(&self, first: usize, second: usize) -> Self {
+        match self {
+            Self::Leaf(id) => Self::Leaf(if *id == first {
+                second
+            } else if *id == second {
+                first
+            } else {
+                *id
+            }),
+            Self::Split { dir, ratio, a, b } => Self::Split {
+                dir: *dir,
+                ratio: *ratio,
+                a: Box::new(a.swapped(first, second)),
+                b: Box::new(b.swapped(first, second)),
+            },
+        }
+    }
+
     pub fn layout(&self, r: Rect, out: &mut Vec<(usize, Rect)>) {
         match self {
             Node::Leaf(id) => out.push((*id, r)),

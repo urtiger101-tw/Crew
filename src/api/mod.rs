@@ -133,6 +133,10 @@ pub enum Request {
     PaneFocus {
         pane: usize,
     },
+    PaneSwap {
+        pane: usize,
+        target: usize,
+    },
     PaneFocusDirection {
         pane: Option<usize>,
         direction: Direction,

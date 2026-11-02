@@ -19,6 +19,16 @@ impl State {
         let Some(c) = self.clients.get_mut(&cid) else {
             return;
         };
+        if matches!(
+            c.drag,
+            Some(crate::server::Drag::Pane { .. } | crate::server::Drag::Tab { .. })
+        ) {
+            c.drag = None;
+            if k.code == KeyCode::Esc {
+                self.mark_dirty();
+                return;
+            }
+        }
         // overlays first
         if c.popup.is_some() {
             self.popup_key(cid, k);

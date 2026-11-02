@@ -20,6 +20,7 @@ pub(crate) mod host;
 mod model;
 mod mru;
 pub(crate) mod plugin_paths;
+mod reorder;
 pub use model::*;
 
 pub struct State {
@@ -897,6 +898,16 @@ impl State {
         for w in &s.windows {
             all.extend(self.visible_rects(s, w));
         }
+        if all
+            .iter()
+            .any(|(id, r)| self.panes.get(id).is_some_and(|p| p.rect != *r))
+        {
+            for c in self.clients.values_mut().filter(|c| c.session == s.name) {
+                if matches!(c.drag, Some(Drag::Pane { .. } | Drag::Tab { .. })) {
+                    c.drag = None;
+                }
+            }
+        }
         let scrollback = self.cfg.scrollback;
         for (id, r) in all {
             if let Some(p) = self.panes.get_mut(&id)
@@ -1024,6 +1035,7 @@ impl State {
             if let Some(o) = &other {
                 let c = self.clients.get_mut(&id).unwrap();
                 c.session = o.clone();
+                c.drag = None;
                 c.frame.invalidate();
                 c.message = Some(Message {
                     text: commands::session_ended_text(
@@ -1132,6 +1144,7 @@ impl State {
         let name = s.name.clone();
         if let Some(c) = self.clients.get_mut(&cid) {
             c.session = name;
+            c.drag = None;
             c.frame.invalidate();
         }
         self.relayout(ni);
@@ -1398,6 +1411,33 @@ impl State {
                 if w.zoomed {
                     self.relayout(si);
                 }
+            }
+            Cmd::SwapPane {
+                source,
+                target,
+                backward,
+            } => {
+                let source = source.unwrap_or_else(|| self.active_pane(si));
+                let target = match target {
+                    Some(target) => target,
+                    None => {
+                        let (psi, wi) = self.locate(source).ok_or("no such pane")?;
+                        let panes = self.sessions[psi].windows[wi].panes();
+                        let index = panes.iter().position(|id| *id == source).unwrap();
+                        panes[(index + if backward { panes.len() - 1 } else { 1 }) % panes.len()]
+                    }
+                };
+                self.swap_panes(source, target)?;
+            }
+            Cmd::MoveWindow { backward } => {
+                let s = &self.sessions[si];
+                let from = s.active;
+                let slot = if backward {
+                    from.saturating_sub(1)
+                } else {
+                    (from + 2).min(s.windows.len())
+                };
+                crate::workspace::order::tab(self, si, from, slot).map_err(|e| e.message)?;
             }
             Cmd::ResizePane(m, n) => {
                 let area = self.pane_area(&self.sessions[si]);

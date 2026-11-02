@@ -3,7 +3,7 @@
 mod cli;
 #[cfg(test)]
 mod move_tests;
-mod order;
+pub(crate) mod order;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

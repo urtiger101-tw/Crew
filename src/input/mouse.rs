@@ -10,7 +10,7 @@ use crate::render::{
     SidebarKind, pack_chooser, sidebar_rows_lang, sidebar_text_width, status_hit_at,
     status_regions, toolbar_hit_at, unpack_chooser, visible_entries,
 };
-use crate::server::State;
+use crate::server::{Drag, State};
 use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 
 /// Lines one wheel tick moves a key popup or a pane.
@@ -27,11 +27,11 @@ impl State {
         match m.kind {
             MouseEventKind::Down(MouseButton::Left) => self.click_left(cid, si, m),
             MouseEventKind::Drag(MouseButton::Left) => {
-                self.drag_copy(cid, si, m);
+                self.drag_mouse(cid, si, m);
                 None
             }
             MouseEventKind::Up(MouseButton::Left) => {
-                self.finish_drag(cid);
+                self.finish_drag(cid, si, m);
                 None
             }
             MouseEventKind::ScrollUp | MouseEventKind::ScrollDown => self.wheel(cid, si, m),
@@ -77,6 +77,17 @@ impl State {
         }
         if let Some(pid) = self.title_at(si, m.column, m.row) {
             self.focus_pane(pid);
+            let s = &self.sessions[si];
+            if let Some(c) = self.clients.get_mut(&cid).filter(|c| c.prompt.is_none()) {
+                c.drag = Some(Drag::Pane {
+                    workspace: s.id,
+                    tab: s.windows[s.active].id,
+                    pane: pid,
+                    start: (m.column, m.row),
+                    size: (s.cols, s.rows),
+                    moved: false,
+                });
+            }
         }
         None
     }
@@ -147,6 +158,16 @@ impl State {
         if let Some(wi) = hit {
             self.sessions[si].active = wi;
             self.relayout(si);
+            let s = &self.sessions[si];
+            if let Some(c) = self.clients.get_mut(&cid) {
+                c.drag = Some(Drag::Tab {
+                    workspace: s.id,
+                    tab: s.windows[s.active].id,
+                    start: (col, s.rows - 1),
+                    size: (s.cols, s.rows),
+                    moved: false,
+                });
+            }
         }
         None
     }
@@ -178,15 +199,77 @@ impl State {
             let off = p.parser.screen().scrollback();
             let row = copy::abs_row(m.row - r.y, off);
             if let Some(c) = self.clients.get_mut(&cid) {
-                c.drag = Some((pid, row, m.column - r.x, false));
+                c.drag = Some(Drag::Copy {
+                    pane: pid,
+                    row,
+                    col: m.column - r.x,
+                    moved: false,
+                });
             }
         }
         self.mark_dirty();
     }
 
-    fn drag_copy(&mut self, cid: usize, si: usize, m: MouseEvent) {
-        let Some((pid, row, col, _)) = self.clients.get(&cid).and_then(|c| c.drag) else {
+    fn drag_mouse(&mut self, cid: usize, si: usize, m: MouseEvent) {
+        let Some(drag) = self.clients.get(&cid).and_then(|c| c.drag) else {
             return;
+        };
+        let (pid, row, col) = match drag {
+            Drag::Copy { pane, row, col, .. } => (pane, row, col),
+            Drag::Pane {
+                workspace,
+                tab,
+                pane,
+                start,
+                size,
+                moved,
+            } => {
+                if !self.drag_surface_valid(cid, si, workspace, tab, size) {
+                    self.clients.get_mut(&cid).unwrap().drag = None;
+                } else {
+                    let moved = moved
+                        || start
+                            .0
+                            .abs_diff(m.column)
+                            .saturating_add(start.1.abs_diff(m.row))
+                            >= 2;
+                    self.clients.get_mut(&cid).unwrap().drag = Some(Drag::Pane {
+                        workspace,
+                        tab,
+                        pane,
+                        start,
+                        size,
+                        moved,
+                    });
+                }
+                return;
+            }
+            Drag::Tab {
+                workspace,
+                tab,
+                start,
+                size,
+                moved,
+            } => {
+                if !self.drag_surface_valid(cid, si, workspace, tab, size) {
+                    self.clients.get_mut(&cid).unwrap().drag = None;
+                } else {
+                    let moved = moved
+                        || start
+                            .0
+                            .abs_diff(m.column)
+                            .saturating_add(start.1.abs_diff(m.row))
+                            >= 2;
+                    self.clients.get_mut(&cid).unwrap().drag = Some(Drag::Tab {
+                        workspace,
+                        tab,
+                        start,
+                        size,
+                        moved,
+                    });
+                }
+                return;
+            }
         };
         let s = &self.sessions[si];
         let w = &s.windows[s.active];
@@ -221,18 +304,90 @@ impl State {
         cs.cx = cx;
         cs.cy = cy;
         if let Some(c) = self.clients.get_mut(&cid) {
-            c.drag = Some((pid, row, col, true));
+            c.drag = Some(Drag::Copy {
+                pane: pid,
+                row,
+                col,
+                moved: true,
+            });
         }
         self.mark_dirty();
     }
 
-    fn finish_drag(&mut self, cid: usize) {
-        let Some((pid, _, _, moved)) = self.clients.get_mut(&cid).and_then(|c| c.drag.take())
-        else {
+    fn drag_surface_valid(
+        &self,
+        cid: usize,
+        si: usize,
+        workspace: usize,
+        tab: usize,
+        size: (u16, u16),
+    ) -> bool {
+        let Some(s) = self.sessions.get(si) else {
+            return false;
+        };
+        let Some(c) = self.clients.get(&cid) else {
+            return false;
+        };
+        c.session == s.name
+            && c.prompt.is_none()
+            && c.chooser.is_none()
+            && c.popup.is_none()
+            && s.id == workspace
+            && (s.cols, s.rows) == size
+            && s.windows.get(s.active).is_some_and(|w| w.id == tab)
+    }
+
+    fn finish_drag(&mut self, cid: usize, si: usize, m: MouseEvent) {
+        let Some(drag) = self.clients.get_mut(&cid).and_then(|c| c.drag.take()) else {
             return;
         };
-        if moved {
-            self.copy_selection(cid, pid);
+        match drag {
+            Drag::Copy {
+                pane, moved: true, ..
+            } => self.copy_selection(cid, pane),
+            Drag::Pane {
+                workspace,
+                tab,
+                pane,
+                size,
+                moved: true,
+                ..
+            } if self.drag_surface_valid(cid, si, workspace, tab, size) => {
+                let target = self
+                    .title_at(si, m.column, m.row)
+                    .or_else(|| self.pane_at(si, m.column, m.row).map(|(pid, _)| pid));
+                if let Some(target) = target.filter(|target| *target != pane) {
+                    let _ = self.swap_panes(pane, target);
+                }
+            }
+            Drag::Tab {
+                workspace,
+                tab,
+                size,
+                moved: true,
+                ..
+            } if self.drag_surface_valid(cid, si, workspace, tab, size)
+                && m.row == size.1.saturating_sub(1) =>
+            {
+                let s = &self.sessions[si];
+                let c = &self.clients[&cid];
+                if let Some(target) = status_hit_at(self, c, s, m.column) {
+                    let start = (0..=m.column)
+                        .rev()
+                        .take_while(|col| status_hit_at(self, c, s, *col) == Some(target))
+                        .last()
+                        .unwrap_or(m.column);
+                    let end = (m.column..s.cols)
+                        .take_while(|col| status_hit_at(self, c, s, *col) == Some(target))
+                        .last()
+                        .unwrap_or(m.column)
+                        + 1;
+                    let slot = target + usize::from(m.column - start >= (end - start).div_ceil(2));
+                    let from = s.windows.iter().position(|w| w.id == tab).unwrap();
+                    let _ = crate::workspace::order::tab(self, si, from, slot);
+                }
+            }
+            _ => {}
         }
     }
 
@@ -459,6 +614,179 @@ mod tests {
             modifiers: KeyModifiers::NONE,
         };
         st.handle_mouse(1, 0, m)
+    }
+
+    fn mouse(st: &mut State, kind: MouseEventKind, column: u16, row: u16) {
+        st.handle_mouse(
+            1,
+            0,
+            MouseEvent {
+                kind,
+                column,
+                row,
+                modifiers: KeyModifiers::NONE,
+            },
+        );
+    }
+
+    fn pane_drag_state() -> State {
+        let mut st = toolbar_state(false);
+        st.sessions[0].windows[0].layout = crate::layout::Node::Split {
+            dir: crate::layout::Dir::H,
+            ratio: 0.5,
+            a: Box::new(crate::layout::Node::Leaf(7)),
+            b: Box::new(crate::layout::Node::Leaf(8)),
+        };
+        st
+    }
+
+    fn tab_columns(st: &State, tab: usize) -> Vec<u16> {
+        let s = &st.sessions[0];
+        let c = &st.clients[&1];
+        (0..s.cols)
+            .filter(|col| status_hit_at(st, c, s, *col) == Some(tab))
+            .collect()
+    }
+
+    #[test]
+    fn title_click_and_short_motion_keep_pane_order() {
+        let mut st = pane_drag_state();
+        let rect = st.title_rows(&st.sessions[0], &st.sessions[0].windows[0])[0].1;
+        mouse(
+            &mut st,
+            MouseEventKind::Down(MouseButton::Left),
+            rect.x,
+            rect.y,
+        );
+        mouse(
+            &mut st,
+            MouseEventKind::Drag(MouseButton::Left),
+            rect.x + 1,
+            rect.y,
+        );
+        mouse(
+            &mut st,
+            MouseEventKind::Up(MouseButton::Left),
+            rect.x + 1,
+            rect.y,
+        );
+        assert_eq!(st.sessions[0].windows[0].panes(), vec![7, 8]);
+    }
+
+    #[test]
+    fn title_drag_swaps_with_target_body_only_on_release() {
+        let mut st = pane_drag_state();
+        let s = &st.sessions[0];
+        let title = st.title_rows(s, &s.windows[0])[0].1;
+        let body = st.visible_rects(s, &s.windows[0])[1].1;
+        mouse(
+            &mut st,
+            MouseEventKind::Down(MouseButton::Left),
+            title.x,
+            title.y,
+        );
+        mouse(
+            &mut st,
+            MouseEventKind::Drag(MouseButton::Left),
+            body.x,
+            body.y,
+        );
+        assert_eq!(st.sessions[0].windows[0].panes(), vec![7, 8]);
+        mouse(
+            &mut st,
+            MouseEventKind::Up(MouseButton::Left),
+            body.x,
+            body.y,
+        );
+        assert_eq!(st.sessions[0].windows[0].panes(), vec![8, 7]);
+        assert_eq!(st.sessions[0].windows[0].active, 7);
+    }
+
+    #[test]
+    fn title_drag_outside_or_surface_change_cancels() {
+        let mut st = pane_drag_state();
+        let rect = st.title_rows(&st.sessions[0], &st.sessions[0].windows[0])[0].1;
+        mouse(
+            &mut st,
+            MouseEventKind::Down(MouseButton::Left),
+            rect.x,
+            rect.y,
+        );
+        mouse(&mut st, MouseEventKind::Drag(MouseButton::Left), 119, 29);
+        mouse(&mut st, MouseEventKind::Up(MouseButton::Left), 119, 29);
+        assert_eq!(st.sessions[0].windows[0].panes(), vec![7, 8]);
+        mouse(
+            &mut st,
+            MouseEventKind::Down(MouseButton::Left),
+            rect.x,
+            rect.y,
+        );
+        st.sessions[0].cols -= 1;
+        mouse(
+            &mut st,
+            MouseEventKind::Drag(MouseButton::Left),
+            rect.x + 4,
+            rect.y,
+        );
+        assert!(st.clients[&1].drag.is_none());
+    }
+
+    #[test]
+    fn status_drag_reorders_on_release_and_keeps_clicked_tab_active() {
+        let mut st = toolbar_state(false);
+        let second = crate::server::test_session("other", 120, 30, 8)
+            .windows
+            .remove(0);
+        let mut second = second;
+        second.id = 2;
+        second.name = "second".into();
+        st.sessions[0].windows.push(second);
+        let first = tab_columns(&st, 0)[0];
+        mouse(&mut st, MouseEventKind::Down(MouseButton::Left), first, 29);
+        let target = *tab_columns(&st, 1).last().unwrap();
+        mouse(&mut st, MouseEventKind::Drag(MouseButton::Left), target, 29);
+        assert_eq!(
+            st.sessions[0]
+                .windows
+                .iter()
+                .map(|w| w.id)
+                .collect::<Vec<_>>(),
+            vec![1, 2]
+        );
+        mouse(&mut st, MouseEventKind::Up(MouseButton::Left), target, 29);
+        assert_eq!(
+            st.sessions[0]
+                .windows
+                .iter()
+                .map(|w| w.id)
+                .collect::<Vec<_>>(),
+            vec![2, 1]
+        );
+        assert_eq!(st.sessions[0].windows[st.sessions[0].active].id, 1);
+    }
+
+    #[test]
+    fn status_click_and_drop_outside_do_not_reorder() {
+        let mut st = toolbar_state(false);
+        let mut second = crate::server::test_session("other", 120, 30, 8)
+            .windows
+            .remove(0);
+        second.id = 2;
+        st.sessions[0].windows.push(second);
+        let first = tab_columns(&st, 0)[0];
+        mouse(&mut st, MouseEventKind::Down(MouseButton::Left), first, 29);
+        mouse(&mut st, MouseEventKind::Up(MouseButton::Left), first, 29);
+        mouse(&mut st, MouseEventKind::Down(MouseButton::Left), first, 29);
+        mouse(&mut st, MouseEventKind::Drag(MouseButton::Left), 119, 20);
+        mouse(&mut st, MouseEventKind::Up(MouseButton::Left), 119, 20);
+        assert_eq!(
+            st.sessions[0]
+                .windows
+                .iter()
+                .map(|w| w.id)
+                .collect::<Vec<_>>(),
+            vec![1, 2]
+        );
     }
 
     #[test]
