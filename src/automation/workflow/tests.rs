@@ -30,7 +30,7 @@ fn test_dir() -> PathBuf {
     path
 }
 fn config() -> Config {
-    serde_json::from_value(serde_json::json!({"repo":"owner/project","repo_path":".","state_path":"state.json","head":"feature","base":"main","title":"Change","pr_number":7,"required_checks":["test"],"ci":{"workflow":"ci.yml","ref":"feature","inputs":{"allow_hosted_minutes":"true"}}})).unwrap()
+    serde_json::from_value(serde_json::json!({"repo":"owner/project","repo_path":".","state_path":"state.json","head":"feature","base":"main","title":"Change","pr_number":7,"reviewers":["reviewer","A"],"required_checks":["test"],"ci":{"workflow":"ci.yml","ref":"feature","inputs":{"allow_hosted_minutes":"true"}}})).unwrap()
 }
 
 #[test]
@@ -60,7 +60,7 @@ fn requires_approval_and_success_on_current_head() {
             let endpoint = &args[2];
             Ok(if endpoint.ends_with("/pulls/7") {
                 response(
-                    serde_json::json!({"number":7,"state":"open","user":{"login":"author"},"head":{"sha":head,"ref":"feature"},"base":{"ref":"main"},"requested_reviewers":[]}),
+                    serde_json::json!({"number":7,"state":"open","draft":false,"user":{"login":"author"},"head":{"sha":head,"ref":"feature"},"base":{"ref":"main"},"requested_reviewers":[]}),
                 )
             } else if endpoint.contains("/reviews?") {
                 response(
@@ -120,7 +120,7 @@ fn dispatch_requires_both_flags_and_is_not_repeated() {
         let endpoint = &args[2];
         Ok(if endpoint.ends_with("/pulls/7") {
             response(
-                serde_json::json!({"number":7,"state":"open","user":{"login":"author"},"head":{"sha":"one","ref":"feature"},"base":{"ref":"main"}}),
+                serde_json::json!({"number":7,"state":"open","draft":false,"user":{"login":"author"},"head":{"sha":"one","ref":"feature"},"base":{"ref":"main"}}),
             )
         } else if endpoint.contains("/reviews?") {
             response(
@@ -190,7 +190,7 @@ fn failed_mutation_requires_recovery_before_retry() {
         }
         Ok(if args[2].ends_with("/pulls/7") {
             response(
-                serde_json::json!({"number":7,"state":"open","user":{"login":"author"},"head":{"sha":"one","ref":"feature"},"base":{"ref":"main"}}),
+                serde_json::json!({"number":7,"state":"open","draft":false,"user":{"login":"author"},"head":{"sha":"one","ref":"feature"},"base":{"ref":"main"}}),
             )
         } else {
             response(serde_json::json!([[]]))
@@ -283,7 +283,7 @@ fn polling_waits_for_changes_requested_and_paged_statuses() {
         let endpoint = &args[2];
         Ok(if endpoint.ends_with("/pulls/7") {
             response(
-                serde_json::json!({"number":7,"state":"open","user":{"login":"author"},"head":{"sha":"one","ref":"feature"},"base":{"ref":"main"}}),
+                serde_json::json!({"number":7,"state":"open","draft":false,"user":{"login":"author"},"head":{"sha":"one","ref":"feature"},"base":{"ref":"main"}}),
             )
         } else if endpoint.contains("/reviews?") {
             cycles += 1;
@@ -372,4 +372,195 @@ fn help_and_config_validation_reject_missing_checks_and_config_as_state() {
         config
     );
     fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn approval_requires_a_configured_reviewer_or_trusted_association() {
+    for (login, association, expected) in [
+        ("outsider", None, false),
+        ("outsider", Some("NONE"), false),
+        ("outsider", Some("CONTRIBUTOR"), false),
+        ("ExPlIcIt", Some("NONE"), true),
+        ("maintainer", Some("MEMBER"), true),
+        ("maintainer", Some("OWNER"), true),
+        ("maintainer", Some("COLLABORATOR"), true),
+        ("author", Some("OWNER"), false),
+    ] {
+        let dir = test_dir();
+        let path = dir.join("state.json");
+        let mut config = config();
+        config.reviewers = vec!["explicit".into(), "author".into()];
+        let mut state = State {
+            pr_number: Some(7),
+            ..State::default()
+        };
+        let mut runner = |args: &[String], _: &Path, _: Option<&[u8]>, _: u64| -> Result<Output> {
+            let endpoint = &args[2];
+            Ok(response(if endpoint.ends_with("/pulls/7") {
+                serde_json::json!({"number":7,"state":"open","draft":false,"user":{"login":"author"},"head":{"sha":"one","ref":"feature"},"base":{"ref":"main"}})
+            } else if endpoint.contains("/reviews?") {
+                serde_json::json!([[{"user":{"login":login},"author_association":association,"state":"APPROVED","commit_id":"one"}]])
+            } else if endpoint.contains("/check-runs?") {
+                serde_json::json!([{"check_runs":[{"id":1,"name":"test","status":"completed","conclusion":"success"}]}])
+            } else {
+                serde_json::json!([[]])
+            }))
+        };
+        advance(&config, &dir, &path, &mut state, false, false, &mut runner).unwrap();
+        assert_eq!(
+            state.status.starts_with("ready:"),
+            expected,
+            "login={login}, association={association:?}, state={}",
+            state.status
+        );
+        fs::remove_file(path).unwrap();
+        fs::remove_dir(dir).unwrap();
+    }
+}
+
+#[test]
+fn draft_pr_finishes_polling_with_distinct_evidence_ready_state() {
+    // Include conversion to draft during evidence collection: the last PR read owns the label.
+    for initially_draft in [true, false] {
+        let dir = test_dir();
+        let path = dir.join("state.json");
+        let mut state = State {
+            pr_number: Some(7),
+            ..State::default()
+        };
+        let mut reads = 0;
+        let mut runner = |args: &[String], _: &Path, _: Option<&[u8]>, _: u64| -> Result<Output> {
+            let endpoint = &args[2];
+            Ok(response(if endpoint.ends_with("/pulls/7") {
+                reads += 1;
+                serde_json::json!({"number":7,"state":"open","draft":initially_draft || reads > 1,"user":{"login":"author"},"head":{"sha":"one","ref":"feature"},"base":{"ref":"main"}})
+            } else if endpoint.contains("/reviews?") {
+                serde_json::json!([[{"user":{"login":"reviewer"},"author_association":"MEMBER","state":"APPROVED","commit_id":"one"}]])
+            } else if endpoint.contains("/check-runs?") {
+                serde_json::json!([{"check_runs":[{"id":1,"name":"test","status":"completed","conclusion":"success"}]}])
+            } else {
+                serde_json::json!([[]])
+            }))
+        };
+        poll(
+            &config(),
+            &dir,
+            &path,
+            &mut state,
+            (false, false),
+            (1, 2000),
+            &mut runner,
+        )
+        .unwrap();
+        assert!(
+            state.status.starts_with("evidence-ready (draft):"),
+            "{}",
+            state.status
+        );
+        assert!(!state.status.starts_with("ready:"));
+        assert_eq!(reads, 2);
+        let stored: State = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert_eq!(stored.status, state.status);
+        fs::remove_file(path).unwrap();
+        fs::remove_dir(dir).unwrap();
+    }
+}
+
+#[test]
+fn successful_dispatch_survives_fresh_pull_failure_or_head_change() {
+    for head_change in [false, true] {
+        let dir = test_dir();
+        let path = dir.join("state.json");
+        let mut state = State {
+            pr_number: Some(7),
+            ..State::default()
+        };
+        let mut dispatches = 0;
+        let mut fresh_read_failed = false;
+        {
+            let mut runner = |args: &[String],
+                              _: &Path,
+                              _: Option<&[u8]>,
+                              _: u64|
+             -> Result<Output> {
+                if args.contains(&"POST".into()) {
+                    dispatches += 1;
+                    return Ok(response(serde_json::json!({})));
+                }
+                let endpoint = &args[2];
+                Ok(response(if endpoint.ends_with("/pulls/7") {
+                    let mut head = "one";
+                    if dispatches > 0 && !fresh_read_failed {
+                        fresh_read_failed = true;
+                        if head_change {
+                            head = "two";
+                        } else {
+                            bail!("fixture: fresh PR read unavailable");
+                        }
+                    }
+                    serde_json::json!({"number":7,"state":"open","draft":false,"user":{"login":"author"},"head":{"sha":head,"ref":"feature"},"base":{"ref":"main"}})
+                } else if endpoint.contains("/reviews?") {
+                    serde_json::json!([[{"user":{"login":"reviewer"},"author_association":"MEMBER","state":"APPROVED","commit_id":"one"}]])
+                } else if endpoint.contains("/check-runs?") {
+                    serde_json::json!([{"check_runs":[]}])
+                } else {
+                    serde_json::json!([[]])
+                }))
+            };
+            let error =
+                advance(&config(), &dir, &path, &mut state, true, true, &mut runner).unwrap_err();
+            assert!(error.to_string().contains(if head_change {
+                "PR changed"
+            } else {
+                "unavailable"
+            }));
+            let stored: State = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+            assert!(
+                stored.recovery_needed.is_none(),
+                "successful dispatch must be durable before the fresh read"
+            );
+            assert_eq!(stored.dispatched_for_head.as_deref(), Some("one"));
+            if !head_change {
+                state = stored; // A new advance reads the durable state; it must not redispatch.
+                advance(&config(), &dir, &path, &mut state, true, true, &mut runner).unwrap();
+            }
+        }
+        assert_eq!(dispatches, 1);
+        fs::remove_file(path).unwrap();
+        fs::remove_dir(dir).unwrap();
+    }
+}
+
+#[test]
+fn deleted_reviewer_changes_requested_blocks_approved_pr() {
+    let dir = test_dir();
+    let path = dir.join("state.json");
+    let mut state = State {
+        pr_number: Some(7),
+        ..State::default()
+    };
+    let mut runner = |args: &[String], _: &Path, _: Option<&[u8]>, _: u64| -> Result<Output> {
+        Ok(response(if args[2].ends_with("/pulls/7") {
+            serde_json::json!({"number":7,"state":"open","draft":false,"user":{"login":"author"},"head":{"sha":"one","ref":"feature"},"base":{"ref":"main"}})
+        } else {
+            assert!(
+                args[2].contains("/reviews?"),
+                "blocked review must not advance to CI"
+            );
+            serde_json::json!([[{"user":{"login":"reviewer"},"state":"APPROVED","commit_id":"one"},{"user":null,"state":"CHANGES_REQUESTED","commit_id":"one"}]])
+        }))
+    };
+    advance(
+        &config(),
+        &dir,
+        &path,
+        &mut state,
+        false,
+        false,
+        &mut runner,
+    )
+    .unwrap();
+    assert!(state.status.contains("outstanding change requests"));
+    fs::remove_file(path).unwrap();
+    fs::remove_dir(dir).unwrap();
 }

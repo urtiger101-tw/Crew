@@ -63,6 +63,7 @@ struct State {
 struct Pull {
     number: u64,
     state: String,
+    draft: bool,
     user: User,
     head: Head,
     base: Branch,
@@ -89,6 +90,7 @@ struct Review {
     user: Option<User>,
     state: String,
     commit_id: Option<String>,
+    author_association: Option<String>,
 }
 #[derive(Debug, Deserialize)]
 struct CheckPage {
@@ -353,12 +355,24 @@ where
     }
     let approved = latest.iter().any(|(login, r)| {
         !login.eq_ignore_ascii_case(&pr.user.login)
+            && (config
+                .reviewers
+                .iter()
+                .any(|name| login.eq_ignore_ascii_case(name))
+                || matches!(
+                    r.author_association.as_deref(),
+                    Some("MEMBER" | "OWNER" | "COLLABORATOR")
+                ))
             && r.state == "APPROVED"
             && r.commit_id.as_deref() == Some(pr.head.sha.as_str())
     });
-    let changes_requested = latest.iter().any(|(login, r)| {
-        !login.eq_ignore_ascii_case(&pr.user.login) && r.state == "CHANGES_REQUESTED"
-    });
+    let changes_requested = pages
+        .iter()
+        .flatten()
+        .any(|r| r.user.is_none() && r.state == "CHANGES_REQUESTED")
+        || latest.iter().any(|(login, r)| {
+            !login.eq_ignore_ascii_case(&pr.user.login) && r.state == "CHANGES_REQUESTED"
+        });
     if changes_requested {
         state.status = "waiting for outstanding change requests to be resolved".into();
         save(state_path, state)?;
@@ -500,6 +514,7 @@ where
             )?;
             state.dispatched_for_head = Some(pr.head.sha.clone());
             state.recovery_needed = None;
+            save(state_path, state)?;
         }
     }
     // Confirm that the evidence still describes the current PR head before reporting readiness.
@@ -511,6 +526,9 @@ where
             && fresh.base.reference == config.base,
         "PR changed during evidence collection; run advance again"
     );
+    if missing.is_empty() && fresh.draft {
+        state.status = "evidence-ready (draft): current head has eligible non-author approval and all required checks succeeded".into();
+    }
     save(state_path, state)?;
     println!("{}", state.status);
     Ok(())
@@ -556,7 +574,8 @@ where
             allow_ci,
             &mut bounded_runner,
         )?;
-        if state.status.starts_with("ready:") {
+        if state.status.starts_with("ready:") || state.status.starts_with("evidence-ready (draft):")
+        {
             return Ok(());
         }
         let remaining = deadline.saturating_duration_since(Instant::now());
