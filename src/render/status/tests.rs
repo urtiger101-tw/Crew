@@ -631,3 +631,17 @@ fn zh_tw_status_row_keeps_the_windows_when_narrow() {
     assert!(text.width() <= 30, "{text:?}");
     assert!(!hits.is_empty());
 }
+
+#[test]
+fn studio_chip_is_quiet_but_mono_keeps_inverse_focus() {
+    let mut t = Theme::resolve(
+        &crate::theme::ThemeCfg::default(),
+        &crate::theme::ClientEnv::default(),
+    );
+    assert_eq!(tone_style(&t, Tone::Chip), (t.accent, t.bar_bg, BOLD));
+    t.mono = true;
+    assert_eq!(
+        tone_style(&t, Tone::Chip),
+        (Color::Reset, Color::Reset, BOLD | INVERSE)
+    );
+}

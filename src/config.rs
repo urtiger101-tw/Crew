@@ -287,10 +287,12 @@ impl Config {
                 _ => return Err(format!("pane-titles: expected off|auto|always, got {val}")),
             },
             "theme" | "theme-preset" => match val {
-                "terminal" | "dark" | "light" | "mono" => self.theme.preset = val.to_string(),
+                "studio" | "terminal" | "dark" | "light" | "mono" => {
+                    self.theme.preset = val.to_string()
+                }
                 _ => {
                     return Err(format!(
-                        "theme: expected terminal|dark|light|mono, got {val}"
+                        "theme: expected studio|terminal|dark|light|mono, got {val}"
                     ));
                 }
             },

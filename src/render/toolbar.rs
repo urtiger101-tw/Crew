@@ -209,6 +209,8 @@ fn bar_style(t: &Theme) -> Style {
 fn chip_style(t: &Theme) -> Style {
     if t.mono {
         (Color::Reset, Color::Reset, BOLD | INVERSE)
+    } else if t.quiet_chrome {
+        (t.c(t.accent), t.c(t.bar_bg), BOLD)
     } else {
         (Color::Black, t.c(t.accent), BOLD)
     }

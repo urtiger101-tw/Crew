@@ -571,12 +571,24 @@ pub(super) fn draw_sidebar(g: &mut Grid, cx: &Ctx) {
     let sx = w - sw;
     let t = &cx.theme;
     for y in 0..h.saturating_sub(1) {
+        for x in sx..w {
+            g.put(
+                x,
+                y,
+                Cell {
+                    fg: t.c(t.sidebar_fg),
+                    bg: t.c(t.sidebar_bg),
+                    ..Cell::default()
+                },
+            );
+        }
         g.put(
             sx,
             y,
             Cell {
                 s: t.g.vline.into(),
                 fg: t.c(t.border),
+                bg: t.c(t.sidebar_bg),
                 ..Cell::default()
             },
         );
@@ -619,14 +631,22 @@ fn draw_row(g: &mut Grid, l: &Lane, row: &SidebarRow, groups: &[GroupView]) {
                 l.tw,
                 tr(l.lang, "render.sidebar.title"),
                 l.t.c(l.t.accent),
-                Color::Reset,
+                l.t.c(l.t.sidebar_bg),
                 BOLD,
             );
         }
         SidebarKind::SessionOpen => {
             if let Some(gr) = group {
                 let label = cut(&format!("{} {}", l.t.g.group_open, gr.name), tw, ell);
-                g.text(l.tx, y, l.tw, &label, l.t.c(l.t.accent), Color::Reset, BOLD);
+                g.text(
+                    l.tx,
+                    y,
+                    l.tw,
+                    &label,
+                    l.t.c(l.t.accent),
+                    l.t.c(l.t.sidebar_bg),
+                    BOLD,
+                );
             }
         }
         SidebarKind::SessionClosed => {
@@ -643,27 +663,35 @@ fn draw_row(g: &mut Grid, l: &Lane, row: &SidebarRow, groups: &[GroupView]) {
             if let Some(m) = pane.and_then(|p| p.message.as_deref()) {
                 let room = l.tw.saturating_sub(PANE_PREFIX);
                 let m = cut(m, room as usize, ell);
-                g.text(l.tx + PANE_PREFIX, y, room, &m, muted, Color::Reset, dim);
+                g.text(
+                    l.tx + PANE_PREFIX,
+                    y,
+                    room,
+                    &m,
+                    muted,
+                    l.t.c(l.t.sidebar_bg),
+                    dim,
+                );
             }
         }
         SidebarKind::Empty(i) => {
             if let Some(line) = empty_lines(l.tw, l.t.g.dash, l.lang).get(i) {
                 let line = cut(line, tw, ell);
-                g.text(l.tx, y, l.tw, &line, muted, Color::Reset, dim);
+                g.text(l.tx, y, l.tw, &line, muted, l.t.c(l.t.sidebar_bg), dim);
             }
         }
         SidebarKind::More(n) => {
             let more = trf(l.lang, "render.sidebar.more", &[("ell", &ell), ("n", &n)]);
             let label = cut(&more, tw, ell);
-            g.text(l.tx, y, l.tw, &label, muted, Color::Reset, dim);
+            g.text(l.tx, y, l.tw, &label, muted, l.t.c(l.t.sidebar_bg), dim);
         }
         SidebarKind::Legend => {
             let text = cut(&legend_text(l.t, l.tw >= LEGEND_SPACED, l.lang), tw, ell);
-            g.text(l.tx, y, l.tw, &text, muted, Color::Reset, dim);
+            g.text(l.tx, y, l.tw, &text, muted, l.t.c(l.t.sidebar_bg), dim);
         }
         SidebarKind::Hint => {
             let text = cut(&hint_text(&l.prefix, l.lang), tw, ell);
-            g.text(l.tx, y, l.tw, &text, muted, Color::Reset, dim);
+            g.text(l.tx, y, l.tw, &text, muted, l.t.c(l.t.sidebar_bg), dim);
         }
         SidebarKind::Gap => {}
     }
@@ -691,7 +719,15 @@ fn draw_closed(g: &mut Grid, l: &Lane, y: u16, gr: &GroupView) {
     };
     let name = cut(&gr.name, name_budget as usize, t.g.ellipsis);
     let label = format!("{} {name}", t.g.group_closed);
-    g.text(l.tx, y, l.tw, &label, Color::Reset, Color::Reset, 0);
+    g.text(
+        l.tx,
+        y,
+        l.tw,
+        &label,
+        l.t.c(l.t.sidebar_fg),
+        l.t.c(l.t.sidebar_bg),
+        0,
+    );
     if !show_counts {
         return;
     }
@@ -701,7 +737,7 @@ fn draw_closed(g: &mut Grid, l: &Lane, y: u16, gr: &GroupView) {
         if i > 0 {
             x += 1;
         }
-        x += g.text(x, y, end - x, s, *color, Color::Reset, dim);
+        x += g.text(x, y, end - x, s, *color, l.t.c(l.t.sidebar_bg), dim);
     }
 }
 
@@ -719,8 +755,16 @@ fn draw_pane(g: &mut Grid, l: &Lane, y: u16, p: &PaneView) {
     } else {
         (" ", 0)
     };
-    g.text(l.tx, y, 1, ptr, t.c(t.accent), Color::Reset, ptr_attr);
-    g.text(l.tx + 2, y, 1, glyph, t.c(color), Color::Reset, 0);
+    g.text(
+        l.tx,
+        y,
+        1,
+        ptr,
+        t.c(t.accent),
+        l.t.c(l.t.sidebar_bg),
+        ptr_attr,
+    );
+    g.text(l.tx + 2, y, 1, glyph, t.c(color), l.t.c(l.t.sidebar_bg), 0);
     let room = l.tw.saturating_sub(PANE_PREFIX);
     let word_w = word.width() as u16;
     let show_word = room >= word_w + 1 + MIN_NAME;
@@ -737,7 +781,7 @@ fn draw_pane(g: &mut Grid, l: &Lane, y: u16, p: &PaneView) {
             word_w,
             word,
             t.c(t.muted),
-            Color::Reset,
+            l.t.c(l.t.sidebar_bg),
             dim_if_mono(t),
         );
     }
@@ -754,7 +798,15 @@ fn draw_pane_name(g: &mut Grid, l: &Lane, y: u16, room: u16, p: &PaneView, base:
     let mut x = l.tx + PANE_PREFIX;
     let end = x + room;
     if p.spans.is_empty() {
-        g.text(x, y, room, &name, Color::Reset, Color::Reset, base);
+        g.text(
+            x,
+            y,
+            room,
+            &name,
+            l.t.c(l.t.sidebar_fg),
+            l.t.c(l.t.sidebar_bg),
+            base,
+        );
         return;
     }
     // Cut the complete label once, then split its unchanged prefix at span byte
@@ -777,7 +829,7 @@ fn draw_pane_name(g: &mut Grid, l: &Lane, y: u16, room: u16, p: &PaneView, base:
             .as_deref()
             .filter(|_| l.custom_colors)
             .and_then(segment_rgb)
-            .map_or(Color::Reset, |(r, g, b)| Color::Rgb { r, g, b });
+            .map_or(l.t.c(l.t.sidebar_fg), |(r, g, b)| Color::Rgb { r, g, b });
         let mut attrs = base;
         for (flag, bit) in [(span.bold, BOLD), (span.dim, DIM)] {
             match flag {
@@ -786,10 +838,18 @@ fn draw_pane_name(g: &mut Grid, l: &Lane, y: u16, room: u16, p: &PaneView, base:
                 None => {}
             }
         }
-        x += g.text(x, y, end - x, text, fg, Color::Reset, attrs);
+        x += g.text(x, y, end - x, text, fg, l.t.c(l.t.sidebar_bg), attrs);
         offset = next;
     }
-    g.text(x, y, end - x, ellipsis, Color::Reset, Color::Reset, base);
+    g.text(
+        x,
+        y,
+        end - x,
+        ellipsis,
+        l.t.c(l.t.sidebar_fg),
+        l.t.c(l.t.sidebar_bg),
+        base,
+    );
 }
 
 #[cfg(test)]

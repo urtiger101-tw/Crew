@@ -1,6 +1,6 @@
 //! Semantic UI colors and glyphs (docs/team/ui-ux/ui-spec.md §2).
 //!
-//! Defaults are ANSI-16 indices so the chrome follows the user's terminal theme. State is
+//! The default studio preset uses quiet truecolor chrome; terminal follows ANSI-16. State is
 //! always shape + word; color only reinforces it. `mono` drops chrome colors (NO_COLOR,
 //! TERM=dumb, preset "mono"); `ascii` swaps every glyph for an ASCII one.
 use crate::api::Status;
@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(default)]
 pub struct ThemeCfg {
-    /// terminal (ANSI-16, default) | dark | light (truecolor) | mono (no color)
+    /// studio (default) | terminal (ANSI-16) | dark | light | mono (no color)
     pub preset: String,
     /// auto | true | false
     pub ascii_glyphs: String,
@@ -23,7 +23,7 @@ pub struct ThemeCfg {
 impl Default for ThemeCfg {
     fn default() -> Self {
         ThemeCfg {
-            preset: "terminal".into(),
+            preset: "studio".into(),
             ascii_glyphs: "auto".into(),
             colors: BTreeMap::new(),
         }
@@ -188,6 +188,12 @@ pub struct Theme {
     pub bar_bg: Color,
     pub bar_fg: Color,
     pub selection: Color,
+    pub sidebar_bg: Color,
+    pub sidebar_fg: Color,
+    pub pane_bg: Color,
+    pub pane_fg: Color,
+    /// Low-emphasis toolbar keys and thin focused separators.
+    pub quiet_chrome: bool,
     pub warn: Color,
     pub g: Glyphs,
 }
@@ -211,6 +217,11 @@ impl Theme {
             bar_bg: a(0),
             bar_fg: a(7),
             selection: a(6),
+            sidebar_bg: Color::Reset,
+            sidebar_fg: Color::Reset,
+            pane_bg: Color::Reset,
+            pane_fg: Color::Reset,
+            quiet_chrome: false,
             warn: a(3),
             g: UNICODE,
         }
@@ -220,7 +231,7 @@ impl Theme {
     /// Presets "dark"/"light" and `colors` overrides are applied by `apply_preset`/`apply_overrides`.
     pub fn resolve(cfg: &ThemeCfg, env: &ClientEnv) -> Theme {
         let mut t = Theme::terminal();
-        let explicit = cfg.preset != "terminal";
+        let explicit = cfg.preset != "terminal" && cfg.preset != "studio";
         t.mono = cfg.preset == "mono" || (!explicit && (env.no_color || env.dumb));
         t.apply_preset(&cfg.preset);
         t.apply_overrides(&cfg.colors);
@@ -231,6 +242,9 @@ impl Theme {
         };
         if t.ascii {
             t.g = ASCII;
+        } else if t.quiet_chrome && !t.mono {
+            t.g.vline_active = t.g.vline;
+            t.g.hline_active = t.g.hline;
         }
         t
     }
@@ -241,6 +255,7 @@ impl Theme {
         let Some(p) = PRESETS.iter().find(|(name, _)| *name == preset) else {
             return;
         };
+        self.quiet_chrome = preset == "studio";
         for (token, value) in p.1 {
             if let (Some(slot), Some(c)) = (self.slot(token), parse_color(value)) {
                 *slot = c;
@@ -273,6 +288,10 @@ impl Theme {
             "bar_bg" => &mut self.bar_bg,
             "bar_fg" => &mut self.bar_fg,
             "selection" => &mut self.selection,
+            "sidebar_bg" => &mut self.sidebar_bg,
+            "sidebar_fg" => &mut self.sidebar_fg,
+            "pane_bg" => &mut self.pane_bg,
+            "pane_fg" => &mut self.pane_fg,
             "warn" => &mut self.warn,
             _ => return None,
         })
@@ -299,6 +318,28 @@ impl Theme {
 /// `border_active` and `selection` equal `accent`; `idle`/`unknown` equal `muted`;
 /// `warn` equals `working`.
 const PRESETS: &[(&str, &[(&str, &str)])] = &[
+    (
+        "studio",
+        &[
+            ("accent", "#a7bdcc"),
+            ("muted", "#a4a8b1"),
+            ("border", "#60646e"),
+            ("border_active", "#a7bdcc"),
+            ("working", "#e5c07b"),
+            ("blocked", "#e89aa1"),
+            ("done", "#a9c997"),
+            ("idle", "#a4a8b1"),
+            ("unknown", "#a4a8b1"),
+            ("bar_bg", "#1b1d22"),
+            ("bar_fg", "#d0d2d7"),
+            ("sidebar_bg", "#1b1d22"),
+            ("sidebar_fg", "#d0d2d7"),
+            ("pane_bg", "#14161b"),
+            ("pane_fg", "#d0d2d7"),
+            ("selection", "#a7bdcc"),
+            ("warn", "#e5c07b"),
+        ],
+    ),
     (
         "dark",
         &[
@@ -366,6 +407,36 @@ mod tests {
             .iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect()
+    }
+
+    #[test]
+    fn studio_default_is_quiet_and_respects_accessibility_environment() {
+        let cfg = ThemeCfg::default();
+        assert_eq!(cfg.preset, "studio");
+        let t = Theme::resolve(&cfg, &ClientEnv::default());
+        assert!(t.quiet_chrome);
+        assert_eq!(t.g.vline_active, t.g.vline);
+        assert_eq!(t.g.hline_active, t.g.hline);
+        assert_eq!(t.sidebar_bg, parse_color("#1b1d22").unwrap());
+        assert_eq!(t.sidebar_fg, parse_color("#d0d2d7").unwrap());
+        let mono = Theme::resolve(
+            &cfg,
+            &ClientEnv {
+                no_color: true,
+                ..Default::default()
+            },
+        );
+        assert!(mono.mono);
+        assert_eq!(mono.c(mono.sidebar_bg), Color::Reset);
+        assert_ne!(mono.g.vline_active, mono.g.vline);
+        let ascii = Theme::resolve(
+            &cfg,
+            &ClientEnv {
+                ascii: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(ascii.g.vline_active, "#");
     }
 
     #[test]

@@ -9,9 +9,9 @@ use crate::theme::Theme;
 use crossterm::style::Color;
 use unicode_width::UnicodeWidthStr;
 
-fn conv(c: vt100::Color) -> Color {
+fn conv(c: vt100::Color, default: Color) -> Color {
     match c {
-        vt100::Color::Default => Color::Reset,
+        vt100::Color::Default => default,
         vt100::Color::Idx(i) => Color::AnsiValue(i),
         vt100::Color::Rgb(r, g, b) => Color::Rgb { r, g, b },
     }
@@ -71,8 +71,8 @@ pub(super) fn draw_panes(g: &mut Grid, cx: &Ctx, covered: &mut [bool]) -> Option
                         } else {
                             txt.to_string()
                         },
-                        fg: conv(cell.fgcolor()),
-                        bg: conv(cell.bgcolor()),
+                        fg: conv(cell.fgcolor(), cx.theme.c(cx.theme.pane_fg)),
+                        bg: conv(cell.bgcolor(), cx.theme.c(cx.theme.pane_bg)),
                         attrs,
                         wide: cell.is_wide(),
                         skip: cell.is_wide_continuation(),
@@ -457,6 +457,52 @@ mod tests {
     use super::*;
     use crate::api::Status;
     use crate::theme::{ASCII, UNICODE};
+
+    #[test]
+    fn studio_defaults_do_not_replace_child_palette_or_rgb_colors() {
+        let t = Theme::resolve(
+            &crate::theme::ThemeCfg::default(),
+            &crate::theme::ClientEnv::default(),
+        );
+        let mut parser = vt100::Parser::new(1, 12, 0);
+        parser.process(b"a\x1b[31;48;2;1;2;3mb\x1b[38;2;4;5;6;44mc\x1b[0md");
+        let screen = parser.screen();
+        let colors = |i| {
+            let cell = screen.cell(0, i).unwrap();
+            (
+                conv(cell.fgcolor(), t.c(t.pane_fg)),
+                conv(cell.bgcolor(), t.c(t.pane_bg)),
+            )
+        };
+        assert_eq!(colors(0), (t.pane_fg, t.pane_bg));
+        assert_eq!(
+            colors(1),
+            (Color::AnsiValue(1), Color::Rgb { r: 1, g: 2, b: 3 })
+        );
+        assert_eq!(
+            colors(2),
+            (Color::Rgb { r: 4, g: 5, b: 6 }, Color::AnsiValue(4))
+        );
+        assert_eq!(colors(3), (t.pane_fg, t.pane_bg));
+        let terminal = Theme::terminal();
+        assert_eq!(conv(vt100::Color::Default, terminal.pane_fg), Color::Reset);
+        assert_eq!(conv(vt100::Color::Default, terminal.pane_bg), Color::Reset);
+        let mono = Theme::resolve(
+            &crate::theme::ThemeCfg::default(),
+            &crate::theme::ClientEnv {
+                no_color: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            conv(vt100::Color::Default, mono.c(mono.pane_fg)),
+            Color::Reset
+        );
+        assert_eq!(
+            conv(vt100::Color::Default, mono.c(mono.pane_bg)),
+            Color::Reset
+        );
+    }
 
     #[test]
     fn host_lost_banner_names_survivors_and_the_close_key() {

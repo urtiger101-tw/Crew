@@ -604,6 +604,7 @@ fn tone_style(t: &Theme, tone: Tone) -> Style {
     let bar = (t.c(t.bar_fg), t.c(t.bar_bg), 0);
     match tone {
         Tone::Bar => bar,
+        Tone::Chip if t.quiet_chrome && !t.mono => (t.c(t.accent), t.c(t.bar_bg), BOLD),
         Tone::Chip => solid(t, t.accent, BOLD),
         Tone::Warn => solid(t, t.warn, BOLD),
         Tone::Danger => solid(t, t.blocked, BOLD),

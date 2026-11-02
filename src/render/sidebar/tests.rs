@@ -180,6 +180,44 @@ fn styled_foregrounds_respect_each_clients_no_color_even_with_explicit_presets()
     }
 }
 
+#[test]
+fn studio_sidebar_paints_background_and_mono_leaves_it_uncolored() {
+    let st = crate::server::test_state();
+    let mut s = crate::server::test_session("studio", 80, 10, 7);
+    s.sidebar = true;
+    for env in [
+        crate::theme::ClientEnv::default(),
+        crate::theme::ClientEnv {
+            no_color: true,
+            ..Default::default()
+        },
+    ] {
+        let mut c = crate::server::test_client("studio");
+        c.env = env;
+        let theme = Theme::resolve(&st.cfg.theme, &env);
+        let cx = Ctx {
+            st: &st,
+            s: &s,
+            c: &c,
+            w: 80,
+            h: 10,
+            rects: vec![],
+            area: st.pane_area(&s),
+            theme: theme.clone(),
+            lang: Lang::En,
+        };
+        let mut g = blank(80, 10);
+        draw_sidebar(&mut g, &cx);
+        let sx = 80 - st.sidebar_width(&s);
+        for y in 0..9 {
+            for x in sx..80 {
+                assert_eq!(cell(&g, x, y).bg, theme.c(theme.sidebar_bg), "{x}, {y}");
+            }
+        }
+        assert_eq!(cell(&g, sx, 0).fg, theme.c(theme.border));
+    }
+}
+
 fn group(si: usize, name: &str, open: bool, panes: Vec<PaneView>) -> GroupView {
     GroupView {
         si,

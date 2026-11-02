@@ -149,8 +149,8 @@ snapshot；舊 epoch 會回 `server_restarted`。事件 `pane.output` 只提供�
   Which-key bar: after the prefix, the status bar lists the common keys, taken from your current bindings
 - 確認提示：互動式 `x`、`&` 與選單中 session／視窗列的 `x` 會先以 y/n 確認（`confirm-close`）；指令列、CLI 與 API 仍立即執行
   Confirmations: interactive `x`, `&` and the chooser's `x` on session and window rows ask y/n first (`confirm-close`); typed commands, the CLI and the API still run at once
-- 主題與無色模式：`[theme]` 提供 terminal / dark / light / mono 預設並可逐項覆寫顏色；支援 `NO_COLOR`、`TERM=dumb` 與 `CREW_ASCII=1`（改用 ASCII 字元）
-  Themes: `[theme]` presets terminal / dark / light / mono with per-token color overrides; honors `NO_COLOR`, `TERM=dumb` and `CREW_ASCII=1` (ASCII glyphs)
+- 主題與無色模式：`[theme]` 提供 studio / terminal / dark / light / mono 預設並可逐項覆寫顏色；支援 `NO_COLOR`、`TERM=dumb` 與 `CREW_ASCII=1`（改用 ASCII 字元）
+  Themes: `[theme]` presets studio / terminal / dark / light / mono with per-token color overrides; honors `NO_COLOR`, `TERM=dumb` and `CREW_ASCII=1` (ASCII glyphs)
 - 複製模式：vi 風格游標移動與選取（`v` 字元 / `V` 整行），`y` 複製；滑鼠拖曳選取自動複製；`prefix ]` 貼上；同時透過 OSC 52 寫入系統剪貼簿
   Copy mode with vi-style movement and selection (`v` / `V`, `y` to yank), mouse-drag selection, `prefix ]` to paste, system clipboard via OSC 52
 - `:` 指令列，支援 tmux 風格指令 · `:` command prompt with tmux-style commands
@@ -177,8 +177,8 @@ snapshot；舊 epoch 會回 `server_restarted`。事件 `pane.output` 只提供�
 | idle | `○` | `-` | 閒置 Idle | 灰 gray |
 | unknown | `?` | `?` | 無法判斷，不代表已完成 Cannot classify; does not mean finished | 灰 gray |
 
-- 符號形狀各不相同，不靠顏色區分；側邊欄與窗格標題列另附狀態文字。顏色為 ANSI 色，跟隨終端機配色，可用 `[theme]` 覆寫。
-  The shapes differ, so color is not needed to tell them apart; the sidebar and pane titles also print the word. Colors are ANSI and follow your terminal theme; override them with `[theme]`.
+- 符號形狀各不相同，不靠顏色區分；側邊欄與窗格標題列另附狀態文字。介面顏色可用 `[theme]` 覆寫；`terminal` 預設跟隨終端機配色。
+  The shapes differ, so color is not needed to tell them apart; the sidebar and pane titles also print the word. Chrome colors can be changed with `[theme]`; the `terminal` preset follows your terminal palette.
 - 視窗標籤顯示其窗格中最需要注意的狀態（▲ > ◆ > ● > ?；全部閒置時不顯示）；狀態列計數只列 ▲ ◆ ●，零不顯示。標籤旗標：`*` 目前視窗、`Z` 已縮放、`!` 有尚未查看的輸出。
   A window label shows its most urgent pane state (▲ > ◆ > ● > ?; hidden when all panes are idle). The status-bar counts list ▲ ◆ ● only; zeros are hidden. Label flags: `*` current window, `Z` zoomed, `!` output not yet viewed.
 
@@ -512,7 +512,7 @@ v = "split-window -h"
 "M-1" = "select-window -t 1"
 
 [theme]                 # 顏色與字元 / colors and glyphs
-preset = "terminal"     # terminal（預設）| dark | light | mono
+preset = "studio"       # studio（預設）| terminal | dark | light | mono
 ascii_glyphs = "auto"   # auto | "true" | "false"
 [theme.colors]          # 逐項覆寫 token / per-token overrides
 accent = "74"
@@ -525,7 +525,7 @@ Values under `[theme.colors]` must be strings, so quote color values (for exampl
 `pane_utf8` 預設為 `true`，讓 Windows 新窗格的主控台輸入與輸出碼頁使用 UTF-8（65001），shell 與其子程序皆受影響；設為 `false` 保留原本的碼頁。已執行的窗格不受影響，Linux／macOS 不變。
 `pane_utf8` defaults to `true`, setting the console input and output code pages to UTF-8 (65001) for new Windows panes, their shells and child processes. Set it to `false` to retain the original code pages. Existing panes and Linux/macOS are unchanged.
 
-`set` 可用選項 options: `prefix`, `shell`, `pane-utf8`（僅影響 Windows 新窗格 new Windows panes only）, `mouse`, `sidebar`, `sidebar-width`, `scrollback`/`history-limit`（僅影響新窗格 new panes only）, `busy-secs`, `automatic-rename`, `osc52`/`set-clipboard`, `persist`, `hints on|off`, `confirm-close on|off`, `toolbar on|off`, `toolbar-fkeys on|off`, `scroll-keys on|off`, `pane-titles off|auto|always`, `theme terminal|dark|light|mono`, `ascii-glyphs auto|on|off`.
+`set` 可用選項 options: `prefix`, `shell`, `pane-utf8`（僅影響 Windows 新窗格 new Windows panes only）, `mouse`, `sidebar`, `sidebar-width`, `scrollback`/`history-limit`（僅影響新窗格 new panes only）, `busy-secs`, `automatic-rename`, `osc52`/`set-clipboard`, `persist`, `hints on|off`, `confirm-close on|off`, `toolbar on|off`, `toolbar-fkeys on|off`, `scroll-keys on|off`, `pane-titles off|auto|always`, `theme studio|terminal|dark|light|mono`, `ascii-glyphs auto|on|off`.
 
 窗格環境：每個新窗格都會設定 `TERM=xterm-256color` 與 `COLORTERM=truecolor`，並**移除**從伺服器繼承來的 `NO_COLOR`，以免啟動伺服器的那個 shell 剛好帶著 `NO_COLOR` 時，讓所有窗格的程式都失去顏色。要讓某個窗格不顯示顏色，請明確指定：`crew workspace create … --env NO_COLOR=1`（`tab create` 同理）。Crew 自身介面（狀態列、側邊欄）仍依各客戶端自己的 `NO_COLOR` 決定是否上色。已在執行的窗格保有原本的環境，需重啟伺服器或開新窗格才會套用。
 Pane environment: every new pane gets `TERM=xterm-256color` and `COLORTERM=truecolor`, and an inherited server `NO_COLOR` is **removed**, so a shell that happened to start the server with `NO_COLOR` no longer strips color from every pane. Opt a pane out explicitly with `--env NO_COLOR=1` on `workspace create` or `tab create`. Crew's own chrome still follows each client's `NO_COLOR`. Running panes keep their environment; restart the server or open new panes to pick this up.
@@ -595,22 +595,26 @@ command = "split-window -v"
 
 | preset | 說明 Description |
 |---|---|
-| `terminal`（預設 default） | ANSI 16 色，跟隨終端機配色 ANSI-16 colors that follow your terminal theme |
+| `studio`（預設 default） | 深灰色介面、柔和工具列與細邊框 Charcoal chrome, quiet toolbar and thin separators |
+| `terminal` | ANSI 16 色，跟隨終端機配色 ANSI-16 colors that follow your terminal theme |
 | `dark` | 真彩色深色配色 Truecolor, for dark backgrounds |
 | `light` | 真彩色淺色配色 Truecolor, for light backgrounds |
 | `mono` | 不輸出彩色；焦點以反白或粗體、次要文字以淡色（DIM）表示 No colors: focus uses reverse video or bold, muted text uses DIM |
 
-`[theme.colors]` 可覆寫的 token（名稱與 `src/theme.rs` 相同）：`accent` `muted` `border` `border_active` `working` `blocked` `done` `idle` `unknown` `bar_bg` `bar_fg` `selection` `warn`。值為 `0-255`（256 色索引）、`"#rrggbb"` 或 `"reset"`；無法解析的值與未知的 token 會被忽略。
-Overridable tokens (names as in `src/theme.rs`): `accent` `muted` `border` `border_active` `working` `blocked` `done` `idle` `unknown` `bar_bg` `bar_fg` `selection` `warn`. Values are `0-255` (256-color index), `"#rrggbb"` or `"reset"`; unparsable values and unknown tokens are ignored.
+`[theme.colors]` 可覆寫的 token（名稱與 `src/theme.rs` 相同）：`accent` `muted` `border` `border_active` `working` `blocked` `done` `idle` `unknown` `bar_bg` `bar_fg` `sidebar_bg` `sidebar_fg` `pane_bg` `pane_fg` `selection` `warn`。值為 `0-255`（256 色索引）、`"#rrggbb"` 或 `"reset"`；無法解析的值與未知的 token 會被忽略。
+Overridable tokens (names as in `src/theme.rs`): `accent` `muted` `border` `border_active` `working` `blocked` `done` `idle` `unknown` `bar_bg` `bar_fg` `sidebar_bg` `sidebar_fg` `pane_bg` `pane_fg` `selection` `warn`. Values are `0-255` (256-color index), `"#rrggbb"` or `"reset"`; unparsable values and unknown tokens are ignored.
 
-優先順序：明確指定的 `dark`、`light` 或 `mono` 優先於環境變數；`NO_COLOR` 與 `TERM=dumb` 只在 preset 為預設的 `terminal` 時使主題進入無色模式。
-Precedence: an explicit `dark`, `light` or `mono` wins over the environment; `NO_COLOR` and `TERM=dumb` switch the default `terminal` preset to no color, but do not affect `dark` or `light`.
+優先順序：明確指定的 `dark`、`light` 或 `mono` 優先於環境變數；`NO_COLOR` 與 `TERM=dumb` 在 `studio` 和 `terminal` 時使主題進入無色模式。
+Precedence: an explicit `dark`, `light` or `mono` wins over the environment; `NO_COLOR` and `TERM=dumb` switch `studio` and `terminal` to no color, but do not affect `dark` or `light`.
+
+`studio` 為窗格的預設文字與背景套用深色底色；程式明確指定的 ANSI／RGB 顏色不受影響。要顯示既有代理側欄，可設定 `sidebar = true` 或按 `prefix a`。
+`studio` supplies dark defaults for pane text and background; explicit ANSI/RGB application colors remain unchanged. To show the existing agent sidebar, set `sidebar = true` or press `prefix a`.
 
 ### 無色與 ASCII 字元 Color and ASCII glyphs
 
 | 環境變數 Variable | 效果 Effect |
 |---|---|
-| `NO_COLOR`（非空值 non-empty） | 預設 terminal 主題改為無色，保留 Unicode 符號與粗體、反白、淡色 No chrome colors; Unicode shapes and bold/reverse/DIM are kept |
+| `NO_COLOR`（非空值 non-empty） | `studio` 與 `terminal` 主題改為無色，保留 Unicode 符號與粗體、反白、淡色 No chrome colors; Unicode shapes and bold/reverse/DIM are kept |
 | `TERM=dumb` | 無色，並改用 ASCII 字元 No colors, and ASCII glyphs |
 | `CREW_ASCII=1` | 改用 ASCII 字元：狀態 `@ ! + - ?`、框線 `\|` `-`、焦點框 `#` `=`；Linux／macOS 上非 UTF-8 的 locale 也會自動如此 ASCII glyphs; also automatic on a non-UTF-8 locale on Linux and macOS |
 
