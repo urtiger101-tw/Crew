@@ -462,6 +462,13 @@ impl State {
                 .map_err(|error| anyhow!(error.message))?;
             cmd.cwd(process_cwd);
         }
+        #[cfg(windows)]
+        if self.cfg.pane_utf8 {
+            // The bootstrap itself can start even when its shell cannot. Resolve the
+            // shell first so API callers receive a synchronous missing-shell error.
+            let resolved = crate::pane_utf8::resolve_shell(program, &cmd)?;
+            cmd.get_argv_mut()[2] = resolved.into_os_string();
+        }
         crate::log!("pane {id}: spawning {shell:?} {}x{}", size.cols, size.rows);
         let child = pair.slave.spawn_command(cmd).map_err(|e| {
             crate::log!("pane {id}: spawn failed: {e}");

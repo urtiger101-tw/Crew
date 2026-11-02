@@ -4,6 +4,8 @@
 
 - Add the studio theme, native Windows clipboard image paste, UTF-8 pane console
   setup and working Ctrl-C delivery to native child programs.
+- Reject missing Windows pane shells before starting the UTF-8 helper so worktree
+  creation reports the open failure and preserves the completed checkout.
 - Add per-command agentcmd PATH plugins, terminal-title and Codex progress display,
   a durable peer/message inbox and bounded worker/receiver integration helpers.
 - Avoid stale nesting markers after a daemon restart, preserve wide terminal cells,
