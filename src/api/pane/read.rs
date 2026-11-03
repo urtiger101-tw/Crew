@@ -294,4 +294,28 @@ mod tests {
         let err = Matcher::new(&Pattern::Regex("(".into())).err().unwrap();
         assert_eq!(err.code, "invalid_argument");
     }
+
+    #[test]
+    fn view_rows_preserves_soft_wrap_and_full_width_behavior() {
+        let mut parser = vt100::Parser::new(5, 10, 100);
+        // Row 0-1: soft-wrapped line (vt100 marks row 0 wrapped)
+        // Row 2-3: ConPTY-style full-width line with explicit CRLF
+        parser.process(b"0123456789wrapped!\r\nfullwidth!\r\nrest\r\n");
+        let rows = view_rows(parser.screen(), 0, 4);
+        assert!(rows[0].wrapped, "soft-wrapped row must be marked wrapped");
+        assert_eq!(rows[0].text, "0123456789");
+        assert!(
+            !rows[1].wrapped,
+            "continuation of soft-wrapped row does not wrap"
+        );
+        assert_eq!(rows[1].text.trim_end(), "wrapped!");
+
+        assert_eq!(
+            rows[2].wrapped, HARD_WRAP_AT_WIDTH,
+            "full-width row without vt100 wrap is wrapped only on ConPTY/Windows"
+        );
+        assert_eq!(rows[2].text, "fullwidth!");
+        assert!(!rows[3].wrapped, "short row must not be marked wrapped");
+        assert_eq!(rows[3].text.trim_end(), "rest");
+    }
 }

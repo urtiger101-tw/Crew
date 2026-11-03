@@ -35,11 +35,54 @@ pub fn row_text(screen: &vt100::Screen, row: u16) -> String {
     screen.rows(0, width).nth(row as usize).unwrap_or_default()
 }
 
-/// Does `row` continue onto the next row? True if vt100 marked it soft-wrapped, or if
-/// (on Windows) its display width fills the pane width.
+/// Does `row` continue onto the next row for text reading/search?
+/// True if vt100 marked it soft-wrapped, or if (on Windows) its display width fills the pane width.
 pub fn row_continues(screen: &vt100::Screen, row: u16, row_text: &str) -> bool {
     screen.row_wrapped(row)
         || (HARD_WRAP_AT_WIDTH && UnicodeWidthStr::width(row_text) >= usize::from(screen.size().1))
+}
+
+/// A rule row is one where all non-space cells are the same character, or all non-space cells
+/// are box-drawing (U+2500..=U+257F), block elements (U+2580..=U+259F), or '-', '=', '_', '─'.
+fn is_rule_row(text: &str) -> bool {
+    let non_space: Vec<char> = text.chars().filter(|c| !c.is_whitespace()).collect();
+    if non_space.is_empty() {
+        return true;
+    }
+    if non_space.iter().all(|&c| c == non_space[0]) {
+        return true;
+    }
+    non_space.iter().all(|&c| {
+        matches!(
+            c,
+            '\u{2500}'..='\u{257f}' | '\u{2580}'..='\u{259f}' | '-' | '=' | '_'
+        )
+    })
+}
+
+fn next_row_first_cell_non_blank(screen: &vt100::Screen, next_row: u16) -> bool {
+    screen
+        .cell(next_row, 0)
+        .is_some_and(|cell| !cell.is_wide_continuation() && !cell.contents().trim().is_empty())
+}
+
+/// Stricter continuation predicate for copy mode.
+/// Soft-wrap flag OR (HARD_WRAP_AT_WIDTH && full width && row is NOT a rule row && next row's first cell is non-blank).
+pub fn copy_row_continues(screen: &vt100::Screen, row: u16, row_text: &str) -> bool {
+    if screen.row_wrapped(row) {
+        return true;
+    }
+    if !HARD_WRAP_AT_WIDTH {
+        return false;
+    }
+    let width = usize::from(screen.size().1);
+    if UnicodeWidthStr::width(row_text) < width || row_text.trim().is_empty() {
+        return false;
+    }
+    if is_rule_row(row_text) {
+        return false;
+    }
+    next_row_first_cell_non_blank(screen, row.saturating_add(1))
 }
 
 /// Extract text between two absolute positions (inclusive).
@@ -102,21 +145,44 @@ fn extract_opts<CB: vt100::Callbacks>(
             }
         }
         let full_text = row_text(parser.screen(), v);
-        let cont = row_continues(parser.screen(), v, &full_text);
+        let cont = copy_row_continues(parser.screen(), v, &full_text);
         raw_rows.push(text);
         continues.push(cont);
     }
     parser.screen_mut().set_scrollback(saved);
 
     if join {
-        let mut parts = Vec::new();
-        for (i, row) in raw_rows.iter().enumerate() {
-            let piece = if i == 0 { row.trim_end() } else { row.trim() };
-            if !piece.is_empty() {
-                parts.push(piece);
+        let mut out = String::new();
+        let mut in_continuation = false;
+        let n = raw_rows.len();
+
+        for (i, (text, cont)) in raw_rows.into_iter().zip(continues).enumerate() {
+            let is_last = i + 1 == n;
+            let continues_next = cont && !is_last;
+
+            if in_continuation {
+                if continues_next {
+                    out.push_str(&text);
+                } else {
+                    out.push_str(text.trim_end());
+                }
+            } else {
+                let s = if i == 0 {
+                    text.as_str()
+                } else {
+                    text.trim_start()
+                };
+                let s = if continues_next { s } else { s.trim_end() };
+                if !s.is_empty() {
+                    if !out.is_empty() {
+                        out.push(' ');
+                    }
+                    out.push_str(s);
+                }
             }
+            in_continuation = continues_next;
         }
-        parts.join(" ")
+        out
     } else {
         let mut out = String::new();
         let n = raw_rows.len();
@@ -261,14 +327,60 @@ mod tests {
     }
 
     #[test]
-    fn read_rs_behavior_is_unchanged() {
+    fn extract_joined_soft_wrap_long_url() {
+        let mut p = vt100::Parser::new(3, 40, 100);
+        let url = "https://example.com/very/long/url/that/spans/multiple/lines/and/should/not/have/any/spaces/inserted";
+        p.process(url.as_bytes());
+        assert!(p.screen().row_wrapped(0));
+        assert!(p.screen().row_wrapped(1));
+        let text = extract_joined(&mut p, (0, 0), (2, (url.len() - 80 - 1) as u16), false);
+        assert_eq!(text, url);
+    }
+
+    #[test]
+    fn extract_joined_conpty_full_width_long_url() {
+        let mut p = vt100::Parser::new(4, 20, 100);
+        // ConPTY wraps 45 chars across 20-col rows with explicit \r\n:
+        // row 0 (20): https://example.com/
+        // row 1 (20): path/to/resource/123
+        // row 2 (5):  45678
+        p.process(b"https://example.com/\r\npath/to/resource/123\r\n45678\r\n");
+        assert!(!p.screen().row_wrapped(0));
+        assert!(!p.screen().row_wrapped(1));
+        let text = extract_joined(&mut p, (0, 0), (2, 4), false);
+        if HARD_WRAP_AT_WIDTH {
+            assert_eq!(text, "https://example.com/path/to/resource/12345678");
+        } else {
+            assert_eq!(text, "https://example.com/ path/to/resource/123 45678");
+        }
+    }
+
+    #[test]
+    fn extract_plain_full_width_rule_row_keeps_newline() {
+        let mut p = vt100::Parser::new(5, 10, 100);
+        p.process(b"----------\r\ntext 1\r\n");
+        p.process("┌────────┐\r\ntext 2\r\n".as_bytes());
+        let text = extract(&mut p, (0, 0), (3, 5), false);
+        assert_eq!(text, "----------\ntext 1\n┌────────┐\ntext 2");
+    }
+
+    #[test]
+    fn extract_plain_full_width_text_row_followed_by_text_joins() {
         let mut p = vt100::Parser::new(3, 10, 100);
-        p.process(b"abcdefghij\r\nk\r\n");
-        let text0 = row_text(p.screen(), 0);
-        let text1 = row_text(p.screen(), 1);
-        assert_eq!(text0, "abcdefghij");
-        assert_eq!(text1, "k");
-        assert_eq!(row_continues(p.screen(), 0, &text0), HARD_WRAP_AT_WIDTH);
-        assert!(!row_continues(p.screen(), 1, &text1));
+        p.process(b"abcdefghij\r\nklmno\r\n");
+        let text = extract(&mut p, (0, 0), (1, 4), false);
+        if HARD_WRAP_AT_WIDTH {
+            assert_eq!(text, "abcdefghijklmno");
+        } else {
+            assert_eq!(text, "abcdefghij\nklmno");
+        }
+    }
+
+    #[test]
+    fn extract_plain_full_width_text_followed_by_indented_row_keeps_newline() {
+        let mut p = vt100::Parser::new(3, 10, 100);
+        p.process(b"abcdefghij\r\n  klmno\r\n");
+        let text = extract(&mut p, (0, 0), (1, 6), false);
+        assert_eq!(text, "abcdefghij\n  klmno");
     }
 }
