@@ -3,13 +3,9 @@
 //! Rows keep vt100's soft-wrap flag. `pane read` prints one line per row as displayed, while
 //! wait-output matches logical lines, where a soft-wrapped row continues on the next row.
 use crate::api::{ApiError, Pattern, ReadSource, lock};
+use crate::copy::row_continues;
 use crate::server::{Shared, State};
 use regex::Regex;
-use unicode_width::UnicodeWidthStr;
-
-/// ConPTY emits CRLF at full rows, so on Windows a full-width row is assumed to continue.
-/// (An exact-width line followed by a new line is then joined too: a match superset.)
-const HARD_WRAP_AT_WIDTH: bool = cfg!(windows);
 
 /// Rows returned by `Recent` when no count is given.
 const RECENT_ROWS: usize = 80;
@@ -102,15 +98,8 @@ fn view_rows(screen: &vt100::Screen, skip: usize, take: usize) -> Vec<Row> {
         .skip(skip)
         .take(take)
         .map(|(i, text)| {
-            // ConPTY (Windows) emits an explicit CRLF at a full row instead of a soft wrap, so
-            // vt100 never flags it; treat a row filled to the pane width as continuing too.
-            let full =
-                HARD_WRAP_AT_WIDTH && UnicodeWidthStr::width(text.as_str()) >= usize::from(width);
-            let soft = u16::try_from(i).is_ok_and(|r| screen.row_wrapped(r));
-            Row {
-                wrapped: soft || full,
-                text,
-            }
+            let wrapped = u16::try_from(i).is_ok_and(|r| row_continues(screen, r, &text));
+            Row { wrapped, text }
         })
         .collect()
 }
@@ -187,6 +176,7 @@ pub(super) fn find_line(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::copy::HARD_WRAP_AT_WIDTH;
 
     fn text_rows(parser: &vt100::Parser) -> Vec<Row> {
         view_rows(parser.screen(), 0, usize::MAX)
