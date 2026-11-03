@@ -294,8 +294,8 @@ Browse earlier output without the prefix: `Shift+Up`/`Shift+Down` scroll the act
 | `Esc` | 取消選取（再按離開）Clear selection (again to exit) |
 | `q` | 離開 Exit |
 
-滑鼠：在窗格內拖曳即選取，放開時自動複製（含 OSC 52 系統剪貼簿；按住 Shift 放開或設定 copy_join = true 則合併為單行）。
-Mouse: drag inside a pane to select; releasing copies (also to the system clipboard via OSC 52; hold Shift on release or set copy_join = true to join into a single line).
+滑鼠：在窗格內拖曳即選取，放開時自動複製（含 OSC 52 系統剪貼簿；設定 copy_join = true 則合併為單行）。
+Mouse: drag inside a pane to select; releasing copies (also to the system clipboard via OSC 52; set copy_join = true to join into a single line).
 
 拖曳窗格**標題列**到同一分頁的另一個窗格，放開即交換位置；拖曳底部的**分頁標籤**可調整順序（放在目標標籤左半部為插入其前、右半部為插入其後）。移動至少兩個字元格才算拖曳；`Esc` 或放到有效區域外可取消。窗格 ID、執行中的程序與 shell 狀態保留，版面比例不變，焦點跟著原窗格。標題列隱藏時可用 `prefix {`／`prefix }` 或 `crew pane swap p1 p2`。
 

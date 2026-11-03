@@ -395,8 +395,7 @@ impl State {
             Drag::Copy {
                 pane, moved: true, ..
             } => {
-                let force_join = m.modifiers.contains(crossterm::event::KeyModifiers::SHIFT);
-                self.copy_selection(cid, pane, force_join);
+                self.copy_selection(cid, pane, false);
             }
             Drag::Pane {
                 workspace,
