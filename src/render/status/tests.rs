@@ -416,7 +416,7 @@ fn attention_and_zoom_flags_follow_the_active_window() {
 fn copy_mode_shows_the_copy_chip_and_hints() {
     let (wide, _) = row(&input("demo", vec![win("cmd")], 0, Right::Copy), 120);
     assert!(
-        wide.contains(" COPY ") && wide.trim_end().ends_with("y copy  q quit"),
+        wide.contains(" COPY ") && wide.trim_end().ends_with("y/Y copy  q quit"),
         "{wide:?}"
     );
     let (narrow, _) = row(&input("demo", vec![win("cmd")], 0, Right::Copy), 40);
@@ -623,7 +623,7 @@ fn zh_tw_right_block_is_never_overpainted_and_keeps_the_key() {
 fn zh_tw_copy_mode_chip_and_hints() {
     let (wide, _) = row(&zh_input("demo", vec![win("cmd")], 0, Right::Copy), 120);
     assert!(
-        wide.contains(" 複製模式 ") && wide.trim_end().ends_with("y 複製  q 結束"),
+        wide.contains(" 複製模式 ") && wide.trim_end().ends_with("y/Y 複製  q 結束"),
         "{wide:?}"
     );
     let (narrow, _) = row(&zh_input("demo", vec![win("cmd")], 0, Right::Copy), 40);

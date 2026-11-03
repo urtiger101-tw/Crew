@@ -12,8 +12,8 @@ pub const ENTRIES: &[Entry] = &[
     ("render.status.copy_chip", " COPY ", " 複製模式 "),
     (
         "render.status.copy_hint",
-        "hjkl move  v/V select  y copy  q quit",
-        "hjkl 移動  v/V 選取  y 複製  q 結束",
+        "hjkl move  v/V select  y/Y copy  q quit",
+        "hjkl 移動  v/V 選取  y/Y 複製  q 結束",
     ),
     ("render.status.help", "? help", "? 說明"),
     (

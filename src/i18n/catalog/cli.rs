@@ -69,7 +69,7 @@ Config: $CREW_CONFIG or <config_dir>/crew/config.toml"#,
   x          kill pane (y/n)      &          kill window (y/n)
   Tab        next pane needing you (blocked first, then done)
   BTab       previous such pane   g          tree chooser (like s)
-  [ / PgUp   copy mode (hjkl, v/V select, y copy, q exit)
+  [ / PgUp   copy mode (hjkl, v/V select, y/Y copy, q exit)
   ]          paste buffer         :          command prompt
   ,          rename window        $          rename session
   s          session chooser      ( )        prev/next session
@@ -97,7 +97,7 @@ Custom bindings: [bind] in config.toml, or `bind-key KEY COMMAND` at the : promp
   x          關閉窗格（y/n）       &          關閉視窗（y/n）
   Tab        下一個需要你處理的窗格（待回應優先，其次已完成）
   BTab       上一個需要你處理的窗格  g          選單（同 s）
-  [ / PgUp   複製模式（hjkl，v/V 選取，y 複製，q 離開）
+  [ / PgUp   複製模式（hjkl，v/V 選取，y/Y 複製，q 離開）
   ]          貼上緩衝區            :          指令列
   ,          重新命名視窗          $          重新命名工作階段
   s          工作階段選單          ( )        上一個／下一個工作階段

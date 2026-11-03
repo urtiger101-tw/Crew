@@ -86,6 +86,9 @@ pub struct Config {
     pub toolbar_fkeys: bool,
     /// Shift+Up/Down and Shift+PageUp/PageDown scroll the active pane's earlier output
     pub scroll_keys: bool,
+    /// Standard copy joins multi-row selections into a single line
+    #[serde(alias = "copy-join")]
+    pub copy_join: bool,
     /// Custom toolbar buttons in F-key order (at most 12); empty = the default buttons
     pub toolbar_buttons: Vec<ToolbarButton>,
 }
@@ -128,6 +131,7 @@ impl Default for Config {
             toolbar: true,
             toolbar_fkeys: false,
             scroll_keys: true,
+            copy_join: false,
             toolbar_buttons: Vec::new(),
         }
     }
@@ -343,6 +347,7 @@ impl Config {
             }
             "toolbar-fkeys" => self.toolbar_fkeys = parse_bool(val)?,
             "scroll-keys" => self.scroll_keys = parse_bool(val)?,
+            "copy-join" => self.copy_join = parse_bool(val)?,
             "pane-titles" => match val {
                 "off" | "auto" | "always" => self.pane_titles = val.to_string(),
                 _ => return Err(format!("pane-titles: expected off|auto|always, got {val}")),
@@ -480,6 +485,19 @@ sidebar_pane_segments = ["$workspace", {template="$task", fg="#abc", bold=false,
         cfg.set("pane-utf8", "on").unwrap();
         assert!(cfg.pane_utf8);
         assert!(cfg.set("pane_utf8", "invalid").is_err());
+    }
+
+    #[test]
+    fn copy_join_parses_and_sets() {
+        let mut cfg = Config::default();
+        assert!(!cfg.copy_join);
+        cfg.set("copy-join", "on").unwrap();
+        assert!(cfg.copy_join);
+        cfg.set("copy-join", "off").unwrap();
+        assert!(!cfg.copy_join);
+        assert!(cfg.set("copy-join", "invalid").is_err());
+        let loaded = load_text("copy-join = true\n").unwrap();
+        assert!(loaded.copy_join);
     }
 
     #[test]

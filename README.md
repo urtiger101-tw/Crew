@@ -290,11 +290,12 @@ Browse earlier output without the prefix: `Shift+Up`/`Shift+Down` scroll the act
 | `v` or `Space` | 開始字元選取 Start character selection |
 | `V` | 整行選取 Line selection |
 | `y` / `Enter` | 複製並離開 Copy and exit |
+| `Y` | 合併為單行複製並離開 Join into one line, copy and exit |
 | `Esc` | 取消選取（再按離開）Clear selection (again to exit) |
 | `q` | 離開 Exit |
 
-滑鼠：在窗格內拖曳即選取，放開時自動複製（含 OSC 52 系統剪貼簿）。
-Mouse: drag inside a pane to select; releasing copies (also to the system clipboard via OSC 52).
+滑鼠：在窗格內拖曳即選取，放開時自動複製（含 OSC 52 系統剪貼簿；按住 Shift 放開或設定 copy_join = true 則合併為單行）。
+Mouse: drag inside a pane to select; releasing copies (also to the system clipboard via OSC 52; hold Shift on release or set copy_join = true to join into a single line).
 
 拖曳窗格**標題列**到同一分頁的另一個窗格，放開即交換位置；拖曳底部的**分頁標籤**可調整順序（放在目標標籤左半部為插入其前、右半部為插入其後）。移動至少兩個字元格才算拖曳；`Esc` 或放到有效區域外可取消。窗格 ID、執行中的程序與 shell 狀態保留，版面比例不變，焦點跟著原窗格。標題列隱藏時可用 `prefix {`／`prefix }` 或 `crew pane swap p1 p2`。
 
@@ -536,6 +537,7 @@ sidebar_width = 28
 busy_secs = 1.5         # 最後輸出後幾秒內視為 working / seconds after output counted as "working"
 automatic_rename = true # 依前景程式自動命名視窗 / auto-name windows
 osc52 = true            # 複製時寫入系統剪貼簿 / copy to system clipboard via OSC 52
+copy_join = false       # 複製時合併為單行 / join copied rows into a single line
 persist = true          # 保存並還原版面 / save and restore the layout across server restarts
 hints = true            # 狀態列的 "? help"、側邊欄提示與首次連線提示（which-key 不受影響）/ status-bar help, sidebar hint and first-attach tip (not the which-key bar)
 confirm_close = true    # x 與 & 先以 y/n 確認 / ask y/n before x and &

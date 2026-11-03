@@ -4,7 +4,7 @@ use crate::server::State;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 impl State {
-    pub(crate) fn copy_selection(&mut self, cid: usize, pid: usize) {
+    pub(crate) fn copy_selection(&mut self, cid: usize, pid: usize, force_join: bool) {
         let Some(p) = self.panes.get_mut(&pid) else {
             return;
         };
@@ -12,7 +12,11 @@ impl State {
         let Some(anchor) = cs.anchor else { return };
         let off = p.parser.screen().scrollback();
         let cur = (copy::abs_row(cs.cy, off), cs.cx);
-        let text = copy::extract(&mut p.parser, anchor, cur, cs.line);
+        let text = if force_join || self.cfg.copy_join {
+            copy::extract_joined(&mut p.parser, anchor, cur, cs.line)
+        } else {
+            copy::extract(&mut p.parser, anchor, cur, cs.line)
+        };
         p.copy = None;
         p.parser.screen_mut().set_scrollback(0);
         self.set_clipboard(cid, text);
@@ -137,7 +141,16 @@ impl State {
             KeyCode::Char('y') | KeyCode::Enter => {
                 if cs.anchor.is_some() {
                     p.copy = Some(cs);
-                    self.copy_selection(cid, pid);
+                    self.copy_selection(cid, pid, false);
+                    self.mark_dirty();
+                    return;
+                }
+                done = true;
+            }
+            KeyCode::Char('Y') => {
+                if cs.anchor.is_some() {
+                    p.copy = Some(cs);
+                    self.copy_selection(cid, pid, true);
                     self.mark_dirty();
                     return;
                 }
