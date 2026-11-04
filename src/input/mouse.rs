@@ -526,7 +526,10 @@ impl State {
             return false;
         };
         let had_copy = p.copy.is_some();
-        p.prepare_history_view();
+        // Only scrolling back can enter history; never clone the screen on wheel-down.
+        if delta > 0 {
+            p.prepare_history_view();
+        }
         let parser = p.history_view.as_mut().unwrap_or(&mut p.parser);
         let scrolled = scroll_view(parser, &mut p.copy, p.rect.h, delta);
         if p.copy.is_none() {

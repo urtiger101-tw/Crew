@@ -36,7 +36,7 @@ fn split_tree_keeps_active_tab_visible_and_system_rows_are_not_navigation() {
 }
 
 #[test]
-fn aurora_default_content_budget_is_at_least_v060() {
+fn aurora_default_content_budget_with_sidebar_off_is_at_least_v060() {
     use crate::layout::{Dir, Node};
     for (cols, rows) in [(120, 30), (80, 24)] {
         let mut old = test_state();
@@ -48,12 +48,7 @@ fn aurora_default_content_budget_is_at_least_v060() {
         new.cfg = crate::config::Config::default();
         new.cfg.set("theme", "aurora").unwrap();
         new.cfg.sidebar = false;
-        assert!(
-            new.cfg.toolbar
-                && !new.cfg.sidebar
-                && !new.cfg.workspace_tree
-                && !new.cfg.changed_files
-        );
+        assert!(new.cfg.toolbar && !new.cfg.workspace_tree && !new.cfg.changed_files);
         let mut session = test_session("budget", cols, rows, 1);
         let before = old.pane_area(&session);
         let after = new.pane_area(&session);
