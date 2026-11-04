@@ -274,8 +274,24 @@ After the prefix, the status bar becomes a which-key bar listing the common keys
 工具列按鈕（頂列）：`prefix` 後按 `F1`–`F12` 執行第 n 個按鈕；若該鍵已有自訂綁定（`bind`），以綁定為準。`toolbar_fkeys = true` 時，不加前綴的 `F2`–`F12` 直接執行按鈕，不再送到窗格內的程式。點擊按鈕亦會執行（輸入列開啟時點擊無作用）。`F10`（關閉）與 `x` 相同：`confirm-close` 開啟時先以 y/n 詢問。
 Toolbar buttons: `prefix` then `F1`–`F12` runs button n; a custom binding (`bind`) on that key wins. With `toolbar_fkeys = true`, plain `F2`–`F12` run the buttons directly and no longer reach the program in the pane. Clicking a button runs it too (not while a prompt is open). F10 (close) works like `x`: with `confirm-close` on it asks y/n first.
 
-不按前綴也能回看輸出：`Shift+↑`／`Shift+↓` 逐行捲動目前窗格的先前輸出，`Shift+PgUp`／`Shift+PgDn` 整頁捲動；捲離底部即進入捲動模式（可接著用複製模式按鍵），捲回底部自動結束。不加 Shift 的方向鍵仍交給 shell（指令歷史）。全螢幕程式（alternate screen，如 vim）照常收到按鍵；唯一例外是複製模式中已有選取範圍時，按鍵仍歸複製模式。`scroll_keys = false` 可關閉。
-Browse earlier output without the prefix: `Shift+Up`/`Shift+Down` scroll the active pane one line, `Shift+PgUp`/`Shift+PgDn` one page. Scrolling off the bottom enters scroll mode (copy-mode keys then work); scrolling back to the bottom leaves it. Plain arrows still go to the shell (history). Full-screen apps (alternate screen, e.g. vim) still receive the keys, except while a copy-mode selection is active, which keeps them. Turn off with `scroll_keys = false`.
+不按前綴也能回看輸出：`Shift+↑`／`Shift+↓` 逐行捲動，`Shift+PgUp`／`Shift+PgDn` 整頁捲動；也可用 `C-b [` 進入複製／捲動模式。捲離底部會顯示捲動提示；`q` 或未選取文字時的 `Esc` 回到底部，捲回底部也會自動結束。一般輸入模式的上下鍵仍交給程式（例如命令歷史）。`scroll_keys = false` 只關閉 Shift 捲動捷徑。
+Browse earlier output with `Shift+Up`/`Shift+Down` (one line), `Shift+PgUp`/`Shift+PgDn` (one page), or `C-b [` (copy/scroll mode). A scroll label appears while browsing; `q`, or `Esc` with no selection, returns to the live screen. Scrolling back to the bottom also exits. Plain arrows outside copy mode still go to the application, including command history. `scroll_keys = false` disables only the Shift shortcuts.
+
+滾輪預設捲動指標所在窗格的 Crew 歷史；程式明確要求滑鼠回報且未進入複製模式時，才轉送真正的滾輪事件，不再轉成上下鍵。全螢幕程式（alternate screen）執行中，Shift 捲動或 `C-b [` 可檢視已保存的一般畫面歷史副本，標示為「主畫面歷史」，退出後返回程式即時畫面。這份歷史不包含 alternate-screen 過去已覆寫的重繪內容；程式自己的捲動介面由其滑鼠模式處理。
+The wheel browses Crew history in the pane under the pointer, unless the application requests mouse reporting and Crew copy mode is inactive; then Crew forwards a real wheel event, never arrow keys. While an alternate-screen app runs, Shift scrolling or `C-b [` can browse a frozen copy of retained normal-screen history, labeled "saved main"; exiting returns to the live app. Past alternate-screen redraws were never saved and cannot be reconstructed. Applications that request mouse reporting handle their own wheel scrolling.
+
+對未聚焦窗格捲動並進入 Crew 歷史時，焦點會移至該窗格，使 Esc/q 操作同一份歷史。
+Entering Crew history with the wheel focuses that pane so Esc/q acts on the view being browsed.
+
+Windows 10 的系統 ConPTY 可能吞掉程式的 alternate-screen／mouse 模式訊號。x64 原始碼建置可將固定版本、Microsoft 簽章的 ConPTY 配對檔案放在 **daemon 使用的 `crew.exe` 同一目錄**：
+Windows 10's system ConPTY can consume application alternate-screen/mouse mode changes. For an x64 source build, stage the pinned, Microsoft-signed ConPTY pair beside the **daemon's `crew.exe`**:
+
+```powershell
+pwsh -NoProfile -File scripts/stage_windows_conpty.ps1 -Destination target/release
+```
+
+腳本核對 NuGet 與兩個執行檔 SHA-256、Microsoft 簽章，附上 `ConPTY-LICENSE.txt` 與來源紀錄；不修改系統或重啟現有 daemon。搬移建置成品時請保留這些同目錄檔案。已執行的 daemon 必須經使用者允許重啟後才會載入新版 runtime。
+The script verifies package/file SHA-256 and Microsoft signatures, and includes the license and provenance record. It changes no system settings and restarts no daemon. Keep the sidecars with the binary when moving the build. An existing daemon loads the new runtime only after an authorized restart.
 
 ### 複製模式 Copy mode
 
@@ -386,6 +402,33 @@ crew debug-frame -t demo --prefix --text   # 按下前綴鍵後的狀態列 / ba
 ```
 
 ## 自動化 API Automation API (herdr-style)
+
+### 離線任務契約 Offline task contracts
+
+`crew task` 是選用的本機 CLI，不需要 daemon、模型帳號或 API。
+從 [v1 範例](docs/design/task-contract-example.json) 建立自己的 JSON：
+
+```sh
+crew task validate docs/design/task-contract-example.json
+crew task store docs/design/task-contract-example.json --output task-record.json
+crew task inspect task-record.json
+```
+
+輸出沿用 `{"result":...}`／`{"error":{"code","message"}}`。成功 exit 0 代表
+契約格式與交叉參照有效，**不代表任務完成**；`result.state` 是 supplied records
+推導的 ready / revision_required / exhausted / expired / declared_pass，
+`evidence_verified` 固定為 false。inspect 另回傳完整 contract；store 不覆寫既存檔案，
+只寫明確指定的新檔，不建立父目錄。來源與 canonical JSON 均最多 1 MiB。
+語法錯誤 exit 2，資料／I/O 錯誤 exit 1。以 `-` 開頭的檔名請加 `./`。
+
+S/C/I/E/F + verification/revision_policy 可描述角色、上下文來源、步驟與責任人、
+可選例子、輸出契約及有限重試紀錄。context URI、artifact 與 evidence_ref 都是資料，
+不會被讀取或執行；模型可省略。沒有自動排程、模型呼叫或證據真偽認證。
+完整資料型別、信任界線與驗收見 [ADR](docs/design/task-contract-adr.md)。
+
+The optional offline CLI validates and stores versioned task records. It never starts
+a daemon, executes instructions, dereferences context, or invokes a model. Declared
+results remain unverified; an independent operator must inspect the referenced evidence.
 
 以 JSON 指令透過同一個本機 socket 操作伺服器，讓 script 或 coding agent 可以列出、分割、輸入與讀取窗格，並回報與等待 agent 狀態。不需要另外啟動程式。
 A JSON command interface over the same local socket, so scripts and coding agents can list, split, type into and read panes, and report and wait on agent state. No extra process is needed.
@@ -532,7 +575,7 @@ shell = "pwsh -NoLogo"  # 自訂 shell（Windows 預設 powershell.exe -NoLogo�
 pane_utf8 = true        # Windows 新窗格使用 UTF-8；false 沿用原本的編碼 / UTF-8 in new Windows panes
 scrollback = 10000      # 回溯行數 scrollback lines
 mouse = true            # 滑鼠支援 mouse support
-sidebar = false         # 啟動時顯示側邊欄 show sidebar on start
+sidebar = true          # 新 session 預設顯示側邊欄 show sidebar in new sessions
 sidebar_width = 28
 busy_secs = 1.5         # 最後輸出後幾秒內視為 working / seconds after output counted as "working"
 automatic_rename = true # 依前景程式自動命名視窗 / auto-name windows
@@ -655,7 +698,7 @@ Aurora 沿用 v0.6.0 版面，將近黑底色、膠囊分頁與 agent 狀態晶�
 `F1` 顯示／隱藏工具列。
 
 ```toml
-sidebar = false
+sidebar = true
 workspace_tree = false
 toolbar = true
 pane_titles = "always"
@@ -719,8 +762,8 @@ Overridable tokens (names as in `src/theme.rs`): `accent` `muted` `border` `bord
 優先順序：明確指定的 `dark`、`light` 或 `mono` 優先於環境變數；`NO_COLOR` 與 `TERM=dumb` 在 `studio` 和 `terminal` 時使主題進入無色模式。
 Precedence: an explicit `dark`, `light` or `mono` wins over the environment; `NO_COLOR` and `TERM=dumb` switch `studio` and `terminal` to no color, but do not affect `dark` or `light`.
 
-`studio` 為窗格的預設文字與背景套用深色底色；程式明確指定的 ANSI／RGB 顏色不受影響。要顯示既有代理側欄，可設定 `sidebar = true` 或按 `prefix b`。
-`studio` supplies dark defaults for pane text and background; explicit ANSI/RGB application colors remain unchanged. To show the existing agent sidebar, set `sidebar = true` or press `prefix b`.
+`studio` 為窗格的預設文字與背景套用深色底色；程式明確指定的 ANSI／RGB 顏色不受影響。新 session 預設顯示代理側欄（Aurora 亦同）；可設定 `sidebar = false` 關閉，或按 `prefix b`（Aurora 為 `prefix B`）切換。既有 session 的手動切換與保存狀態仍保留；窄於顯示門檻時維持自動隱藏。
+`studio` supplies dark defaults for pane text and background; explicit ANSI/RGB application colors remain unchanged. New sessions show the agent sidebar by default, including Aurora. Set `sidebar = false` to turn it off by default, or press `prefix b` (Aurora: `prefix B`) to toggle it. Existing session choices and saved state are preserved; narrow terminals still hide it automatically.
 
 ### 無色與 ASCII 字元 Color and ASCII glyphs
 
@@ -758,7 +801,7 @@ Precedence: an explicit `dark`, `light` or `mono` wins over the environment; `NO
   OSC 52 requires a supporting outer terminal; the internal buffer (`prefix ]`) always works
 - 只有一個按鍵表（prefix 表），尚無 `-n` 免前綴綁定、複製模式內搜尋、多個貼上緩衝區
   Single key table (prefix only): no `-n` root bindings, no search in copy mode, single paste buffer
-- 窗格內程式的滑鼠事件不會轉送（滾輪在全螢幕程式中轉為方向鍵）/ Mouse events are not forwarded to apps (wheel becomes arrow keys in full-screen apps)
+- 滾輪依程式要求的滑鼠模式轉送；點擊與拖曳仍由 Crew 用於聚焦／選取 / Wheel events follow the application's requested mouse mode; clicks and drags remain Crew focus/selection actions
 - 終端模擬由 `vt100` crate 提供，少數進階序列可能不支援 / Terminal emulation via the `vt100` crate; some advanced sequences may be unsupported
 - 窗格工作目錄只有 Linux 即時追蹤；Windows／macOS 保存與回報的 `cwd` 是窗格啟動目錄 / Live working-directory tracking is Linux only; on Windows and macOS the saved and reported `cwd` is the pane's start directory
 - 還原的 resume 指令只依 POSIX shell 與 PowerShell 的引號規則組成，不支援 cmd.exe / Restored resume commands are quoted for POSIX shells and PowerShell only; cmd.exe is not supported

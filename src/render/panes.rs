@@ -26,7 +26,7 @@ pub(super) fn draw_panes(g: &mut Grid, cx: &Ctx, covered: &mut [bool]) -> Option
 
     for (pid, r) in &cx.rects {
         let Some(p) = st.panes.get(pid) else { continue };
-        let screen = p.parser.screen();
+        let screen = p.view().screen();
         let off = screen.scrollback();
         let sel = p.copy.as_ref().and_then(|c| {
             c.anchor
@@ -89,6 +89,7 @@ pub(super) fn draw_panes(g: &mut Grid, cx: &Ctx, covered: &mut [bool]) -> Option
                 screen.scrollback(),
                 st.cfg.scrollback,
                 cs.anchor.is_some(),
+                p.history_view.is_some(),
             );
             let lx = r.x + r.w.saturating_sub(label.width() as u16);
             let theme = &cx.theme;
@@ -166,7 +167,7 @@ fn draw_host_lost(g: &mut Grid, cx: &Ctx, r: &Rect, lost: &crate::server::host::
 
 /// Copy-mode label `[copy pos/max sel]` (`[複製 pos/max 選取]`): `pos` lines back in the
 /// scrollback of `max`, with the selection tag while a selection is anchored.
-fn copy_label(lang: Lang, pos: usize, max: usize, selecting: bool) -> String {
+fn copy_label(lang: Lang, pos: usize, max: usize, selecting: bool, saved_main: bool) -> String {
     let sel = if selecting {
         tr(lang, "render.copy.sel")
     } else {
@@ -174,7 +175,13 @@ fn copy_label(lang: Lang, pos: usize, max: usize, selecting: bool) -> String {
     };
     trf(
         lang,
-        "render.copy.label",
+        if selecting {
+            "render.copy.label"
+        } else if saved_main {
+            "render.scroll.saved_main"
+        } else {
+            "render.scroll.label"
+        },
         &[("pos", &pos), ("max", &max), ("sel", &sel)],
     )
 }
@@ -754,9 +761,22 @@ mod tests {
     }
     #[test]
     fn zh_tw_copy_label_and_untitled_name() {
-        assert_eq!(copy_label(Lang::En, 3, 2000, true), "[copy 3/2000 sel]");
-        assert_eq!(copy_label(Lang::ZhTw, 3, 2000, true), "[複製 3/2000 選取]");
-        assert_eq!(copy_label(Lang::ZhTw, 0, 2000, false), "[複製 0/2000]");
+        assert_eq!(
+            copy_label(Lang::En, 3, 2000, true, false),
+            "[copy 3/2000 sel]"
+        );
+        assert_eq!(
+            copy_label(Lang::ZhTw, 3, 2000, true, false),
+            "[複製 3/2000 選取]"
+        );
+        assert_eq!(
+            copy_label(Lang::ZhTw, 0, 2000, false, false),
+            "[捲動 0 · Esc/q 回底部]"
+        );
+        assert_eq!(
+            copy_label(Lang::En, 3, 2000, false, true),
+            "[saved main 3 · Esc/q live]"
+        );
         assert_eq!(title_name(None, None, Lang::ZhTw), "窗格");
         assert_eq!(title_name(None, Some("lab"), Lang::ZhTw), "lab");
     }

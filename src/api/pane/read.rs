@@ -40,12 +40,11 @@ fn source_rows(
         .panes
         .get_mut(&pid)
         .ok_or_else(|| ApiError::pane_not_found(pid))?;
-    let screen = p.parser.screen_mut();
     Ok(match source {
-        ReadSource::Visible => window(view_rows(screen, 0, usize::MAX), lines),
+        ReadSource::Visible => window(view_rows(p.view_mut().screen_mut(), 0, usize::MAX), lines),
         ReadSource::Recent => {
             let want = lines.unwrap_or(RECENT_ROWS);
-            window(recent_rows(screen, want), Some(want))
+            window(recent_rows(p.parser.screen_mut(), want), Some(want))
         }
     })
 }

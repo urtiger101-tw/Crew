@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "task_id": "crew-example",
+  "objective": "Create a reversible task contract workflow",
+  "role": "integration-engineer",
+  "authorized_actions": ["read repository", "edit assigned files", "run local tests"],
+  "constraints": ["No paid API", "No shared daemon restart"],
+  "non_goals": ["New scheduler"],
+  "context": [],
+  "instructions": [
+    {"id": "implement", "action": "Implement the offline contract CLI", "owner": "worker-1", "depends_on": []},
+    {"id": "verify", "action": "Run deterministic local checks", "owner": "tester-1", "depends_on": ["implement"]}
+  ],
+  "examples": [],
+  "output_contract": {"format": "JSON status report", "artifacts": ["docs/design/task-contract-delivery.md"]},
+  "verification": [{"id": "cli", "criterion": "validate, store and inspect preserve the contract"}],
+  "revision_policy": {"max_attempts": 2},
+  "attempts": []
+}

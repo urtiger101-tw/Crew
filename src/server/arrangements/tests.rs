@@ -168,6 +168,7 @@ fn layouts_resize_each_existing_pty_at_most_once_without_input_or_history_reset(
             id,
             crate::server::Pane {
                 parser,
+                history_view: None,
                 master: Box::new(Master(count)),
                 writer: Box::new(Input(input.clone())),
                 child: Box::new(Process(id as u32 + 1000)),

@@ -105,7 +105,7 @@ impl Default for Config {
             pane_utf8: true,
             scrollback: 10000,
             mouse: true,
-            sidebar: false,
+            sidebar: true,
             sidebar_width: 28,
             workspace_tree: false,
             dim_inactive: false,
@@ -440,6 +440,22 @@ mod tests {
         config.set("theme", "studio").unwrap();
         config.set("theme", "aurora").unwrap();
         assert!(config.toolbar);
+    }
+
+    #[test]
+    fn sidebar_defaults_on_and_respects_explicit_off_across_themes() {
+        assert!(Config::default().sidebar);
+        assert!(load_text("").unwrap().sidebar);
+        assert!(load_text("[theme]\npreset = 'aurora'\n").unwrap().sidebar);
+        let mut config = load_text("sidebar = false\n[theme]\npreset = 'aurora'\n").unwrap();
+        assert!(!config.sidebar);
+        config.set("theme", "studio").unwrap();
+        assert!(!config.sidebar);
+        config.set("sidebar", "on").unwrap();
+        assert!(config.sidebar);
+        config.set("sidebar", "off").unwrap();
+        config.set("theme", "aurora").unwrap();
+        assert!(!config.sidebar);
     }
 
     #[test]

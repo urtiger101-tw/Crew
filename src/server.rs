@@ -545,6 +545,7 @@ impl State {
             auto_focus_disabled: false,
             started: Instant::now(),
             copy: None,
+            history_view: None,
             agent: None,
             resume_requested: false,
             restored_shell: false,
@@ -969,6 +970,11 @@ impl State {
             {
                 p.rect = r;
                 p.vt(scrollback, |vt| vt.screen_mut().set_size(r.h, r.w));
+                if let Some(view) = &mut p.history_view {
+                    contain_vt(view, r.h, r.w, scrollback, |vt| {
+                        vt.screen_mut().set_size(r.h, r.w)
+                    });
+                }
                 let _ = p.master.resize(PtySize {
                     rows: r.h,
                     cols: r.w,
@@ -1146,8 +1152,7 @@ impl State {
                 p.restored_shell = false;
             }
             if p.copy.is_some() {
-                p.copy = None;
-                p.parser.screen_mut().set_scrollback(0);
+                p.leave_copy();
                 self.dirty = true;
             }
             let _ = p.writer.write_all(bytes);
@@ -1180,8 +1185,7 @@ impl State {
             .get_mut(&pid)
             .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "pane closed"))?;
         if p.copy.is_some() {
-            p.copy = None;
-            p.parser.screen_mut().set_scrollback(0);
+            p.leave_copy();
             self.dirty = true;
         }
         if !bytes.is_empty() {
@@ -1301,7 +1305,7 @@ impl State {
         let si = self.target_session(target)?;
         let p = self.panes.get(&self.active_pane(si)).ok_or("no pane")?;
         let mut out = String::new();
-        for line in p.parser.screen().contents().lines() {
+        for line in p.view().screen().contents().lines() {
             out.push_str(line.trim_end());
             out.push('\n');
         }
@@ -1603,7 +1607,12 @@ impl State {
             Cmd::CopyMode { page_up } => {
                 let pid = self.active_pane(si);
                 if let Some(p) = self.panes.get_mut(&pid) {
-                    let (cy, cx) = p.parser.screen().cursor_position();
+                    p.prepare_history_view();
+                    let (cy, cx) = p.view().screen().cursor_position();
+                    if page_up {
+                        let off = p.view().screen().scrollback() + p.rect.h as usize;
+                        p.view_mut().screen_mut().set_scrollback(off);
+                    }
                     let c = p.copy.get_or_insert(CopyState {
                         cx,
                         cy,
@@ -1611,8 +1620,6 @@ impl State {
                         line: false,
                     });
                     if page_up {
-                        let off = p.parser.screen().scrollback() + p.rect.h as usize;
-                        p.parser.screen_mut().set_scrollback(off);
                         c.cy = 0;
                     }
                 }

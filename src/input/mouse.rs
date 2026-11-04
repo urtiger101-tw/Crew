@@ -11,7 +11,7 @@ use crate::render::{
     status_regions, tab_hit_at, toolbar_hit_at, unpack_chooser, visible_entries,
 };
 use crate::server::{Drag, State};
-use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
 /// Lines one wheel tick moves a key popup or a pane.
 const WHEEL_LINES: usize = 3;
@@ -246,7 +246,7 @@ impl State {
             if let Some(cs) = &mut p.copy {
                 cs.anchor = None;
             }
-            let off = p.parser.screen().scrollback();
+            let off = p.view().screen().scrollback();
             let row = copy::abs_row(m.row - r.y, off);
             if let Some(c) = self.clients.get_mut(&cid) {
                 c.drag = Some(Drag::Copy {
@@ -341,12 +341,12 @@ impl State {
         let mut cy = m.row.clamp(r.y, r.y + r.h - 1) - r.y;
         let cx = m.column.clamp(r.x, r.x + r.w - 1) - r.x;
         // auto-scroll when dragging past the edges
-        let off = p.parser.screen().scrollback();
+        let off = p.view().screen().scrollback();
         if m.row < r.y {
-            p.parser.screen_mut().set_scrollback(off + 1);
+            p.view_mut().screen_mut().set_scrollback(off + 1);
             cy = 0;
         } else if m.row >= r.y + r.h && off > 0 {
-            p.parser.screen_mut().set_scrollback(off - 1);
+            p.view_mut().screen_mut().set_scrollback(off - 1);
         }
         let cs = p.copy.get_or_insert_with(CopyState::default);
         cs.anchor = Some((row, col));
@@ -444,14 +444,19 @@ impl State {
     }
 
     /// Wheel: overlays first (chooser moves its selection, popup scrolls), then the pane
-    /// under the pointer (app cursor keys on the alternate screen, else scrollback).
+    /// under the pointer (requested app mouse events, otherwise Crew scrollback).
     fn wheel(&mut self, cid: usize, si: usize, m: MouseEvent) -> Option<String> {
         let up = m.kind == MouseEventKind::ScrollUp;
         if self.wheel_overlay(cid, up) {
             return None;
         }
         if let Some((pid, r)) = self.pane_at(si, m.column, m.row) {
-            self.wheel_pane(pid, r, up);
+            self.wheel_pane(pid, r, m);
+            // Once Crew owns a history view, its Esc/q hint must target that
+            // pane, even when the wheel started over an unfocused split.
+            if self.panes.get(&pid).is_some_and(|p| p.copy.is_some()) {
+                self.focus_pane(pid);
+            }
         }
         None
     }
@@ -491,18 +496,19 @@ impl State {
         self.mark_dirty();
     }
 
-    fn wheel_pane(&mut self, pid: usize, _r: Rect, up: bool) {
+    fn wheel_pane(&mut self, pid: usize, r: Rect, m: MouseEvent) {
         let Some(p) = self.panes.get_mut(&pid) else {
             return;
         };
-        if p.parser.screen().alternate_screen() {
-            let seq: &[u8] = if up { b"\x1b[A" } else { b"\x1b[B" };
-            for _ in 0..WHEEL_LINES {
-                let _ = p.writer.write_all(seq);
-            }
+        if p.copy.is_none()
+            && p.parser.screen().mouse_protocol_mode() != vt100::MouseProtocolMode::None
+        {
+            let seq = wheel_bytes(p.parser.screen().mouse_protocol_encoding(), r, m);
+            let _ = p.writer.write_all(&seq);
             let _ = p.writer.flush();
             return;
         }
+        let up = m.kind == MouseEventKind::ScrollUp;
         let delta = if up {
             WHEEL_LINES as isize
         } else {
@@ -513,18 +519,66 @@ impl State {
 
     /// Scroll pane `pid` back (`delta > 0`) or forward through its scrollback. A pane scrolled
     /// off the live screen enters scroll mode (copy mode without a selection); returning to the
-    /// bottom leaves it again. Returns `false`, changing nothing, when the pane is on the
-    /// alternate screen (full-screen apps own their own scrolling) or does not exist.
+    /// bottom leaves it again. From an alternate-screen app, browse a frozen copy of the
+    /// retained normal-screen history; never change the live app's grid or input modes.
     pub(crate) fn scroll_pane(&mut self, pid: usize, delta: isize) -> bool {
         let Some(p) = self.panes.get_mut(&pid) else {
             return false;
         };
         let had_copy = p.copy.is_some();
-        let scrolled = scroll_view(&mut p.parser, &mut p.copy, p.rect.h, delta);
+        p.prepare_history_view();
+        let parser = p.history_view.as_mut().unwrap_or(&mut p.parser);
+        let scrolled = scroll_view(parser, &mut p.copy, p.rect.h, delta);
+        if p.copy.is_none() {
+            p.history_view = None;
+        }
         if scrolled || had_copy != p.copy.is_some() {
             self.mark_dirty();
         }
         scrolled
+    }
+}
+
+/// Encode one wheel event requested by the application, in pane-local coordinates.
+/// Legacy encodings cannot represent arbitrary coordinates: drop those events rather
+/// than wrapping them onto a different cell. SGR supports the full pane size.
+fn wheel_bytes(encoding: vt100::MouseProtocolEncoding, r: Rect, m: MouseEvent) -> Vec<u8> {
+    let mut button = if m.kind == MouseEventKind::ScrollUp {
+        64
+    } else {
+        65
+    };
+    for (modifier, bit) in [
+        (KeyModifiers::SHIFT, 4),
+        (KeyModifiers::ALT, 8),
+        (KeyModifiers::CONTROL, 16),
+    ] {
+        if m.modifiers.contains(modifier) {
+            button |= bit;
+        }
+    }
+    let x = u32::from(m.column - r.x) + 1;
+    let y = u32::from(m.row - r.y) + 1;
+    match encoding {
+        vt100::MouseProtocolEncoding::Sgr => format!("\x1b[<{button};{x};{y}M").into_bytes(),
+        vt100::MouseProtocolEncoding::Default if x <= 223 && y <= 223 => {
+            vec![
+                0x1b,
+                b'[',
+                b'M',
+                button + 32,
+                (x + 32) as u8,
+                (y + 32) as u8,
+            ]
+        }
+        vt100::MouseProtocolEncoding::Utf8 if x <= 2015 && y <= 2015 => format!(
+            "\x1b[M{}{}{}",
+            char::from(button + 32),
+            char::from_u32(x + 32).unwrap(),
+            char::from_u32(y + 32).unwrap()
+        )
+        .into_bytes(),
+        _ => Vec::new(),
     }
 }
 
@@ -580,6 +634,10 @@ fn wheel_chooser(raw: usize, last: usize, up: bool) -> usize {
     let (sel, filter) = unpack_chooser(raw);
     pack_chooser(wheel_step(sel, last, up), filter)
 }
+
+#[cfg(test)]
+#[path = "mouse_scrollback_tests.rs"]
+mod scrollback_tests;
 
 #[cfg(test)]
 mod tests {

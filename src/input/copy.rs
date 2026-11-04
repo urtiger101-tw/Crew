@@ -10,15 +10,16 @@ impl State {
         };
         let Some(cs) = p.copy.clone() else { return };
         let Some(anchor) = cs.anchor else { return };
-        let off = p.parser.screen().scrollback();
+        let off = p.view().screen().scrollback();
         let cur = (copy::abs_row(cs.cy, off), cs.cx);
+        // Joined copy (key `Y` or the `copy-join` option) reads the same history view the
+        // cursor was computed from, so browsing an alternate-screen app copies what is shown.
         let text = if force_join || self.cfg.copy_join {
-            copy::extract_joined(&mut p.parser, anchor, cur, cs.line)
+            copy::extract_joined(p.view_mut(), anchor, cur, cs.line)
         } else {
-            copy::extract(&mut p.parser, anchor, cur, cs.line)
+            copy::extract(p.view_mut(), anchor, cur, cs.line)
         };
-        p.copy = None;
-        p.parser.screen_mut().set_scrollback(0);
+        p.leave_copy();
         self.set_clipboard(cid, text);
     }
 
@@ -30,12 +31,11 @@ impl State {
         let (h, w) = (p.rect.h, p.rect.w);
         // a zero-sized pane has no cell to move to; keys then only close copy mode
         if h == 0 || w == 0 {
-            p.copy = None;
-            p.parser.screen_mut().set_scrollback(0);
+            p.leave_copy();
             self.mark_dirty();
             return;
         }
-        let mut off = p.parser.screen().scrollback();
+        let mut off = p.view().screen().scrollback();
         let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
         let mut cs = p.copy.clone().unwrap();
         let scroll_to = |n: usize, parser: &mut crate::server::PaneParser| -> usize {
@@ -67,14 +67,14 @@ impl State {
                 if cs.cy > 0 {
                     cs.cy -= 1
                 } else {
-                    off = scroll_to(off + 1, &mut p.parser)
+                    off = scroll_to(off + 1, p.view_mut())
                 }
             }
             KeyCode::Down | KeyCode::Char('j') => {
                 if cs.cy + 1 < h {
                     cs.cy += 1
                 } else if off > 0 {
-                    off = scroll_to(off - 1, &mut p.parser)
+                    off = scroll_to(off - 1, p.view_mut())
                 }
             }
             KeyCode::Left | KeyCode::Char('h') => cs.cx = cs.cx.saturating_sub(1),
@@ -82,10 +82,10 @@ impl State {
             KeyCode::Char('0') | KeyCode::Home => cs.cx = 0,
             KeyCode::Char('$') | KeyCode::End => {
                 cs.cx =
-                    (row_text(&p.parser, cs.cy).trim_end().chars().count() as u16).saturating_sub(1)
+                    (row_text(p.view(), cs.cy).trim_end().chars().count() as u16).saturating_sub(1)
             }
             KeyCode::Char('w') => {
-                let t: Vec<char> = row_text(&p.parser, cs.cy).chars().collect();
+                let t: Vec<char> = row_text(p.view(), cs.cy).chars().collect();
                 let mut x = cs.cx as usize;
                 while x < t.len() && !t[x].is_whitespace() {
                     x += 1;
@@ -96,7 +96,7 @@ impl State {
                 cs.cx = (x.min(t.len().saturating_sub(1))) as u16;
             }
             KeyCode::Char('b') if !ctrl => {
-                let t: Vec<char> = row_text(&p.parser, cs.cy).chars().collect();
+                let t: Vec<char> = row_text(p.view(), cs.cy).chars().collect();
                 let mut x = cs.cx as usize;
                 while x > 0 && t.get(x - 1).is_some_and(|c| c.is_whitespace()) {
                     x -= 1;
@@ -106,22 +106,18 @@ impl State {
                 }
                 cs.cx = x as u16;
             }
-            KeyCode::PageUp | KeyCode::Char('b') => {
-                off = scroll_to(off + h as usize, &mut p.parser)
-            }
+            KeyCode::PageUp | KeyCode::Char('b') => off = scroll_to(off + h as usize, p.view_mut()),
             KeyCode::PageDown | KeyCode::Char('f') => {
-                off = scroll_to(off.saturating_sub(h as usize), &mut p.parser)
+                off = scroll_to(off.saturating_sub(h as usize), p.view_mut())
             }
-            KeyCode::Char('u') => off = scroll_to(off + h as usize / 2, &mut p.parser),
-            KeyCode::Char('d') => {
-                off = scroll_to(off.saturating_sub(h as usize / 2), &mut p.parser)
-            }
+            KeyCode::Char('u') => off = scroll_to(off + h as usize / 2, p.view_mut()),
+            KeyCode::Char('d') => off = scroll_to(off.saturating_sub(h as usize / 2), p.view_mut()),
             KeyCode::Char('g') => {
-                off = scroll_to(usize::MAX, &mut p.parser);
+                off = scroll_to(usize::MAX, p.view_mut());
                 cs.cy = 0;
             }
             KeyCode::Char('G') => {
-                off = scroll_to(0, &mut p.parser);
+                off = scroll_to(0, p.view_mut());
                 cs.cy = h - 1;
             }
             KeyCode::Char('H') => cs.cy = 0,
@@ -159,8 +155,7 @@ impl State {
             _ => {}
         }
         if done {
-            p.copy = None;
-            p.parser.screen_mut().set_scrollback(0);
+            p.leave_copy();
         } else {
             p.copy = Some(cs);
         }

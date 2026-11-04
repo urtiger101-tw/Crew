@@ -42,9 +42,12 @@ fn aurora_default_content_budget_is_at_least_v060() {
         let mut old = test_state();
         old.cfg = crate::config::Config::default();
         old.cfg.theme.preset = "studio".into();
+        // v0.6.0 budget: no sidebar column (the sidebar now defaults on; covered below).
+        old.cfg.sidebar = false;
         let mut new = test_state();
         new.cfg = crate::config::Config::default();
         new.cfg.set("theme", "aurora").unwrap();
+        new.cfg.sidebar = false;
         assert!(
             new.cfg.toolbar
                 && !new.cfg.sidebar
@@ -76,6 +79,78 @@ fn aurora_default_content_budget_is_at_least_v060() {
             u32::from(after.w) * u32::from(after.h) >= u32::from(before.w) * u32::from(before.h)
         );
         assert_eq!(new.tab_row(&session), rows - 1);
+        new.cfg.workspace_tree = true;
+        session.rows = 3;
+        assert_eq!(new.tree_width(&session), 0);
+        session.rows = rows;
+        new.cfg.workspace_tree = false;
+        // Explicit toolbar choices and split headers still cost exactly the old rows.
+        session.windows[0].layout = Node::Split {
+            dir: Dir::H,
+            ratio: 0.5,
+            a: Box::new(Node::Leaf(1)),
+            b: Box::new(Node::Leaf(2)),
+        };
+        old.cfg.pane_titles = "always".into();
+        new.cfg.pane_titles = "always".into();
+        for toolbar in [false, true] {
+            old.cfg.toolbar = toolbar;
+            new.cfg.toolbar = toolbar;
+            assert_eq!(new.pane_area(&session), old.pane_area(&session));
+            assert_eq!(
+                new.visible_rects(&session, &session.windows[0]),
+                old.visible_rects(&session, &session.windows[0])
+            );
+        }
+    }
+}
+
+#[test]
+fn aurora_and_studio_defaults_reserve_sidebar_and_toolbar_geometry() {
+    use crate::layout::{Dir, Node};
+    for (cols, rows) in [(120, 30), (80, 24)] {
+        let mut old = test_state();
+        old.cfg = crate::config::Config::default();
+        old.cfg.theme.preset = "studio".into();
+        let mut new = test_state();
+        new.cfg = crate::config::Config::default();
+        new.cfg.set("theme", "aurora").unwrap();
+        assert!(
+            new.cfg.toolbar && new.cfg.sidebar && !new.cfg.workspace_tree && !new.cfg.changed_files
+        );
+        let mut session = test_session("budget", cols, rows, 1);
+        session.sidebar = new.cfg.sidebar;
+        let before = old.pane_area(&session);
+        let after = new.pane_area(&session);
+        assert_eq!(
+            before,
+            Rect {
+                x: 0,
+                y: 2,
+                w: cols - 28,
+                h: rows - 3
+            }
+        );
+        assert_eq!(
+            after,
+            Rect {
+                x: 0,
+                y: 2,
+                w: cols - 28,
+                h: rows - 3
+            }
+        );
+        assert!(
+            u32::from(after.w) * u32::from(after.h) >= u32::from(before.w) * u32::from(before.h)
+        );
+        assert_eq!(new.tab_row(&session), rows - 1);
+        session.sidebar = false;
+        assert_eq!(new.pane_area(&session).w, cols);
+        session.sidebar = true;
+        session.cols = 48;
+        assert_eq!(new.sidebar_width(&session), 0);
+        assert_eq!(new.pane_area(&session).w, 48);
+        session.cols = cols;
         new.cfg.workspace_tree = true;
         session.rows = 3;
         assert_eq!(new.tree_width(&session), 0);
