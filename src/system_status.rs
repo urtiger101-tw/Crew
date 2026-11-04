@@ -164,6 +164,7 @@ fn sample_memory() -> Option<Memory> {
         dwLength: std::mem::size_of::<MEMORYSTATUSEX>() as u32,
         ..Default::default()
     };
+    // SAFETY: status is a writable MEMORYSTATUSEX with the required structure size.
     if unsafe { GlobalMemoryStatusEx(&mut status) } == 0 {
         return None;
     }
@@ -229,6 +230,8 @@ fn sample_disk(directory: &str) -> Option<DiskSpace> {
 
     let mut available = 0u64;
     let mut total = 0u64;
+    // SAFETY: path is NUL-terminated UTF-16; both output pointers are writable u64s.
+    // The unused free-bytes output is documented as optional.
     if unsafe {
         GetDiskFreeSpaceExW(
             path.as_ptr(),
@@ -245,14 +248,18 @@ fn sample_disk(directory: &str) -> Option<DiskSpace> {
 }
 
 #[cfg(unix)]
+// statvfs field widths and signedness differ between supported Unix platforms.
+#[allow(clippy::useless_conversion)]
 fn sample_disk(directory: &str) -> Option<DiskSpace> {
     use std::os::unix::ffi::OsStrExt;
 
     let path = std::ffi::CString::new(std::ffi::OsStr::new(directory).as_bytes()).ok()?;
     let mut stats = std::mem::MaybeUninit::<libc::statvfs>::uninit();
+    // SAFETY: path is a valid C string and stats points to a full writable statvfs.
     if unsafe { libc::statvfs(path.as_ptr(), stats.as_mut_ptr()) } != 0 {
         return None;
     }
+    // SAFETY: successful statvfs initialized the structure before this read.
     let stats = unsafe { stats.assume_init() };
     let fragment_size = u64::try_from(stats.f_frsize).ok()?;
     let available = u64::try_from(stats.f_bavail)

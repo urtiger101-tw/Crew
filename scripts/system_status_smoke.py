@@ -33,11 +33,11 @@ LABELS = {
     },
     "zh-TW": {
         "title": "系統狀態",
-        "launch": "啟動目錄：",
-        "disk": "磁碟可用：",
-        "ram": "記憶體已用：",
-        "os": "作業系統：",
-        "panes": "窗格：",
+        "launch": "啟動目錄:",
+        "disk": "磁碟可用:",
+        "ram": "記憶體已用:",
+        "os": "作業系統:",
+        "panes": "窗格:",
     },
 }
 SIZES = ((120, 30, "roomy"), (80, 12, "short"), (60, 18, "narrow"))
@@ -265,6 +265,9 @@ def run_profile(binary, profile, evidence_root):
                 sampled = None
 
                 for lang in LABELS:
+                    # Configured language takes precedence over the throwaway client's
+                    # debug-frame language hint, just as it does for attached clients.
+                    command("set", "lang", lang)
                     deadline = time.monotonic() + 25
                     while True:
                         frame = command("debug-frame", "-t", "system-status", "--lang", lang,
@@ -296,8 +299,15 @@ def run_profile(binary, profile, evidence_root):
                                          if LABELS[lang]["title"] in line)
                         panel_x = 0 if is_aurora else cols - 28 + 2
                         client.click(panel_x, title_row)
-                        wait_for(lambda: pane_state(api, "system-status")[1]["pane_id"] == second_pane,
-                                 "system section click to leave pane focus unchanged", timeout=3)
+                        # A resize on the same ordered connection acknowledges the preceding
+                        # mouse events. An unchanged-focus predicate alone could pass early.
+                        client.resize(cols + 1, rows)
+                        wait_for(lambda: api("workspace", "get", "system-status")["workspace"]["cols"]
+                                 == cols + 1, "mouse processing barrier")
+                        assert pane_state(api, "system-status")[1]["pane_id"] == second_pane
+                        client.resize(cols, rows)
+                        wait_for(lambda: api("workspace", "get", "system-status")["workspace"]["cols"]
+                                 == cols, "restore size after mouse barrier")
                         clicked_panes, _ = pane_state(api, "system-status")
                         assert geometry(clicked_panes) == base_geometry, (
                             base_geometry, geometry(clicked_panes))
