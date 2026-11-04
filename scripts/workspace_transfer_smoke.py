@@ -93,8 +93,11 @@ def main():
             return [t["tab_id"] for t in api("tab", "list", "--workspace", wid)["tabs"]]
 
         def shell_probe(pid, phase):
-            # Require complete, nonce-scoped fields. A prefix can match a PTY read
-            # before its marker/env arrive; one long response can also wrap at 60 columns.
+            # Require complete, nonce-scoped fields: nonce, field name, full value and the
+            # ';' terminator. Match the field inside the logical line, not the whole line.
+            # On ConPTY a row that exactly fills the pane width is joined with the row after
+            # it, so a field printed at the width of a narrow split (45 columns) arrives as
+            # "<field>;<next field>;". The per-probe nonce keeps the match scoped.
             nonce = "Q" + uuid.uuid4().hex[:8]
             command = (
                 f"Write-Output ('{nonce}:P=' + $PID + ';'); "
@@ -105,11 +108,14 @@ def main():
                 '"$$" "$CREW_TRANSFER_MARKER" "$WORKSPACE_MARKER"'
             )
             api("pane", "run", pid, command)
-            # ConPTY can retain padding after a short line. Keep the complete
-            # nonce/value/terminator match, but allow that display-only padding.
-            fields = [output(pid, f"^{nonce}:{field}={pattern};\\s*$").rstrip().split("=", 1)[1][:-1]
-                      for field, pattern in (("P", "[0-9]+"), ("M", "(?:[0-9a-f]{32})?"),
-                                             ("E", "(?:origin|destination)"))]
+            fields = []
+            for field, pattern in (("P", "[0-9]+"), ("M", "(?:[0-9a-f]{32})?"),
+                                   ("E", "(?:origin|destination)")):
+                field_pattern = f"{nonce}:{field}=({pattern});"
+                line = output(pid, field_pattern)
+                found = re.search(field_pattern, line)
+                assert found is not None, (pid, field, line)
+                fields.append(found.group(1))
             print(f"probe {phase} {pid}: {':'.join(fields)}", flush=True)
             return ":".join(fields)
 
