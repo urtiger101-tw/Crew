@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Windows: restrict DLL lookup to the application directory and System32 before
+  any PTY is created, so a `conpty.dll` on `PATH` or in the current directory
+  (for example an installed Crew) is never loaded; a sideloaded `conpty.dll`
+  beside `crew.exe` is still used. Host-lost tests accept either `conhost.exe`
+  or `OpenConsole.exe` as the terminal host.
+
 - Add opt-in edge-triggered auto-focus with off/blocked/on modes, configurable
   idle/dwell/scope guards, per-pane opt-out and stale occupant/generation checks.
   Shared-session focus changes also guard every other client whose view changes.

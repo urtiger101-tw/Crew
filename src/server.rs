@@ -430,6 +430,7 @@ impl State {
         startup_shell: Option<&[String]>,
     ) -> Result<usize> {
         let id = self.id();
+        crate::harden_dll_search();
         let pty = native_pty_system();
         let size = PtySize {
             rows: rows.max(2),

@@ -21,6 +21,7 @@ mod clipboard;
 mod commands;
 mod config;
 mod copy;
+mod dll_search;
 mod doctor;
 mod events;
 mod i18n;
@@ -47,6 +48,7 @@ mod theme;
 mod workspace;
 mod worktree;
 
+pub use dll_search::harden_dll_search;
 use i18n::tr;
 use proto::Command;
 
