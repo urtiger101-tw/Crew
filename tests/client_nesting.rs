@@ -171,6 +171,8 @@ fn stale_server_marker_attaches_after_isolated_restart() {
     server.run(&["pane", "get", "p1"]);
     server.run(&["pane", "run", "p1", "Write-Output 'RESTART_ATTACH_OK'"]);
 
+    // This harness opens a PTY in-process, so restrict conpty.dll lookup like crew's main does.
+    crew::harden_dll_search();
     let pair = native_pty_system()
         .openpty(PtySize {
             rows: 30,

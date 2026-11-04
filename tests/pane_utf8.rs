@@ -73,6 +73,8 @@ fn bootstrap_preserves_shell_commands_and_child_console_encoding() {
                 format!("& '{}'", path.replace('\'', "''")),
             ]
         };
+        // This harness opens a PTY in-process, so restrict conpty.dll lookup like crew's main does.
+        crew::harden_dll_search();
         let pair = native_pty_system()
             .openpty(PtySize {
                 rows: 24,

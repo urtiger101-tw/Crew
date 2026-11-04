@@ -130,6 +130,33 @@ struct TestTree {
     ping: u32,
 }
 
+/// Image names accepted as a pane's terminal host (a child of the daemon). The system
+/// ConPTY uses `conhost.exe`; a sideloaded `conpty.dll`, such as the one beside the
+/// installed crew.exe, uses `OpenConsole.exe`.
+const TERMINAL_HOST_IMAGES: [&str; 2] = ["conhost.exe", "OpenConsole.exe"];
+
+fn is_terminal_host(process: &Process) -> bool {
+    TERMINAL_HOST_IMAGES
+        .iter()
+        .any(|image| process.name.eq_ignore_ascii_case(image))
+}
+
+#[test]
+fn terminal_host_matches_either_conpty_image_case_insensitively() {
+    let image = |name: &str| Process {
+        pid: 1,
+        parent: 1,
+        name: name.to_owned(),
+    };
+    assert!(is_terminal_host(&image("conhost.exe")));
+    assert!(is_terminal_host(&image("CONHOST.EXE")));
+    assert!(is_terminal_host(&image("OpenConsole.exe")));
+    assert!(is_terminal_host(&image("openconsole.EXE")));
+    assert!(!is_terminal_host(&image("OpenConsole")));
+    assert!(!is_terminal_host(&image("powershell.exe")));
+    assert!(!is_terminal_host(&image("crew.exe")));
+}
+
 fn start_test_pane(server: &mut IsolatedServer) -> TestTree {
     server.run(&["workspace", "create", "p5-test"]);
     server.run(&[
@@ -182,9 +209,13 @@ fn start_test_pane(server: &mut IsolatedServer) -> TestTree {
     );
     let hosts: Vec<_> = table
         .iter()
-        .filter(|p| p.parent == daemon && p.name.eq_ignore_ascii_case("conhost.exe"))
+        .filter(|p| p.parent == daemon && is_terminal_host(p))
         .collect();
-    assert_eq!(hosts.len(), 1, "expected one host in the isolated server");
+    assert_eq!(
+        hosts.len(),
+        1,
+        "expected one terminal host (conhost.exe or OpenConsole.exe) in the isolated server"
+    );
     let ping = table
         .iter()
         .find(|p| p.parent == shell && p.name.eq_ignore_ascii_case("ping.exe"))
