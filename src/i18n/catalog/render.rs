@@ -121,6 +121,14 @@ pub const ENTRIES: &[Entry] = &[
     ("render.legend.idle", "idle", "閒置"),
     // sidebar
     ("render.sidebar.title", "agents", "代理"),
+    ("render.system.title", "SYSTEM", "系統狀態"),
+    ("render.system.launch_dir", "Launch dir", "啟動目錄"),
+    ("render.system.disk_available", "Disk free", "磁碟可用"),
+    ("render.system.memory_used", "RAM used", "記憶體已用"),
+    ("render.system.os", "OS", "作業系統"),
+    ("render.system.panes", "Panes", "窗格"),
+    ("render.system.pending", "pending", "讀取中"),
+    ("render.system.na", "N/A", "無資料"),
     (
         "render.sidebar.hint",
         "{prefix} a hide  {prefix} s switch",

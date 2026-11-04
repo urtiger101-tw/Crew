@@ -1,0 +1,13 @@
+# Split sidebar system panel
+
+Owner request: keep current sidebar information above a new system-status section; commit and push after acceptance. Base: origin/main 199e4ae.
+
+Acceptance: preserve workspace/agent navigation and pane geometry; a lower section on Aurora tree and classic agents sidebar shows active pane launch directory (honestly labeled), its filesystem available/total disk, used/total memory, OS and pane count. Fit narrow/short terminals, Unicode paths and missing samples. OS I/O runs off the UI lock, cached at most every 5 seconds; no new subprocesses or dependencies. Shared live daemon is untouched; validate isolated native process only.
+
+Four GPT-6 Luna xhigh workers, separate worktrees:
+- W1: src/system_status.rs + Cargo.toml/Cargo.lock only. Types: Memory { pub used:u64,pub total:u64 }, DiskSpace { pub available:u64,pub total:u64 }, Snapshot { pub memory:Option<Memory>, pub disks:BTreeMap<String,Option<DiskSpace>> }, Cache { pub snapshot:Snapshot, ... }; all default/clone as appropriate. Cache::refresh(Vec<String>)->bool polls worker, requests known directories with 5s TTL, at most one background worker, no shell commands. Windows and Unix native APIs. Unit tests inline.
+- W2: src/render/system_panel.rs + src/i18n/catalog/render.rs only. section_height(terminal_rows:u16)->u16 reserves lower rows excluding final status, zero if rows<12, otherwise min(10,(rows-1)/2). draw(g:&mut Grid,cx:&Ctx,x:u16,width:u16,top:u16,height:u16,bg:Color). Render bounded text, separator/title, pane launch directory, disk available/total, memory used/total, OS, panes; sanitize controls and Unicode bounds. Reads cx.st.system_status.snapshot; tests inline. W1 schema frozen above.
+- W3: src/server.rs, src/lib.rs, src/render/mod.rs, src/render/sidebar.rs, src/render/aurora/tree.rs only. Wire system_status module/cache to State and constructors/ticks (all visible active pane directories, only when sidebar/tree visible); module render/system_panel. Split actual draw and hit targets consistently, retain original upper items/overflow/footer rules, draw lower panel. No W1/W2 files.
+- W4: scripts/system_status_smoke.py and docs/team/sidebar-system.md only. Native isolated API/ANSI smoke for both sidebars, locale/short sizes, cwd disk live sample and cleanup; reuse repo smoke helpers. Tests consume shipping renderer, never shared daemon. Explain launch-directory semantics and refresh cadence.
+
+Lead integrates, runs fmt/clippy/full locked Rust tests plus isolated smoke, actual Windows terminal visual observation if available, one scoped independent non-author Rust review, fixes actual findings, commits/pushes. Hosted CI not authorized (manual-only repo). No live restart implied by push authorization.

@@ -2,6 +2,18 @@ use super::{BOLD, Ctx, Grid, Hit, Lang, Run, State, Theme, UNDER, cut, paint, ru
 use crate::server::{Client, Session};
 use unicode_width::UnicodeWidthStr;
 
+fn viewport_start(row_count: usize, visible: usize, focused: Option<usize>) -> usize {
+    focused.map_or(0, |index| {
+        if index < visible {
+            0
+        } else {
+            index
+                .saturating_sub(visible.saturating_sub(1) / 2)
+                .min(row_count.saturating_sub(visible))
+        }
+    })
+}
+
 pub(super) fn tree_runs(st: &State, c: &Client, s: &Session, t: &Theme) -> Vec<Run> {
     let width = st.tree_width(s);
     if width < 4 || s.rows < 4 {
@@ -58,13 +70,20 @@ pub(super) fn tree_runs(st: &State, c: &Client, s: &Session, t: &Theme) -> Vec<R
             }
         }
     }
-    let limit = usize::from(s.rows.saturating_sub(5));
+    let panel_height = super::super::system_panel::section_height(s.rows);
+    let upper_rows = s.rows.saturating_sub(panel_height);
+    let limit = usize::from(upper_rows.saturating_sub(5));
     let hidden = rows.len().saturating_sub(limit);
     let visible = if hidden > 0 {
         limit.saturating_sub(1)
     } else {
         limit
     };
+    let focused = rows
+        .iter()
+        .position(|(_, _, selected, pane)| *selected && pane.is_some())
+        .or_else(|| rows.iter().rposition(|(_, _, selected, _)| *selected));
+    let start = viewport_start(rows.len(), visible, focused);
     let mut runs = vec![run(
         1,
         0,
@@ -76,7 +95,7 @@ pub(super) fn tree_runs(st: &State, c: &Client, s: &Session, t: &Theme) -> Vec<R
         (t.c(t.muted), t.c(t.surface_bg), BOLD),
         Some(Hit::Chooser),
     )];
-    for (index, (label, hit, selected, pane)) in rows.iter().take(visible).enumerate() {
+    for (index, (label, hit, selected, pane)) in rows.iter().skip(start).take(visible).enumerate() {
         let y = index as u16 + 2;
         let bg = t.c(if *selected { t.raised_bg } else { t.surface_bg });
         let fg = if matches!(hit, Hit::Workspace(_)) && *selected {
@@ -156,7 +175,7 @@ pub(super) fn tree_runs(st: &State, c: &Client, s: &Session, t: &Theme) -> Vec<R
     );
     runs.push(run(
         1,
-        s.rows - 2,
+        upper_rows.saturating_sub(2),
         cut(&hint, usize::from(width - 2), t.g.ellipsis),
         (t.c(t.muted), t.c(t.surface_bg), 0),
         None,
@@ -191,6 +210,18 @@ pub(super) fn draw_tree(g: &mut Grid, cx: &Ctx) {
         );
     }
     paint(g, &tree_runs(cx.st, cx.c, cx.s, t));
+    let panel_height = super::super::system_panel::section_height(cx.h);
+    if panel_height > 0 {
+        super::super::system_panel::draw(
+            g,
+            cx,
+            0,
+            width.saturating_sub(1),
+            cx.h.saturating_sub(panel_height).saturating_sub(1),
+            panel_height,
+            t.c(t.surface_bg),
+        );
+    }
 }
 
 pub(super) fn draw_files(g: &mut Grid, cx: &Ctx) {
@@ -339,4 +370,32 @@ pub(super) fn draw_files(g: &mut Grid, cx: &Ctx) {
         t.c(t.surface_bg),
         0,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::viewport_start;
+
+    #[test]
+    fn active_p9_remains_visible_at_24_rows_with_the_system_section() {
+        let terminal_rows = 24;
+        let panel_height = super::super::super::system_panel::section_height(terminal_rows);
+        let upper_rows = terminal_rows.saturating_sub(panel_height);
+        let limit = usize::from(upper_rows.saturating_sub(5));
+        let row_count: usize = 11; // workspace, active tab, and panes p1 through p9
+        let hidden = row_count.saturating_sub(limit);
+        let visible = if hidden > 0 {
+            limit.saturating_sub(1)
+        } else {
+            limit
+        };
+        let focused = 10; // active pane p9
+        let start = viewport_start(row_count, visible, Some(focused));
+
+        assert_eq!(panel_height, 10);
+        assert!(start <= focused);
+        assert!(focused < start + visible);
+        assert!(start + visible <= row_count);
+        assert!(visible as u16 + 2 < upper_rows.saturating_sub(2));
+    }
 }

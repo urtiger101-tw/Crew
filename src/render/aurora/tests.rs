@@ -2,6 +2,40 @@ use super::*;
 use crate::server::{test_client, test_session, test_state};
 
 #[test]
+fn split_tree_keeps_active_tab_visible_and_system_rows_are_not_navigation() {
+    for rows in [12, 24, 50] {
+        let mut st = test_state();
+        st.cfg.set("theme", "aurora").unwrap();
+        st.cfg.workspace_tree = true;
+        let mut session = test_session("system panel", 120, rows, 1);
+        for index in 1..20 {
+            let mut window = test_session("unused", 120, rows, index + 1)
+                .windows
+                .remove(0);
+            window.name = format!("work {index}");
+            session.windows.push(window);
+        }
+        session.active = 18;
+        st.sessions.push(session);
+        let s = &st.sessions[0];
+        let c = test_client(&s.name);
+        let t = Theme::resolve(&st.cfg.theme, &c.env);
+        let top = rows - 1 - super::super::system_panel::section_height(rows);
+        let runs = tree::tree_runs(&st, &c, s, &t);
+        assert!(runs.iter().any(|r| r.hit == Some(Hit::Tab(0, 18))));
+        for r in &runs {
+            assert!(r.y < top);
+            if r.hit.is_some() && !r.text.is_empty() {
+                assert_eq!(hit_at(&st, &c, s, r.x, r.y), r.hit);
+            }
+        }
+        for y in top..rows - 1 {
+            assert_eq!(hit_at(&st, &c, s, 1, y), None);
+        }
+    }
+}
+
+#[test]
 fn aurora_default_content_budget_is_at_least_v060() {
     use crate::layout::{Dir, Node};
     for (cols, rows) in [(120, 30), (80, 24)] {

@@ -106,7 +106,15 @@ pub fn sidebar_rows_lang(
     lang: Lang,
 ) -> Vec<SidebarRow> {
     let groups = group_views(st, s, lang);
-    layout_rows(&groups, any_agent(st), st.cfg.hints, width, height, lang)
+    let upper_height = height.saturating_sub(super::system_panel::section_height(height));
+    layout_rows(
+        &groups,
+        any_agent(st),
+        st.cfg.hints,
+        width,
+        upper_height,
+        lang,
+    )
 }
 
 fn any_agent(st: &State) -> bool {
@@ -614,8 +622,20 @@ pub(super) fn draw_sidebar(g: &mut Grid, cx: &Ctx) {
         prefix: st.cfg.prefix_name(),
         lang: cx.lang,
     };
-    for row in layout_rows(&groups, any_agent(st), st.cfg.hints, tw, h, cx.lang) {
+    for row in sidebar_rows_lang(st, s, tw, h, cx.lang) {
         draw_row(g, &lane, &row, &groups);
+    }
+    let panel_height = super::system_panel::section_height(h);
+    if panel_height > 0 {
+        super::system_panel::draw(
+            g,
+            cx,
+            sx.saturating_add(1),
+            sw.saturating_sub(1),
+            h.saturating_sub(panel_height).saturating_sub(1),
+            panel_height,
+            t.c(t.sidebar_bg),
+        );
     }
 }
 

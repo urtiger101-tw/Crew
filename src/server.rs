@@ -29,6 +29,7 @@ pub use model::*;
 pub struct State {
     pub autofocus: autofocus::Tracker,
     pub chrome: chrome::Cache,
+    pub(crate) system_status: crate::system_status::Cache,
     pub diagnostics: serde_json::Value,
     pub events: crate::events::Journal,
     pub metadata: crate::metadata::Store,
@@ -116,6 +117,7 @@ pub(crate) fn test_state() -> State {
     State {
         autofocus: Default::default(),
         chrome: chrome::Cache::default(),
+        system_status: crate::system_status::Cache::default(),
         diagnostics: crate::doctor::snapshot(),
         events: crate::events::Journal::default(),
         metadata: crate::metadata::Store::default(),
@@ -2063,6 +2065,7 @@ pub fn run() -> Result<()> {
     let shared: Shared = Arc::new(Mutex::new(State {
         autofocus: Default::default(),
         chrome: chrome::Cache::default(),
+        system_status: crate::system_status::Cache::default(),
         diagnostics: crate::doctor::snapshot(),
         events: crate::events::Journal::default(),
         metadata: crate::metadata::Store::default(),
@@ -2195,6 +2198,24 @@ pub fn run() -> Result<()> {
                 if st.chrome.refresh(directories) {
                     st.dirty = true;
                 }
+            }
+            let mut system_directories = Vec::new();
+            let mut system_panel_visible = false;
+            for (si, session) in st.sessions.iter().enumerate() {
+                if session.rows >= 12
+                    && (st.sidebar_width(session) > 0 || st.tree_width(session) > 0)
+                {
+                    system_panel_visible = true;
+                    let pane = st.active_pane(si);
+                    if let Some(cwd) = st.panes.get(&pane).and_then(|p| p.cwd.clone()) {
+                        system_directories.push(cwd);
+                    }
+                }
+            }
+            system_directories.sort_unstable();
+            system_directories.dedup();
+            if system_panel_visible && st.system_status.refresh(system_directories) {
+                st.dirty = true;
             }
             if !st.dirty && !tick {
                 continue;

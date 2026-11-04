@@ -6,6 +6,7 @@ pub(crate) mod aurora;
 mod overlay;
 mod panes;
 mod sidebar;
+mod system_panel;
 pub use sidebar::{SidebarKind, sidebar_rows_lang, sidebar_text_width};
 mod status;
 mod toolbar;

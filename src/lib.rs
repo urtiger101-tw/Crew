@@ -41,6 +41,7 @@ mod remote;
 mod render;
 mod semantic;
 mod server;
+pub(crate) mod system_status;
 mod theme;
 mod workspace;
 mod worktree;
