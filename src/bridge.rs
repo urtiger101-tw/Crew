@@ -76,7 +76,8 @@ const METHODS: &[&str] = &[
     "msg.ack",
 ];
 
-/// Every stable error `code` the API can emit, sorted, with a one-line meaning.
+/// Every stable error `code` that `crew api` commands and bridge replies can emit, sorted,
+/// with a one-line meaning. (`crew task` prints its own file-contract codes separately.)
 pub const ERROR_CODES: &[(&str, &str)] = &[
     (
         "ack_conflict",
@@ -96,7 +97,7 @@ pub const ERROR_CODES: &[(&str, &str)] = &[
     ),
     (
         "agent_prompt_stalled",
-        "the agent prompt did not accept input before the deadline",
+        "the agent did not start working after the prompt was submitted",
     ),
     (
         "agent_replaced",
@@ -111,16 +112,14 @@ pub const ERROR_CODES: &[(&str, &str)] = &[
         "the bridge has too many pending requests; retry later",
     ),
     ("git_failed", "a git command failed"),
+    ("git_not_found", "git is not installed or not on PATH"),
     ("internal", "unexpected internal error"),
     (
         "invalid_argument",
         "a request argument is missing, malformed, or out of range",
     ),
     ("invalid_base", "the worktree base ref is invalid"),
-    (
-        "invalid_cursor",
-        "the event cursor is invalid or no longer available",
-    ),
+    ("invalid_cursor", "the event cursor is ahead of this server"),
     (
         "invalid_git_output",
         "git produced output Crew could not parse",
@@ -182,10 +181,10 @@ pub const ERROR_CODES: &[(&str, &str)] = &[
         "server_restarted",
         "the server restarted while the request was waiting",
     ),
-    ("session_not_found", "no session with that name exists"),
+    ("session_not_found", "no matching session exists"),
     ("spawn_failed", "starting the pane process failed"),
     ("store_full", "the message store is full"),
-    ("tab_not_found", "no tab with that id exists"),
+    ("tab_not_found", "no matching tab exists"),
     ("timeout", "the operation timed out"),
     (
         "transport_error",
@@ -193,7 +192,7 @@ pub const ERROR_CODES: &[(&str, &str)] = &[
     ),
     ("unknown_peer", "the peer is not known"),
     ("window_not_found", "no window with that id exists"),
-    ("workspace_not_found", "no workspace with that id exists"),
+    ("workspace_not_found", "no matching workspace exists"),
     ("workspace_open_failed", "opening the workspace failed"),
     (
         "worktree_busy",
@@ -212,7 +211,7 @@ pub const ERROR_CODES: &[(&str, &str)] = &[
     ("worktree_locked", "the worktree is locked"),
     (
         "worktree_mismatch",
-        "the worktree does not match the expected branch or path",
+        "the checkout's .git does not match this repository's worktree registration",
     ),
     ("worktree_not_found", "no such worktree exists"),
     (
@@ -222,8 +221,12 @@ pub const ERROR_CODES: &[(&str, &str)] = &[
 ];
 
 pub fn schema() -> Value {
+    let error_codes: Vec<Value> = ERROR_CODES
+        .iter()
+        .map(|(code, meaning)| json!({"code": code, "meaning": meaning}))
+        .collect();
     json!({"protocol": "crew-json-lines-v1", "version": env!("CARGO_PKG_VERSION"),
-        "methods": METHODS, "error_codes": ERROR_CODES.iter().map(|(code, meaning)| json!({"code": code, "meaning": meaning})).collect::<Vec<_>>(), "local_methods": ["ping", "api.schema"],
+        "methods": METHODS, "error_codes": error_codes, "local_methods": ["ping", "api.schema"],
         "request": {"id": "string or integer", "method": "listed method", "params": {"args": ["CLI argument", "..."]}},
         "reply": {"id": "request id", "result": "JSON value or text string", "error": "code/message on failure only"},
         "max_line_bytes": MAX_LINE, "max_pending": MAX_PENDING,
@@ -261,15 +264,33 @@ fn edit_distance(a: &str, b: &str) -> usize {
 }
 
 fn unknown_method_message(method: &str) -> String {
-    let nearest = METHODS
-        .iter()
-        .map(|m| (edit_distance(method, m), *m))
-        .min_by_key(|(d, _)| *d);
+    const MAX_DISTANCE: usize = 2;
+    const MAX_ECHO_CHARS: usize = 80;
+    let len = method.chars().count();
+    let longest = METHODS.iter().map(|m| m.len()).max().unwrap_or(0);
+    // The length difference bounds the distance, so a huge name skips the O(n*m) search.
+    let nearest = (len <= longest + MAX_DISTANCE)
+        .then(|| {
+            METHODS
+                .iter()
+                .map(|m| (edit_distance(method, m), *m))
+                .min_by_key(|(d, _)| *d)
+        })
+        .flatten();
+    let shown: String = if len > MAX_ECHO_CHARS {
+        method
+            .chars()
+            .take(MAX_ECHO_CHARS)
+            .chain("...".chars())
+            .collect()
+    } else {
+        method.to_string()
+    };
     match nearest {
-        Some((d, m)) if d <= 2 => {
-            format!("unknown method '{method}'; did you mean '{m}'? (see api.schema)")
+        Some((d, m)) if d <= MAX_DISTANCE => {
+            format!("unknown method '{shown}'; did you mean '{m}'? (see api.schema)")
         }
-        _ => format!("unknown method '{method}' (see api.schema)"),
+        _ => format!("unknown method '{shown}' (see api.schema)"),
     }
 }
 
@@ -413,12 +434,15 @@ mod tests {
     use super::*;
     #[test]
     fn unknown_method_suggests_nearest() {
-        let m = METHODS.iter().find(|m| m.contains('-')).unwrap();
-        let typo = m.replace('-', "");
+        assert!(METHODS.contains(&"pane.send-keys"));
         assert_eq!(
-            unknown_method_message(&typo),
-            format!("unknown method '{typo}'; did you mean '{m}'? (see api.schema)")
+            unknown_method_message("pane.sendkeys"),
+            "unknown method 'pane.sendkeys'; did you mean 'pane.send-keys'? (see api.schema)"
         );
+        let huge = "x".repeat(1 << 20);
+        let message = unknown_method_message(&huge);
+        assert!(message.len() < 200, "{message}");
+        assert!(!message.contains("did you mean"));
         assert_eq!(
             unknown_method_message("zzzzzzzz.nothing"),
             "unknown method 'zzzzzzzz.nothing' (see api.schema)"

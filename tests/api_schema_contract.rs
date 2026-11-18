@@ -65,21 +65,39 @@ fn schema_lists_every_emitted_error_code() {
     let schema = schema();
     assert!(schema["methods"].as_array().is_some_and(|m| !m.is_empty()));
     let listed: Vec<String> = codes(&schema).into_iter().map(|(c, _)| c).collect();
-    let re = Regex::new(r#"ApiError::new\(\s*"([a-z_]+)""#).unwrap();
+    // `ApiError::new("code", ..)` and `Self::new("code", ..)` inside `impl ApiError`.
+    let re = Regex::new(r#"(?:ApiError|Self)::new\(\s*"([a-z0-9_]+)""#).unwrap();
+    // Codes picked at runtime (an `if`/tuple feeding `ApiError::new(code, ..)`).
+    let dynamic = [
+        "git_not_found",
+        "server_not_running",
+        "ipc_permission_denied",
+    ];
     let mut files = Vec::new();
     rust_files(
         &Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
         &mut files,
     );
-    let mut missing = Vec::new();
+    assert!(files.len() > 20, "found only {} source files", files.len());
+    let mut missing: Vec<String> = dynamic
+        .iter()
+        .filter(|c| !listed.contains(&c.to_string()))
+        .map(|c| format!("{c} (runtime-selected)"))
+        .collect();
+    let mut matched = 0;
     for file in files {
         let text = std::fs::read_to_string(&file).unwrap();
         for cap in re.captures_iter(&text) {
+            matched += 1;
             if !listed.contains(&cap[1].to_string()) {
                 missing.push(format!("{} in {}", &cap[1], file.display()));
             }
         }
     }
+    assert!(
+        matched >= 40,
+        "scan matched only {matched} error constructors"
+    );
     assert!(missing.is_empty(), "unregistered error codes: {missing:?}");
 }
 

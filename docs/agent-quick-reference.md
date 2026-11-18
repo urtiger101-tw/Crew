@@ -8,7 +8,10 @@ for agents is in [skills/crew/SKILL.md](../skills/crew/SKILL.md).
 
 - Success: stdout `{"result": ...}`, exit 0. Text replies (`pane read`, `agent read`) print raw text.
 - Failure: stderr `{"error":{"code","message"}}`, exit 1. Codes are stable; messages are for people.
+  `crew api schema` lists every code with a one-line meaning under `error_codes`.
 - Usage error (unknown subcommand or option, bad argument count): exit 2, plain `crew: ...` text.
+  Exception: `peer` and `msg` usage errors print `{"error":{"code":"invalid_argument",...}}`
+  on stderr, still with exit 2.
 - Bridge errors come back inside the reply object (section 3), not as exit codes.
 
 ## 2. Targeting
@@ -17,8 +20,10 @@ for agents is in [skills/crew/SKILL.md](../skills/crew/SKILL.md).
   runs; run `pane list` again after a restart.
 - `--current` targets the calling pane (`$CREW_PANE_ID`): `pane current`, `pane split`,
   `pane focus --direction` and `pane zoom`. Outside a pane it is a usage error.
-- Without a target, pane commands use the caller's pane when `CREW_PANE_ID` is set, else
-  the focused pane of the most recently used session.
+- Only `pane current`, `pane split`, `pane focus --direction`, `pane zoom` and `pane layout`
+  fall back to a default pane when no ID is given. Every other pane command
+  (`get`, `read`, `send-text`, `send-keys`, `run`, `submit`, `wait-output`, `close`, ...)
+  requires an explicit `p<N>`.
 - `agent` commands accept a pane ID or a unique agent name. Names match
   `[a-z][a-z0-9_-]{0,31}`, cannot look like a pane ID (such as `p12`), and are set with
   `agent rename` on a pane that already has an agent report.
@@ -45,8 +50,9 @@ reply   : {"id": ..., "result": ...}   or   {"id": ..., "error": {"code": "...",
   by `api.schema`, or it fails with `method_not_found`. The bridge runs the CLI with the
   argument array `[group, sub, ...params.args]`, so the rules in sections 2 and 5 apply.
 - `session.snapshot` is an alias of `api.snapshot`.
-- Unknown request fields are rejected with `invalid_request`. `id` must be a string or an integer;
-  a line that cannot be parsed gets `"id": null`.
+- Unknown request fields are rejected with `invalid_request`. `id` must be a string or an integer.
+  Every envelope failure (`invalid_request`, `request_too_large`) is replied with `"id": null`,
+  so treat a null-id error as "one of my unanswered requests was rejected". Only `busy` keeps the id.
 - Limits: 1 MiB per line (`request_too_large`) and 16 requests in flight (`busy`).
 - A wait holds its in-flight slot until it ends, so always pass a timeout (section 5).
 
@@ -120,13 +126,17 @@ between group and sub (`pane read` is `pane.read`).
 | `msg ack` | Mark a message read or done |
 
 Events: `events list --after N` returns `{"epoch","events":[{"cursor","timestamp_ms","kind","pane_id","data"}],"cursor","latest_cursor","events_lost"}`.
-Pass `cursor` as the next `--after` (unchanged when nothing new arrived). The journal keeps
-512 events; `events_lost: true` means some were dropped before your cursor. A changed
-`epoch` means the server restarted: take `api snapshot` and restart from cursor 0.
+Pass `cursor` as the next `--after` (unchanged when nothing new arrived) and `epoch` as
+`--epoch E`. `--limit` defaults to 100 (1..512), so loop until `cursor` reaches `latest_cursor`.
+The journal keeps 512 events; `events_lost: true` means events after your cursor were
+dropped before you read them: resync with `api snapshot`. With `--epoch`, a restarted
+server fails with `server_restarted`; a cursor ahead of the server fails with
+`invalid_cursor`. Either way take `api snapshot` and restart from cursor 0.
 
 ## 5. Waits and timeouts
 
-- A timed-out wait fails with code `timeout`. Waits poll every 100 ms.
+- A timed-out wait fails with code `timeout`. Pane and agent waits poll every 100 ms;
+  `events wait` polls every 25 ms.
 - `pane wait-output`, `agent wait` and `agent prompt --wait` wait indefinitely without
   `--timeout MS`; scripts should always pass one.
 - `events wait` defaults to 30000 ms (maximum 600000, else usage error). `events list` never waits.

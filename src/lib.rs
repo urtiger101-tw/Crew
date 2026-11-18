@@ -326,9 +326,12 @@ pub fn run() {
                 Err(e) => {
                     // A short, actionable error instead of the full help text.
                     eprintln!("crew: {e}");
-                    let suggestion = e
-                        .strip_prefix("unknown command: ")
-                        .and_then(|word| suggest::nearest(word, suggest::COMMANDS));
+                    let suggestion = e.strip_prefix("unknown command: ").and_then(|word| {
+                        // `crew server x` reaches here as "unknown command: server";
+                        // never suggest the word the user already typed.
+                        suggest::nearest(word, suggest::COMMANDS)
+                            .filter(|command| !command.eq_ignore_ascii_case(word))
+                    });
                     if let Some(command) = suggestion {
                         let hint = trf(lang, "cli.hint.did_you_mean", &[("command", &command)]);
                         eprintln!("  {hint}");

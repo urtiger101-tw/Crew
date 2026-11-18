@@ -97,6 +97,15 @@ fn unrelated_word_has_no_suggestion() {
 }
 
 #[test]
+fn known_word_with_bad_arguments_does_not_suggest_itself() {
+    let case = Case::new("self");
+    let output = case.run(&["server", "extra"]);
+    let err = stderr(&output);
+    assert_ne!(output.status.code(), Some(0), "{err}");
+    assert!(!err.contains("Did you mean 'server'"), "{err}");
+}
+
+#[test]
 fn usage_error_prints_only_the_error_and_the_help_pointer() {
     let case = Case::new("usage");
     let output = case.run(&["last-pane", "extra"]);

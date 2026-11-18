@@ -74,7 +74,7 @@ fn quick_reference_covers_every_schema_method() {
             let (group, sub) = method
                 .split_once('.')
                 .unwrap_or_else(|| panic!("method without a group: {method}"));
-            !doc.contains(&format!("{group} {sub}"))
+            !doc.contains(&format!("| `{group} {sub}` |"))
         })
         .collect();
     assert!(
@@ -90,8 +90,8 @@ fn readme_has_quick_start_before_release_notes() {
         .find("Quick start")
         .expect("README has no Quick start section");
     let release_notes = readme
-        .find("## Crew 0.6.0")
-        .expect("README has no Crew 0.6.0 heading");
+        .find("\n## Crew ")
+        .expect("README has no release-notes heading");
     assert!(
         quick_start < release_notes,
         "Quick start must come before the release notes"
