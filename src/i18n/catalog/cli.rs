@@ -18,6 +18,7 @@ USAGE:
   crew kill-session -t NAME  kill a session
   crew kill-server           kill the server and all sessions
   crew keys                  show default key bindings
+  crew doctor [--json]       check the running daemon: version, colors
   crew capture-pane -p [-t S] print the active pane of a session
   crew send-keys [-t S] KEYS  type text / keys (Enter, C-c, ...) into it
   crew source-file [PATH]    reload config in the running server
@@ -45,6 +46,7 @@ Config: $CREW_CONFIG or <config_dir>/crew/config.toml"#,
   crew kill-session -t NAME  關閉一個工作階段
   crew kill-server           關閉伺服器與所有工作階段
   crew keys                  顯示預設按鍵
+  crew doctor [--json]       檢查執行中的 daemon：版本、色彩
   crew capture-pane -p [-t S] 印出工作階段的使用中窗格
   crew send-keys [-t S] KEYS  將文字或按鍵（Enter、C-c 等）輸入到窗格
   crew source-file [PATH]    在執行中的伺服器重新載入設定
@@ -217,8 +219,18 @@ agent rename <target> <name>  |  agent rename <target> --clear
     ),
     (
         "cli.err.no_server",
-        "no server running ({err})",
-        "沒有執行中的伺服器（{err}）",
+        "no server running ({err}); start one with `crew` or `crew new -s NAME`",
+        "沒有執行中的伺服器（{err}）；請用 `crew` 或 `crew new -s NAME` 啟動一個",
+    ),
+    (
+        "cli.hint.did_you_mean",
+        "Did you mean '{command}'?",
+        "您是不是要輸入 '{command}'？",
+    ),
+    (
+        "cli.hint.run_help",
+        "Run `crew --help` for the command list.",
+        "執行 `crew --help` 查看指令清單。",
     ),
     (
         "cli.err.start_failed",
