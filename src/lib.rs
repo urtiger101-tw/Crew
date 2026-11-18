@@ -42,6 +42,7 @@ mod remote;
 mod render;
 mod semantic;
 mod server;
+mod suggest;
 pub(crate) mod system_status;
 mod task_contract;
 mod theme;
@@ -49,7 +50,7 @@ mod workspace;
 mod worktree;
 
 pub use dll_search::harden_dll_search;
-use i18n::tr;
+use i18n::{tr, trf};
 use proto::Command;
 
 fn flag(args: &[String], f: &str) -> Option<String> {
@@ -322,7 +323,22 @@ pub fn run() {
                 .join(" ");
             match commands::parse(&line) {
                 Ok(_) => client::simple(Command::Run { line }),
-                Err(e) => Err(anyhow::anyhow!("{e}\n\n{}", tr(lang, "cli.help"))),
+                Err(e) => {
+                    // A short, actionable error instead of the full help text.
+                    eprintln!("crew: {e}");
+                    let suggestion = e.strip_prefix("unknown command: ").and_then(|word| {
+                        // `crew server x` reaches here as "unknown command: server";
+                        // never suggest the word the user already typed.
+                        suggest::nearest(word, suggest::COMMANDS)
+                            .filter(|command| !command.eq_ignore_ascii_case(word))
+                    });
+                    if let Some(command) = suggestion {
+                        let hint = trf(lang, "cli.hint.did_you_mean", &[("command", &command)]);
+                        eprintln!("  {hint}");
+                    }
+                    eprintln!("  {}", tr(lang, "cli.hint.run_help"));
+                    std::process::exit(1);
+                }
             }
         }
     };

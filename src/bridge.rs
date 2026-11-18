@@ -76,9 +76,157 @@ const METHODS: &[&str] = &[
     "msg.ack",
 ];
 
+/// Every stable error `code` that `crew api` commands and bridge replies can emit, sorted,
+/// with a one-line meaning. (`crew task` prints its own file-contract codes separately.)
+pub const ERROR_CODES: &[(&str, &str)] = &[
+    (
+        "ack_conflict",
+        "message ack conflicts with the message's current state",
+    ),
+    (
+        "agent_already_running",
+        "an agent is already running in the target pane",
+    ),
+    (
+        "agent_blocked",
+        "the agent is blocked waiting for input or approval",
+    ),
+    (
+        "agent_not_found",
+        "no agent is registered for the target pane",
+    ),
+    (
+        "agent_prompt_stalled",
+        "the agent did not start working after the prompt was submitted",
+    ),
+    (
+        "agent_replaced",
+        "the awaited agent was replaced by a new instance",
+    ),
+    (
+        "ambiguous_target",
+        "the target matches more than one pane, tab, or workspace",
+    ),
+    (
+        "busy",
+        "the bridge has too many pending requests; retry later",
+    ),
+    ("git_failed", "a git command failed"),
+    ("git_not_found", "git is not installed or not on PATH"),
+    ("internal", "unexpected internal error"),
+    (
+        "invalid_argument",
+        "a request argument is missing, malformed, or out of range",
+    ),
+    ("invalid_base", "the worktree base ref is invalid"),
+    ("invalid_cursor", "the event cursor is ahead of this server"),
+    (
+        "invalid_git_output",
+        "git produced output Crew could not parse",
+    ),
+    (
+        "invalid_request",
+        "the request line is not a valid envelope",
+    ),
+    (
+        "ipc_permission_denied",
+        "access to the Crew server socket was denied",
+    ),
+    (
+        "message_conflict",
+        "the message conflicts with an existing message",
+    ),
+    ("message_not_found", "no message with that id exists"),
+    ("metadata_key_limit", "the metadata key limit was reached"),
+    (
+        "metadata_source_limit",
+        "the metadata source limit was reached",
+    ),
+    (
+        "method_not_found",
+        "the method is not listed by crew api schema",
+    ),
+    ("name_taken", "the requested name is already in use"),
+    (
+        "no_neighbor",
+        "there is no neighboring pane in that direction",
+    ),
+    (
+        "not_git_repository",
+        "the path is not inside a git repository",
+    ),
+    ("pane_not_found", "no pane with that id exists"),
+    ("path_not_found", "the path does not exist"),
+    ("protocol_error", "the peer violated the Crew wire protocol"),
+    (
+        "protocol_mismatch",
+        "client and server protocol versions differ",
+    ),
+    ("remote_error", "a remote Crew host returned an error"),
+    (
+        "request_too_large",
+        "the request line exceeds the maximum size",
+    ),
+    ("resume_failed", "resuming the agent failed"),
+    (
+        "resume_unavailable",
+        "no resume command is available for the agent",
+    ),
+    ("server_error", "the Crew server reported an error"),
+    (
+        "server_not_running",
+        "no Crew server is running on the socket",
+    ),
+    (
+        "server_restarted",
+        "the server restarted while the request was waiting",
+    ),
+    ("session_not_found", "no matching session exists"),
+    ("spawn_failed", "starting the pane process failed"),
+    ("store_full", "the message store is full"),
+    ("tab_not_found", "no matching tab exists"),
+    ("timeout", "the operation timed out"),
+    (
+        "transport_error",
+        "communication with the Crew server failed",
+    ),
+    ("unknown_peer", "the peer is not known"),
+    ("window_not_found", "no window with that id exists"),
+    ("workspace_not_found", "no matching workspace exists"),
+    ("workspace_open_failed", "opening the workspace failed"),
+    (
+        "worktree_busy",
+        "the worktree is busy with another operation",
+    ),
+    (
+        "worktree_created_unverified",
+        "the worktree was created but could not be verified",
+    ),
+    ("worktree_dirty", "the worktree has uncommitted changes"),
+    (
+        "worktree_exists",
+        "a worktree already exists at that location",
+    ),
+    ("worktree_in_use", "the worktree is in use by a pane"),
+    ("worktree_locked", "the worktree is locked"),
+    (
+        "worktree_mismatch",
+        "the checkout's .git does not match this repository's worktree registration",
+    ),
+    ("worktree_not_found", "no such worktree exists"),
+    (
+        "worktree_primary",
+        "the primary worktree cannot be modified this way",
+    ),
+];
+
 pub fn schema() -> Value {
+    let error_codes: Vec<Value> = ERROR_CODES
+        .iter()
+        .map(|(code, meaning)| json!({"code": code, "meaning": meaning}))
+        .collect();
     json!({"protocol": "crew-json-lines-v1", "version": env!("CARGO_PKG_VERSION"),
-        "methods": METHODS, "local_methods": ["ping", "api.schema"],
+        "methods": METHODS, "error_codes": error_codes, "local_methods": ["ping", "api.schema"],
         "request": {"id": "string or integer", "method": "listed method", "params": {"args": ["CLI argument", "..."]}},
         "reply": {"id": "request id", "result": "JSON value or text string", "error": "code/message on failure only"},
         "max_line_bytes": MAX_LINE, "max_pending": MAX_PENDING,
@@ -101,6 +249,51 @@ struct Params {
     args: Vec<String>,
 }
 
+fn edit_distance(a: &str, b: &str) -> usize {
+    let b: Vec<char> = b.chars().collect();
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    for (i, ca) in a.chars().enumerate() {
+        let mut cur = vec![i + 1];
+        for (j, cb) in b.iter().enumerate() {
+            let cost = usize::from(ca != *cb);
+            cur.push((prev[j] + cost).min(prev[j + 1] + 1).min(cur[j] + 1));
+        }
+        prev = cur;
+    }
+    prev[b.len()]
+}
+
+fn unknown_method_message(method: &str) -> String {
+    const MAX_DISTANCE: usize = 2;
+    const MAX_ECHO_CHARS: usize = 80;
+    let len = method.chars().count();
+    let longest = METHODS.iter().map(|m| m.len()).max().unwrap_or(0);
+    // The length difference bounds the distance, so a huge name skips the O(n*m) search.
+    let nearest = (len <= longest + MAX_DISTANCE)
+        .then(|| {
+            METHODS
+                .iter()
+                .map(|m| (edit_distance(method, m), *m))
+                .min_by_key(|(d, _)| *d)
+        })
+        .flatten();
+    let shown: String = if len > MAX_ECHO_CHARS {
+        method
+            .chars()
+            .take(MAX_ECHO_CHARS)
+            .chain("...".chars())
+            .collect()
+    } else {
+        method.to_string()
+    };
+    match nearest {
+        Some((d, m)) if d <= MAX_DISTANCE => {
+            format!("unknown method '{shown}'; did you mean '{m}'? (see api.schema)")
+        }
+        _ => format!("unknown method '{shown}' (see api.schema)"),
+    }
+}
+
 fn execute(request: Envelope) -> ApiResult {
     if matches!(request.method.as_str(), "ping" | "api.schema") {
         if !request.params.args.is_empty() {
@@ -115,7 +308,7 @@ fn execute(request: Envelope) -> ApiResult {
     if !METHODS.contains(&request.method.as_str()) {
         return Err(ApiError::new(
             "method_not_found",
-            "method is not listed by crew api schema",
+            unknown_method_message(&request.method),
         ));
     }
     let method = if request.method == "session.snapshot" {
@@ -239,6 +432,22 @@ pub fn serve() -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn unknown_method_suggests_nearest() {
+        assert!(METHODS.contains(&"pane.send-keys"));
+        assert_eq!(
+            unknown_method_message("pane.sendkeys"),
+            "unknown method 'pane.sendkeys'; did you mean 'pane.send-keys'? (see api.schema)"
+        );
+        let huge = "x".repeat(1 << 20);
+        let message = unknown_method_message(&huge);
+        assert!(message.len() < 200, "{message}");
+        assert!(!message.contains("did you mean"));
+        assert_eq!(
+            unknown_method_message("zzzzzzzz.nothing"),
+            "unknown method 'zzzzzzzz.nothing' (see api.schema)"
+        );
+    }
     #[test]
     fn strict_envelope_rejects_accidental_api_mismatches() {
         for value in [

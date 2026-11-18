@@ -1,4 +1,6 @@
 //! Resolve plugin paths before taking the server state lock.
+// clippy 1.96 flags the thread_local! initializers below even though they are already `const`.
+#![allow(clippy::missing_const_for_thread_local)]
 use crate::plugins::PanePluginPaths;
 use std::cell::RefCell;
 

@@ -258,8 +258,8 @@ pub struct AgentInfo {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct ApiError {
-    /// stable machine code: pane_not_found, agent_not_found, invalid_argument, timeout,
-    /// agent_blocked, agent_prompt_stalled, spawn_failed, not_implemented, internal
+    /// stable machine code; the full list with meanings is `crate::bridge::ERROR_CODES`
+    /// (published by `crew api schema` as `error_codes`)
     pub code: String,
     pub message: String,
 }

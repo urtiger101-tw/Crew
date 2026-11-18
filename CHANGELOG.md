@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- Human-first CLI errors: an unknown command prints one error line, a
+  `Did you mean '...'?` hint when a command is close, and a pointer to
+  `crew --help` instead of dumping the full help. `crew doctor` is listed in
+  `crew --help`, and the no-server error names the next step
+  (`crew` or `crew new -s NAME`). English and zh-TW.
+- Agent-friendly API: `crew api schema` now publishes `error_codes`, every
+  stable error code with a one-line meaning; a test fails when a new code is
+  emitted without being registered. Unknown bridge methods suggest the nearest
+  method name.
+- Docs: README opens with a bilingual Quick start, and the new
+  [agent quick reference](docs/agent-quick-reference.md) covers the output
+  contract, targeting, the JSON-lines bridge, every method, events and waits;
+  a drift test keeps its method table in sync with `crew api schema`.
+- Silence a clippy 1.96 false positive (`missing_const_for_thread_local`) on
+  already-`const` thread locals.
+
 - Windows: restrict DLL lookup to the application directory and System32 before
   any PTY is created, so a `conpty.dll` on `PATH` or in the current directory
   (for example an installed Crew) is never loaded; a sideloaded `conpty.dll`
