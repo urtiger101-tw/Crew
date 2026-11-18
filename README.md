@@ -4,6 +4,15 @@
 
 A cross-platform terminal multiplexer written in Rust, inspired by tmux and herdr. Primary targets: **Windows** and **Linux**; also works on **macOS**.
 
+## 快速開始 Quick start
+
+- 安裝 / Install: 見 [安裝 Install](#安裝-install)（Windows 見 [安裝指南](docs/windows-install.md)）。
+- `crew`：連到最近的 session，沒有則建立 / attach to the last session or create one.
+- `crew keys`：顯示快捷鍵 / show key bindings.
+- `crew doctor`：檢查 daemon 版本與顏色環境 / check the daemon version and color environment.
+- `crew --help`：列出指令與用法 / list commands and usage.
+- For agents: JSON 指令、事件、收件匣與錯誤格式見 [docs/agent-quick-reference.md](docs/agent-quick-reference.md)。
+
 ## Crew 0.6.0
 
 [下載 Windows 版本](https://github.com/urtiger101-tw/Crew/releases/tag/v0.6.0)：
