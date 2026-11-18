@@ -10,3 +10,6 @@ __pycache__/
 # Local collaboration artifacts; logs already committed stay tracked
 docs/collab/claude-codex/log/
 crew-agent-handoff-20261102/
+
+# Local release build output
+dist/
